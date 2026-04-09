@@ -35,23 +35,32 @@ type AliVideoRequest struct {
 
 // AliVideoInput 视频输入参数
 type AliVideoInput struct {
-	Prompt         string `json:"prompt,omitempty"`          // 文本提示词
-	ImgURL         string `json:"img_url,omitempty"`         // 首帧图像URL或Base64（图生视频）
-	FirstFrameURL  string `json:"first_frame_url,omitempty"` // 首帧图片URL（首尾帧生视频）
-	LastFrameURL   string `json:"last_frame_url,omitempty"`  // 尾帧图片URL（首尾帧生视频）
-	AudioURL       string `json:"audio_url,omitempty"`       // 音频URL（wan2.5支持）
-	NegativePrompt string `json:"negative_prompt,omitempty"` // 反向提示词
-	Template       string `json:"template,omitempty"`        // 视频特效模板
+	Prompt         string      `json:"prompt,omitempty"`          // 文本提示词
+	ImgURL         string      `json:"img_url,omitempty"`         // 首帧图像URL或Base64（图生视频）
+	FirstFrameURL  string      `json:"first_frame_url,omitempty"` // 首帧图片URL（首尾帧生视频）
+	LastFrameURL   string      `json:"last_frame_url,omitempty"`  // 尾帧图片URL（首尾帧生视频）
+	AudioURL       string      `json:"audio_url,omitempty"`       // 音频URL（wan2.5支持）
+	NegativePrompt string      `json:"negative_prompt,omitempty"` // 反向提示词
+	Template       string      `json:"template,omitempty"`        // 视频特效模板
+	Media          []AliMedia  `json:"media,omitempty"`           // PixVerse 媒体素材
+}
+
+// AliMedia PixVerse 媒体素材
+type AliMedia struct {
+	Type    string `json:"type"`                // image_url / first_frame / last_frame
+	URL     string `json:"url"`
+	RefName string `json:"ref_name,omitempty"` // 参考生视频引用名
 }
 
 // AliVideoParameters 视频参数
 type AliVideoParameters struct {
-	Resolution   string `json:"resolution,omitempty"`    // 分辨率: 480P/720P/1080P（图生视频、首尾帧生视频）
+	Resolution   string `json:"resolution,omitempty"`    // 分辨率: 360P/480P/540P/720P/1080P
 	Size         string `json:"size,omitempty"`          // 尺寸: 如 "832*480"（文生视频）
 	Duration     int    `json:"duration,omitempty"`      // 时长: 3-10秒
 	PromptExtend bool   `json:"prompt_extend,omitempty"` // 是否开启prompt智能改写
 	Watermark    bool   `json:"watermark,omitempty"`     // 是否添加水印
-	Audio        *bool  `json:"audio,omitempty"`         // 是否添加音频（wan2.5）
+	Audio        *bool  `json:"audio,omitempty"`         // 是否添加音频
+	ShotType     string `json:"shot_type,omitempty"`     // 镜头类型: single/multi（PixVerse v6）
 	Seed         int    `json:"seed,omitempty"`          // 随机数种子
 }
 
@@ -87,20 +96,22 @@ type AliUsage struct {
 
 type AliMetadata struct {
 	// Input 相关
-	AudioURL       string `json:"audio_url,omitempty"`       // 音频URL
-	ImgURL         string `json:"img_url,omitempty"`         // 图片URL（图生视频）
-	FirstFrameURL  string `json:"first_frame_url,omitempty"` // 首帧图片URL（首尾帧生视频）
-	LastFrameURL   string `json:"last_frame_url,omitempty"`  // 尾帧图片URL（首尾帧生视频）
-	NegativePrompt string `json:"negative_prompt,omitempty"` // 反向提示词
-	Template       string `json:"template,omitempty"`        // 视频特效模板
+	AudioURL       string     `json:"audio_url,omitempty"`       // 音频URL
+	ImgURL         string     `json:"img_url,omitempty"`         // 图片URL（图生视频）
+	FirstFrameURL  string     `json:"first_frame_url,omitempty"` // 首帧图片URL（首尾帧生视频）
+	LastFrameURL   string     `json:"last_frame_url,omitempty"`  // 尾帧图片URL（首尾帧生视频）
+	NegativePrompt string     `json:"negative_prompt,omitempty"` // 反向提示词
+	Template       string     `json:"template,omitempty"`        // 视频特效模板
+	Media          []AliMedia `json:"media,omitempty"`           // PixVerse 媒体素材
 
 	// Parameters 相关
-	Resolution   *string `json:"resolution,omitempty"`    // 分辨率: 480P/720P/1080P
+	Resolution   *string `json:"resolution,omitempty"`    // 分辨率: 360P/480P/540P/720P/1080P
 	Size         *string `json:"size,omitempty"`          // 尺寸: 如 "832*480"
 	Duration     *int    `json:"duration,omitempty"`      // 时长
 	PromptExtend *bool   `json:"prompt_extend,omitempty"` // 是否开启prompt智能改写
 	Watermark    *bool   `json:"watermark,omitempty"`     // 是否添加水印
 	Audio        *bool   `json:"audio,omitempty"`         // 是否添加音频
+	ShotType     string  `json:"shot_type,omitempty"`     // 镜头类型: single/multi
 	Seed         *int    `json:"seed,omitempty"`          // 随机数种子
 }
 
@@ -179,9 +190,29 @@ var (
 	}
 )
 
+var (
+	size360p = []string{
+		"640*360", "360*640", "640*480", "480*640", "640*640",
+		"640*432", "432*640", "640*288",
+	}
+	size540p = []string{
+		"1024*576", "576*1024", "1024*768", "768*1024", "1024*1024",
+		"1024*688", "688*1024", "1024*448",
+	}
+)
+
+// isPixverseModel 判断是否为 PixVerse 系列模型
+func isPixverseModel(model string) bool {
+	return strings.HasPrefix(model, "pixverse/")
+}
+
 func sizeToResolution(size string) (string, error) {
-	if lo.Contains(size480p, size) {
+	if lo.Contains(size360p, size) {
+		return "360P", nil
+	} else if lo.Contains(size480p, size) {
 		return "480P", nil
+	} else if lo.Contains(size540p, size) {
+		return "540P", nil
 	} else if lo.Contains(size720p, size) {
 		return "720P", nil
 	} else if lo.Contains(size1080p, size) {
@@ -249,6 +280,50 @@ func ProcessAliOtherRatios(aliReq *AliVideoRequest) (map[string]float64, error) 
 			otherRatios[fmt.Sprintf("resolution-%s", resolution)] = ratio
 		}
 	}
+
+	// PixVerse 系列模型计费倍率
+	if isPixverseModel(aliReq.Model) {
+		audioKey := "no-audio"
+		if aliReq.Parameters.Audio != nil && *aliReq.Parameters.Audio {
+			audioKey = "audio"
+		}
+		ratioKey := fmt.Sprintf("%s-%s", resolution, audioKey)
+
+		if strings.Contains(aliReq.Model, "v6") {
+				// PixVerse v6 基准：360P 无声 = 1.0 (0.15元/秒)
+			pixverseV6Ratios := map[string]float64{
+				"360P-no-audio":  1.0,
+				"360P-audio":     0.21 / 0.15,
+				"480P-no-audio":  1.0,
+				"540P-no-audio":  0.21 / 0.15,
+				"540P-audio":     0.27 / 0.15,
+				"720P-no-audio":  0.27 / 0.15,
+				"720P-audio":     0.36 / 0.15,
+				"1080P-no-audio": 0.53 / 0.15,
+				"1080P-audio":    0.68 / 0.15,
+			}
+			if ratio, ok := pixverseV6Ratios[ratioKey]; ok {
+				otherRatios[fmt.Sprintf("resolution-%s", resolution)] = ratio
+			}
+		} else {
+				// PixVerse v5.6 基准：360P/540P 无声 = 1.0 (0.21元/秒)
+			pixverseV56Ratios := map[string]float64{
+				"360P-no-audio":  1.0,
+				"360P-audio":     0.47 / 0.21,
+				"480P-no-audio":  1.0,
+				"540P-no-audio":  1.0,
+				"540P-audio":     0.47 / 0.21,
+				"720P-no-audio":  0.27 / 0.21,
+				"720P-audio":     0.53 / 0.21,
+				"1080P-no-audio": 0.44 / 0.21,
+				"1080P-audio":    0.70 / 0.21,
+			}
+			if ratio, ok := pixverseV56Ratios[ratioKey]; ok {
+				otherRatios[fmt.Sprintf("resolution-%s", resolution)] = ratio
+			}
+		}
+	}
+
 	return otherRatios, nil
 }
 
@@ -257,57 +332,26 @@ func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relay
 	if info.IsModelMapped {
 		upstreamModel = info.UpstreamModelName
 	}
+
 	aliReq := &AliVideoRequest{
 		Model: upstreamModel,
 		Input: AliVideoInput{
 			Prompt: req.Prompt,
-			ImgURL: req.InputReference,
 		},
 		Parameters: &AliVideoParameters{
-			PromptExtend: true, // 默认开启智能改写
-			Watermark:    false,
+			Watermark: false,
 		},
 	}
 
-	// 处理分辨率映射
-	if req.Size != "" {
-		// text to video size must be contained *
-		if strings.Contains(req.Model, "t2v") && !strings.Contains(req.Size, "*") {
-			return nil, fmt.Errorf("invalid size: %s, example: %s", req.Size, "1920*1080")
-		}
-		if strings.Contains(req.Size, "*") {
-			aliReq.Parameters.Size = req.Size
-		} else {
-			resolution := strings.ToUpper(req.Size)
-			// 支持 480p, 720p, 1080p 或 480P, 720P, 1080P
-			if !strings.HasSuffix(resolution, "P") {
-				resolution = resolution + "P"
-			}
-			aliReq.Parameters.Resolution = resolution
+	if isPixverseModel(upstreamModel) {
+		if err := a.buildPixverseRequest(aliReq, req); err != nil {
+			return nil, err
 		}
 	} else {
-		// 根据模型设置默认分辨率
-		if strings.Contains(req.Model, "t2v") { // image to video
-			if strings.HasPrefix(req.Model, "wan2.5") {
-				aliReq.Parameters.Size = "1920*1080"
-			} else if strings.HasPrefix(req.Model, "wan2.2") {
-				aliReq.Parameters.Size = "1920*1080"
-			} else {
-				aliReq.Parameters.Size = "1280*720"
-			}
-		} else {
-			if strings.HasPrefix(req.Model, "wan2.6") {
-				aliReq.Parameters.Resolution = "1080P"
-			} else if strings.HasPrefix(req.Model, "wan2.5") {
-				aliReq.Parameters.Resolution = "1080P"
-			} else if strings.HasPrefix(req.Model, "wan2.2-i2v-flash") {
-				aliReq.Parameters.Resolution = "720P"
-			} else if strings.HasPrefix(req.Model, "wan2.2-i2v-plus") {
-				aliReq.Parameters.Resolution = "1080P"
-			} else {
-				aliReq.Parameters.Resolution = "720P"
-			}
-		}
+		// wan 系列模型：使用 img_url / first_frame_url
+		aliReq.Input.ImgURL = req.InputReference
+		aliReq.Parameters.PromptExtend = true
+		a.buildWanResolution(aliReq, req)
 	}
 
 	// 处理时长
@@ -317,14 +361,13 @@ func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relay
 		seconds, err := strconv.Atoi(req.Seconds)
 		if err != nil {
 			return nil, errors.Wrap(err, "convert seconds to int failed")
-		} else {
-			aliReq.Parameters.Duration = seconds
 		}
+		aliReq.Parameters.Duration = seconds
 	} else {
 		aliReq.Parameters.Duration = 5 // 默认5秒
 	}
 
-	// 从 metadata 中提取额外参数
+	// 从 metadata 中提取额外参数（覆盖默认值）
 	if req.Metadata != nil {
 		if metadataBytes, err := common.Marshal(req.Metadata); err == nil {
 			err = common.Unmarshal(metadataBytes, aliReq)
@@ -341,6 +384,112 @@ func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relay
 	}
 
 	return aliReq, nil
+}
+
+// buildWanResolution 处理 wan 系列模型的分辨率参数
+func (a *TaskAdaptor) buildWanResolution(aliReq *AliVideoRequest, req relaycommon.TaskSubmitReq) {
+	if req.Size != "" {
+		// wan t2v size must contain *
+		if strings.Contains(req.Model, "t2v") && !strings.Contains(req.Size, "*") {
+			return // will be caught by validation later
+		}
+		if strings.Contains(req.Size, "*") {
+			aliReq.Parameters.Size = req.Size
+		} else {
+			resolution := strings.ToUpper(req.Size)
+			if !strings.HasSuffix(resolution, "P") {
+				resolution = resolution + "P"
+			}
+			aliReq.Parameters.Resolution = resolution
+		}
+	} else {
+		if strings.Contains(req.Model, "t2v") {
+			if strings.HasPrefix(req.Model, "wan2.5") || strings.HasPrefix(req.Model, "wan2.2") {
+				aliReq.Parameters.Size = "1920*1080"
+			} else {
+				aliReq.Parameters.Size = "1280*720"
+			}
+		} else {
+			if strings.HasPrefix(req.Model, "wan2.6") || strings.HasPrefix(req.Model, "wan2.5") {
+				aliReq.Parameters.Resolution = "1080P"
+			} else if strings.HasPrefix(req.Model, "wan2.2-i2v-flash") {
+				aliReq.Parameters.Resolution = "720P"
+			} else if strings.HasPrefix(req.Model, "wan2.2-i2v-plus") {
+				aliReq.Parameters.Resolution = "1080P"
+			} else {
+				aliReq.Parameters.Resolution = "720P"
+			}
+		}
+	}
+}
+
+// buildPixverseRequest 构建 PixVerse 系列模型的请求
+func (a *TaskAdaptor) buildPixverseRequest(aliReq *AliVideoRequest, req relaycommon.TaskSubmitReq) error {
+	// 确定模型后缀类型
+	modelSuffix := ""
+	for _, suffix := range []string{"-t2v", "-it2v", "-kf2v", "-r2v"} {
+		if strings.HasSuffix(aliReq.Model, suffix) {
+			modelSuffix = suffix
+			break
+		}
+	}
+
+	switch modelSuffix {
+	case "-t2v":
+		// 文生视频：使用 size（像素值），无 media
+		a.setPixverseSize(aliReq, req, "1280*720")
+	case "-it2v":
+		// 图生视频：使用 resolution（档位），media[{type:"image_url", url:img}]
+		a.setPixverseResolution(aliReq, req, "720P")
+		if req.InputReference != "" {
+			aliReq.Input.Media = []AliMedia{{Type: "image_url", URL: req.InputReference}}
+		} else if len(req.Images) > 0 {
+			aliReq.Input.Media = []AliMedia{{Type: "image_url", URL: req.Images[0]}}
+		}
+	case "-kf2v":
+		// 首尾帧生视频：使用 resolution（档位），media[{type:"first_frame"}, {type:"last_frame"}]
+		a.setPixverseResolution(aliReq, req, "720P")
+		if len(req.Images) >= 2 {
+			aliReq.Input.Media = []AliMedia{
+				{Type: "first_frame", URL: req.Images[0]},
+				{Type: "last_frame", URL: req.Images[1]},
+			}
+		}
+	case "-r2v":
+		// 参考生视频：使用 size（像素值），media[{type:"image_url", url:img, ref_name:...}]
+		a.setPixverseSize(aliReq, req, "1280*720")
+		if len(req.Images) > 0 {
+			media := make([]AliMedia, 0, len(req.Images))
+			for _, imgURL := range req.Images {
+				media = append(media, AliMedia{Type: "image_url", URL: imgURL})
+			}
+			aliReq.Input.Media = media
+		}
+	}
+
+	return nil
+}
+
+// setPixverseSize 设置 PixVerse t2v/r2v 的 size 参数（像素值格式）
+func (a *TaskAdaptor) setPixverseSize(aliReq *AliVideoRequest, req relaycommon.TaskSubmitReq, defaultSize string) {
+	if req.Size != "" && strings.Contains(req.Size, "*") {
+		aliReq.Parameters.Size = req.Size
+	} else {
+		aliReq.Parameters.Size = defaultSize
+	}
+}
+
+// setPixverseResolution 设置 PixVerse it2v/kf2v 的 resolution 参数（档位格式）
+func (a *TaskAdaptor) setPixverseResolution(aliReq *AliVideoRequest, req relaycommon.TaskSubmitReq, defaultResolution string) {
+	if req.Size != "" && !strings.Contains(req.Size, "*") {
+		resolution := strings.ToUpper(req.Size)
+		if !strings.HasSuffix(resolution, "P") {
+			resolution = resolution + "P"
+		}
+		aliReq.Parameters.Resolution = resolution
+	} else {
+		aliReq.Parameters.Resolution = defaultResolution
+	}
 }
 
 // EstimateBilling 根据用户请求参数计算 OtherRatios（时长、分辨率等）。
