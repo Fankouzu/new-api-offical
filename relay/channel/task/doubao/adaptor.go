@@ -27,13 +27,19 @@ import (
 // Request / Response structures
 // ============================
 
+// DraftTaskRef is the nested object for content items with type "draft_task" (Seedance draft-to-video).
+type DraftTaskRef struct {
+	ID string `json:"id"`
+}
+
 type ContentItem struct {
-	Type     string    `json:"type,omitempty"`
-	Text     string    `json:"text,omitempty"`
-	ImageURL *MediaURL `json:"image_url,omitempty"`
-	VideoURL *MediaURL `json:"video_url,omitempty"`
-	AudioURL *MediaURL `json:"audio_url,omitempty"`
-	Role     string    `json:"role,omitempty"`
+	Type      string        `json:"type,omitempty"`
+	Text      string        `json:"text,omitempty"`
+	ImageURL  *MediaURL     `json:"image_url,omitempty"`
+	VideoURL  *MediaURL     `json:"video_url,omitempty"`
+	AudioURL  *MediaURL     `json:"audio_url,omitempty"`
+	Role      string        `json:"role,omitempty"`
+	DraftTask *DraftTaskRef `json:"draft_task,omitempty"`
 }
 
 type MediaURL struct {
