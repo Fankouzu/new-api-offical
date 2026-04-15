@@ -359,10 +359,14 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	if privateData.Key != "" {
 		key = privateData.Key
 	}
-	resp, err := adaptor.FetchTask(baseURL, key, map[string]any{
+	fetchBody := map[string]any{
 		"task_id": task.GetUpstreamTaskID(),
 		"action":  task.Action,
-	}, proxy)
+	}
+	if task.PrivateData.UpstreamKind != "" {
+		fetchBody["upstream_kind"] = task.PrivateData.UpstreamKind
+	}
+	resp, err := adaptor.FetchTask(baseURL, key, fetchBody, proxy)
 	if err != nil {
 		return fmt.Errorf("fetchTask failed for task %s: %w", taskId, err)
 	}

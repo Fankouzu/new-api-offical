@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -24,7 +26,7 @@ import (
 )
 
 // ============================
-// Request / Response structures
+// Request / Response structures (video — Ark-compatible body forwarded to /v2/video/generations)
 // ============================
 
 // DraftTaskRef is the nested object for content items with type "draft_task" (Seedance draft-to-video).
@@ -68,7 +70,7 @@ type requestPayload struct {
 }
 
 type responsePayload struct {
-	ID string `json:"id"` // task_id
+	ID string `json:"id"`
 }
 
 type responseTask struct {
@@ -102,6 +104,20 @@ type responseTask struct {
 	UpdatedAt int64 `json:"updated_at"`
 }
 
+// imageResponseTask mirrors upstream image task polling (fields may vary; use loose parsing where needed).
+type imageResponseTask struct {
+	ID      string `json:"id"`
+	Model   string `json:"model"`
+	Status  string `json:"status"`
+	Content struct {
+		ImageURL string `json:"image_url"`
+	} `json:"content"`
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
 // ============================
 // Adaptor implementation
 // ============================
@@ -115,18 +131,60 @@ type TaskAdaptor struct {
 
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.ChannelType = info.ChannelType
-	a.baseURL = info.ChannelBaseUrl
+	a.baseURL = strings.TrimRight(info.ChannelBaseUrl, "/")
 	a.apiKey = info.ApiKey
+}
+
+func requestPathFromRelay(info *relaycommon.RelayInfo) string {
+	if info == nil || info.RequestURLPath == "" {
+		return ""
+	}
+	u, err := url.Parse(info.RequestURLPath)
+	if err != nil || u.Path == "" {
+		return info.RequestURLPath
+	}
+	return u.Path
 }
 
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
-	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
+	path := requestPathFromRelay(info)
+	if path == "" {
+		path = c.Request.URL.Path
+	}
+	switch UpstreamKindFromPath(path) {
+	case UpstreamKindAsset:
+		var req relaycommon.TaskSubmitReq
+		if err := common.UnmarshalBodyReusable(c, &req); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		if strings.TrimSpace(req.Model) == "" {
+			req.Model = AssetPlaceholderModel
+		}
+		if strings.TrimSpace(req.Prompt) == "" {
+			req.Prompt = "asset-upload"
+		}
+		info.Action = constant.TaskActionGenerate
+		c.Set("task_request", req)
+		return nil
+	case UpstreamKindImage:
+		return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
+	default:
+		return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
+	}
 }
 
 // BuildRequestURL constructs the upstream URL.
-func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
-	return fmt.Sprintf("%s/api/v3/contents/generations/tasks", a.baseURL), nil
+func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
+	path := requestPathFromRelay(info)
+	switch UpstreamKindFromPath(path) {
+	case UpstreamKindAsset:
+		return fmt.Sprintf("%s/v2/asset/upload", a.baseURL), nil
+	case UpstreamKindImage:
+		return fmt.Sprintf("%s/v2/image/generations", a.baseURL), nil
+	default:
+		return fmt.Sprintf("%s/v2/video/generations", a.baseURL), nil
+	}
 }
 
 // BuildRequestHeader sets required headers.
@@ -139,6 +197,10 @@ func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *r
 
 // EstimateBilling detects video input in metadata and returns video discount OtherRatio.
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
+	path := requestPathFromRelay(info)
+	if UpstreamKindFromPath(path) != UpstreamKindVideo {
+		return nil
+	}
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
 		return nil
@@ -178,8 +240,33 @@ func hasVideoInMetadata(metadata map[string]interface{}) bool {
 	return false
 }
 
-// BuildRequestBody converts request into Ark-compatible format (forked from task/doubao).
+// BuildRequestBody converts request into upstream JSON.
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
+	path := requestPathFromRelay(info)
+	kind := UpstreamKindFromPath(path)
+	if kind == UpstreamKindAsset || kind == UpstreamKindImage {
+		storage, err := common.GetBodyStorage(c)
+		if err != nil {
+			return nil, err
+		}
+		raw, err := storage.Bytes()
+		if err != nil {
+			return nil, err
+		}
+		if kind == UpstreamKindImage {
+			var m map[string]any
+			if err := common.Unmarshal(raw, &m); err != nil {
+				return nil, errors.Wrap(err, "unmarshal image request")
+			}
+			m["model"] = info.UpstreamModelName
+			raw, err = common.Marshal(m)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return bytes.NewReader(raw), nil
+	}
+
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
 		return nil, err
@@ -193,6 +280,9 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		body.Model = info.UpstreamModelName
 	} else {
 		info.UpstreamModelName = body.Model
+	}
+	if body.GenerateAudio == nil {
+		body.GenerateAudio = lo.ToPtr(dto.BoolValue(true))
 	}
 	data, err := common.Marshal(body)
 	if err != nil {
@@ -215,41 +305,141 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 	_ = resp.Body.Close()
 
-	var dResp responsePayload
-	if err := common.Unmarshal(responseBody, &dResp); err != nil {
-		taskErr = service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", responseBody), "unmarshal_response_body_failed", http.StatusInternalServerError)
+	path := requestPathFromRelay(info)
+	kind := UpstreamKindFromPath(path)
+
+	inner, err := UnmarshalEnvelope(responseBody)
+	if err != nil {
+		taskErr = service.TaskErrorWrapper(err, "invalid_response", http.StatusBadRequest)
 		return
 	}
 
-	if dResp.ID == "" {
-		taskErr = service.TaskErrorWrapper(fmt.Errorf("task_id is empty"), "invalid_response", http.StatusInternalServerError)
-		return
+	switch kind {
+	case UpstreamKindImage:
+		id := extractImageCreateTaskID(inner)
+		if id == "" {
+			taskErr = service.TaskErrorWrapper(fmt.Errorf("image task id is empty"), "invalid_response", http.StatusInternalServerError)
+			return
+		}
+		taskData = inner
+		ov := dto.NewOpenAIVideo()
+		ov.ID = info.PublicTaskID
+		ov.TaskID = info.PublicTaskID
+		ov.CreatedAt = time.Now().Unix()
+		ov.Model = info.OriginModelName
+		c.JSON(http.StatusOK, ov)
+		return id, taskData, nil
+
+	case UpstreamKindAsset:
+		id := extractAssetCreateID(inner)
+		if id == "" {
+			taskErr = service.TaskErrorWrapper(fmt.Errorf("asset id is empty"), "invalid_response", http.StatusInternalServerError)
+			return
+		}
+		taskData = inner
+		c.JSON(http.StatusOK, gin.H{
+			"id":       info.PublicTaskID,
+			"task_id":  info.PublicTaskID,
+			"asset_id": id,
+			"object":   "pingxingshijie.asset.upload",
+		})
+		return id, taskData, nil
+
+	default:
+		var dResp responsePayload
+		if err := common.Unmarshal(inner, &dResp); err != nil {
+			taskErr = service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", string(inner)), "unmarshal_response_body_failed", http.StatusInternalServerError)
+			return
+		}
+		if dResp.ID == "" {
+			taskErr = service.TaskErrorWrapper(fmt.Errorf("task_id is empty"), "invalid_response", http.StatusInternalServerError)
+			return
+		}
+		ov := dto.NewOpenAIVideo()
+		ov.ID = info.PublicTaskID
+		ov.TaskID = info.PublicTaskID
+		ov.CreatedAt = time.Now().Unix()
+		ov.Model = info.OriginModelName
+		c.JSON(http.StatusOK, ov)
+		return dResp.ID, inner, nil
 	}
-
-	ov := dto.NewOpenAIVideo()
-	ov.ID = info.PublicTaskID
-	ov.TaskID = info.PublicTaskID
-	ov.CreatedAt = time.Now().Unix()
-	ov.Model = info.OriginModelName
-
-	c.JSON(http.StatusOK, ov)
-	return dResp.ID, responseBody, nil
 }
 
-// FetchTask fetch task status
+func extractImageCreateTaskID(inner []byte) string {
+	var m map[string]any
+	if common.Unmarshal(inner, &m) != nil {
+		return ""
+	}
+	if d, ok := m["data"].(map[string]any); ok {
+		if d2, ok := d["data"].(map[string]any); ok {
+			if id, ok := d2["id"].(string); ok {
+				return id
+			}
+		}
+		if id, ok := d["id"].(string); ok {
+			return id
+		}
+	}
+	if id, ok := m["id"].(string); ok {
+		return id
+	}
+	return ""
+}
+
+func extractAssetCreateID(inner []byte) string {
+	var m map[string]any
+	if common.Unmarshal(inner, &m) != nil {
+		return ""
+	}
+	for _, k := range []string{"asset_id", "id", "AssetId", "ID"} {
+		if v, ok := m[k].(string); ok && v != "" {
+			return v
+		}
+	}
+	if d, ok := m["data"].(map[string]any); ok {
+		for _, k := range []string{"asset_id", "id"} {
+			if v, ok := d[k].(string); ok && v != "" {
+				return v
+			}
+		}
+	}
+	return ""
+}
+
+// FetchTask fetches task status (GET for video/image, POST JSON for asset).
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
 	taskID, ok := body["task_id"].(string)
-	if !ok {
+	if !ok || taskID == "" {
 		return nil, fmt.Errorf("invalid task_id")
 	}
+	kind, _ := body["upstream_kind"].(string)
+	if kind == "" {
+		kind = UpstreamKindVideo
+	}
+	baseUrl = strings.TrimRight(baseUrl, "/")
 
-	uri := fmt.Sprintf("%s/api/v3/contents/generations/tasks/%s", baseUrl, taskID)
-
-	req, err := http.NewRequest(http.MethodGet, uri, nil)
+	var req *http.Request
+	var err error
+	switch kind {
+	case UpstreamKindAsset:
+		payload := map[string]any{"asset_id": taskID}
+		raw, mErr := common.Marshal(payload)
+		if mErr != nil {
+			return nil, mErr
+		}
+		req, err = http.NewRequest(http.MethodPost, baseUrl+"/v2/asset/status", bytes.NewReader(raw))
+	default:
+		var uri string
+		if kind == UpstreamKindImage {
+			uri = fmt.Sprintf("%s/v2/image/generations/tasks/%s", baseUrl, url.PathEscape(taskID))
+		} else {
+			uri = fmt.Sprintf("%s/v2/video/generations/tasks/%s", baseUrl, url.PathEscape(taskID))
+		}
+		req, err = http.NewRequest(http.MethodGet, uri, nil)
+	}
 	if err != nil {
 		return nil, err
 	}
-
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+key)
@@ -318,30 +508,147 @@ func contentHasDraftTask(items []ContentItem) bool {
 	return false
 }
 
+func unwrapInnerForTaskData(raw []byte) ([]byte, error) {
+	inner, err := UnmarshalEnvelope(raw)
+	if err == nil {
+		return inner, nil
+	}
+	return raw, nil
+}
+
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
-	resTask := responseTask{}
-	if err := common.Unmarshal(respBody, &resTask); err != nil {
-		return nil, errors.Wrap(err, "unmarshal task result failed")
+	inner, err := unwrapInnerForTaskData(respBody)
+	if err != nil {
+		return nil, err
 	}
 
+	// Asset status: Result.Status
+	if ti, ok := parseAssetStatus(inner); ok {
+		return ti, nil
+	}
+
+	// Video-style
+	var vid responseTask
+	if common.Unmarshal(inner, &vid) == nil && (vid.Content.VideoURL != "" || vid.Status != "" || vid.ID != "") {
+		return mapVideoTaskResult(&vid)
+	}
+
+	// Image-style
+	var img imageResponseTask
+	if common.Unmarshal(inner, &img) == nil && (img.Content.ImageURL != "" || img.Status != "" || img.ID != "") {
+		return mapImageTaskResult(&img)
+	}
+
+	// Fallback: try video struct without strict match
+	var v2 responseTask
+	if err := common.Unmarshal(inner, &v2); err != nil {
+		return nil, errors.Wrap(err, "unmarshal task result failed")
+	}
+	return mapVideoTaskResult(&v2)
+}
+
+func parseAssetStatus(inner []byte) (*relaycommon.TaskInfo, bool) {
+	var m map[string]any
+	if common.Unmarshal(inner, &m) != nil {
+		return nil, false
+	}
+	var res map[string]any
+	if r, ok := m["Result"].(map[string]any); ok {
+		res = r
+	} else if r, ok := m["result"].(map[string]any); ok {
+		res = r
+	}
+	if res == nil {
+		return nil, false
+	}
+	status := ""
+	if s, ok := res["Status"].(string); ok {
+		status = s
+	} else if s, ok := res["status"].(string); ok {
+		status = s
+	}
+	st := strings.ToLower(strings.TrimSpace(status))
+	tr := &relaycommon.TaskInfo{Code: 0}
+	switch st {
+	case "processing", "pending", "queued", "running":
+		tr.Status = model.TaskStatusInProgress
+		tr.Progress = "50%"
+	case "active", "succeeded", "success", "completed":
+		tr.Status = model.TaskStatusSuccess
+		tr.Progress = "100%"
+		if u := extractStringFromMap(m, "url", "asset_url", "AssetUrl"); u != "" {
+			tr.Url = u
+		}
+	case "failed", "failure":
+		tr.Status = model.TaskStatusFailure
+		tr.Progress = "100%"
+		tr.Reason = extractStringFromMap(res, "Message", "message", "reason")
+	default:
+		if st == "" {
+			return nil, false
+		}
+		tr.Status = model.TaskStatusInProgress
+		tr.Progress = "30%"
+	}
+	return tr, true
+}
+
+func extractStringFromMap(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k].(string); ok && v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func mapVideoTaskResult(resTask *responseTask) (*relaycommon.TaskInfo, error) {
 	taskResult := relaycommon.TaskInfo{
 		Code: 0,
 	}
-
-	switch resTask.Status {
+	switch strings.ToLower(resTask.Status) {
 	case "pending", "queued":
 		taskResult.Status = model.TaskStatusQueued
 		taskResult.Progress = "10%"
 	case "processing", "running":
 		taskResult.Status = model.TaskStatusInProgress
 		taskResult.Progress = "50%"
-	case "succeeded":
+	case "succeeded", "success", "completed":
 		taskResult.Status = model.TaskStatusSuccess
 		taskResult.Progress = "100%"
 		taskResult.Url = resTask.Content.VideoURL
 		taskResult.CompletionTokens = resTask.Usage.CompletionTokens
 		taskResult.TotalTokens = resTask.Usage.TotalTokens
-	case "failed":
+	case "failed", "failure":
+		taskResult.Status = model.TaskStatusFailure
+		taskResult.Progress = "100%"
+		taskResult.Reason = resTask.Error.Message
+	default:
+		if resTask.Status == "" {
+			taskResult.Status = model.TaskStatusInProgress
+			taskResult.Progress = "30%"
+		} else {
+			taskResult.Status = model.TaskStatusInProgress
+			taskResult.Progress = "30%"
+		}
+	}
+	return &taskResult, nil
+}
+
+func mapImageTaskResult(resTask *imageResponseTask) (*relaycommon.TaskInfo, error) {
+	taskResult := relaycommon.TaskInfo{Code: 0}
+	switch strings.ToLower(resTask.Status) {
+	case "pending", "queued":
+		taskResult.Status = model.TaskStatusQueued
+		taskResult.Progress = "10%"
+	case "processing", "running":
+		taskResult.Status = model.TaskStatusInProgress
+		taskResult.Progress = "50%"
+	case "succeeded", "success", "completed":
+		taskResult.Status = model.TaskStatusSuccess
+		taskResult.Progress = "100%"
+		taskResult.Url = resTask.Content.ImageURL
+	case "failed", "failure":
 		taskResult.Status = model.TaskStatusFailure
 		taskResult.Progress = "100%"
 		taskResult.Reason = resTask.Error.Message
@@ -349,13 +656,16 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		taskResult.Status = model.TaskStatusInProgress
 		taskResult.Progress = "30%"
 	}
-
 	return &taskResult, nil
 }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
+	inner, err := unwrapInnerForTaskData(originTask.Data)
+	if err != nil {
+		return nil, err
+	}
 	var dResp responseTask
-	if err := common.Unmarshal(originTask.Data, &dResp); err != nil {
+	if err := common.Unmarshal(inner, &dResp); err != nil {
 		return nil, errors.Wrap(err, "unmarshal pingxingshijie task data failed")
 	}
 
@@ -369,7 +679,7 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	openAIVideo.CompletedAt = originTask.UpdatedAt
 	openAIVideo.Model = originTask.Properties.OriginModelName
 
-	if dResp.Status == "failed" {
+	if strings.EqualFold(dResp.Status, "failed") || strings.EqualFold(dResp.Status, "failure") {
 		openAIVideo.Error = &dto.OpenAIVideoError{
 			Message: dResp.Error.Message,
 			Code:    dResp.Error.Code,
@@ -377,4 +687,59 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	}
 
 	return common.Marshal(openAIVideo)
+}
+
+// ConvertToOpenAIAsyncImage implements channel.OpenAIAsyncImageConverter.
+func (a *TaskAdaptor) ConvertToOpenAIAsyncImage(originTask *model.Task) ([]byte, error) {
+	inner, err := unwrapInnerForTaskData(originTask.Data)
+	if err != nil {
+		return nil, err
+	}
+	var img imageResponseTask
+	if err := common.Unmarshal(inner, &img); err != nil {
+		return nil, errors.Wrap(err, "unmarshal image task data failed")
+	}
+	out := map[string]any{
+		"object":    "pingxingshijie.image.generation.task",
+		"id":        originTask.TaskID,
+		"task_id":   originTask.TaskID,
+		"status":    originTask.Status.ToVideoStatus(),
+		"progress":  originTask.Progress,
+		"model":     originTask.Properties.OriginModelName,
+		"created_at": originTask.CreatedAt,
+		"updated_at": originTask.UpdatedAt,
+	}
+	if img.Content.ImageURL != "" {
+		out["url"] = img.Content.ImageURL
+	}
+	if strings.EqualFold(img.Status, "failed") || strings.EqualFold(img.Status, "failure") {
+		out["error"] = map[string]any{"message": img.Error.Message, "code": img.Error.Code}
+	}
+	return common.Marshal(out)
+}
+
+// ConvertToOpenAIAssetTask implements channel.OpenAIAssetTaskConverter.
+func (a *TaskAdaptor) ConvertToOpenAIAssetTask(originTask *model.Task) ([]byte, error) {
+	inner, err := unwrapInnerForTaskData(originTask.Data)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]any
+	if err := common.Unmarshal(inner, &m); err != nil {
+		return nil, err
+	}
+	out := map[string]any{
+		"object":     "pingxingshijie.asset.task",
+		"id":         originTask.TaskID,
+		"task_id":    originTask.TaskID,
+		"status":     string(originTask.Status),
+		"progress":   originTask.Progress,
+		"created_at": originTask.CreatedAt,
+		"updated_at": originTask.UpdatedAt,
+		"data":       m,
+	}
+	if originTask.FailReason != "" {
+		out["fail_reason"] = originTask.FailReason
+	}
+	return common.Marshal(out)
 }

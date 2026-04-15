@@ -119,7 +119,7 @@ var ChannelBaseURLs = []string{
 	"https://api.openai.com",                    //55
 	"https://api.replicate.com",                 //56
 	"https://chatgpt.com",                       //57
-	"https://ark.cn-beijing.volces.com",         //58 PingXingShiJie
+	"https://api.pingxingshijie.cn",             //58 PingXingShiJie
 }
 
 var ChannelTypeNames = map[int]string{
