@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -703,10 +704,40 @@ func (t *TaskSubmitReq) GetPrompt() string {
 }
 
 func (t *TaskSubmitReq) HasImage() bool {
-	return len(t.Images) > 0
+	return len(t.Images) > 0 || strings.TrimSpace(t.Image) != ""
 }
 
 func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
+	// "image" may be a single URL string (OpenAI-style) or a list of reference URLs (Seedream / client convention).
+	var raw map[string]json.RawMessage
+	if err := common.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	var imageURLs []string
+	var imageStr string
+	if imgRaw, ok := raw["image"]; ok {
+		imgRaw = bytes.TrimSpace(imgRaw)
+		if len(imgRaw) > 0 && string(imgRaw) != "null" {
+			switch imgRaw[0] {
+			case '[':
+				if err := common.Unmarshal(imgRaw, &imageURLs); err != nil {
+					return err
+				}
+			case '"':
+				if err := common.Unmarshal(imgRaw, &imageStr); err != nil {
+					return err
+				}
+			default:
+				return fmt.Errorf("json: field \"image\" must be a string or array of strings")
+			}
+		}
+		delete(raw, "image")
+	}
+	stitched, err := common.Marshal(raw)
+	if err != nil {
+		return err
+	}
+
 	type Alias TaskSubmitReq
 	aux := &struct {
 		Metadata json.RawMessage `json:"metadata,omitempty"`
@@ -716,8 +747,18 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 		Alias: (*Alias)(t),
 	}
 
-	if err := common.Unmarshal(data, &aux); err != nil {
+	if err := common.Unmarshal(stitched, &aux); err != nil {
 		return err
+	}
+
+	if len(imageURLs) > 0 {
+		if len(t.Images) == 0 {
+			t.Images = imageURLs
+		} else {
+			t.Images = append(append([]string{}, t.Images...), imageURLs...)
+		}
+	} else if imageStr != "" {
+		t.Image = imageStr
 	}
 
 	if len(aux.Duration) > 0 {
