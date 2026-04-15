@@ -105,6 +105,7 @@ type responseTask struct {
 }
 
 // imageResponseTask mirrors upstream image task polling (fields may vary; use loose parsing where needed).
+// Seedream-style responses use status "done" and put URLs in data[].url instead of content.image_url.
 type imageResponseTask struct {
 	ID      string `json:"id"`
 	Model   string `json:"model"`
@@ -112,10 +113,30 @@ type imageResponseTask struct {
 	Content struct {
 		ImageURL string `json:"image_url"`
 	} `json:"content"`
+	// Data holds generated image entries (PingXingShiJie / Volc Seedream shape).
+	Data []struct {
+		Size string `json:"size"`
+		URL  string `json:"url"`
+	} `json:"data"`
 	Error struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	} `json:"error"`
+}
+
+func (img *imageResponseTask) resultImageURL() string {
+	if img == nil {
+		return ""
+	}
+	if img.Content.ImageURL != "" {
+		return img.Content.ImageURL
+	}
+	for _, d := range img.Data {
+		if strings.TrimSpace(d.URL) != "" {
+			return d.URL
+		}
+	}
+	return ""
 }
 
 // ============================
@@ -535,7 +556,7 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 
 	// Image-style
 	var img imageResponseTask
-	if common.Unmarshal(inner, &img) == nil && (img.Content.ImageURL != "" || img.Status != "" || img.ID != "") {
+	if common.Unmarshal(inner, &img) == nil && (img.resultImageURL() != "" || img.Status != "" || img.ID != "") {
 		return mapImageTaskResult(&img)
 	}
 
@@ -613,7 +634,7 @@ func mapVideoTaskResult(resTask *responseTask) (*relaycommon.TaskInfo, error) {
 	case "processing", "running":
 		taskResult.Status = model.TaskStatusInProgress
 		taskResult.Progress = "50%"
-	case "succeeded", "success", "completed":
+	case "succeeded", "success", "completed", "done":
 		taskResult.Status = model.TaskStatusSuccess
 		taskResult.Progress = "100%"
 		taskResult.Url = resTask.Content.VideoURL
@@ -644,10 +665,10 @@ func mapImageTaskResult(resTask *imageResponseTask) (*relaycommon.TaskInfo, erro
 	case "processing", "running":
 		taskResult.Status = model.TaskStatusInProgress
 		taskResult.Progress = "50%"
-	case "succeeded", "success", "completed":
+	case "succeeded", "success", "completed", "done":
 		taskResult.Status = model.TaskStatusSuccess
 		taskResult.Progress = "100%"
-		taskResult.Url = resTask.Content.ImageURL
+		taskResult.Url = resTask.resultImageURL()
 	case "failed", "failure":
 		taskResult.Status = model.TaskStatusFailure
 		taskResult.Progress = "100%"
@@ -709,8 +730,8 @@ func (a *TaskAdaptor) ConvertToOpenAIAsyncImage(originTask *model.Task) ([]byte,
 		"created_at": originTask.CreatedAt,
 		"updated_at": originTask.UpdatedAt,
 	}
-	if img.Content.ImageURL != "" {
-		out["url"] = img.Content.ImageURL
+	if u := img.resultImageURL(); u != "" {
+		out["url"] = u
 	}
 	if strings.EqualFold(img.Status, "failed") || strings.EqualFold(img.Status, "failure") {
 		out["error"] = map[string]any{"message": img.Error.Message, "code": img.Error.Code}
