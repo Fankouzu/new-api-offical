@@ -449,6 +449,13 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		} else if taskResult.Url != "" {
 			// Direct upstream URL (e.g. Kling, Ali, Doubao, etc.)
 			task.PrivateData.ResultURL = taskResult.Url
+		} else if task.PrivateData.UpstreamKind == "image" {
+			// Image async: first success poll may have empty TaskInfo.Url; parse URL from raw response before video proxy fallback.
+			if imgURL := model.ExtractImageURLFromJSONBytes(responseBody); imgURL != "" {
+				task.PrivateData.ResultURL = imgURL
+			} else {
+				task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
+			}
 		} else {
 			// No URL from adaptor — construct proxy URL using public task ID
 			task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)

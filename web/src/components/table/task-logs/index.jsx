@@ -38,13 +38,21 @@ const TaskLogsPage = () => {
     <>
       {/* Modals */}
       <ColumnSelectorModal {...taskLogsData} />
-      <ContentModal {...taskLogsData} isVideo={false} />
+      <ContentModal {...taskLogsData} isVideo={false} isImage={false} />
       {/* 新增：视频预览弹窗 */}
       <ContentModal
         isModalOpen={taskLogsData.isVideoModalOpen}
         setIsModalOpen={taskLogsData.setIsVideoModalOpen}
         modalContent={taskLogsData.videoUrl}
         isVideo={true}
+        isImage={false}
+      />
+      <ContentModal
+        isModalOpen={taskLogsData.isImageModalOpen}
+        setIsModalOpen={taskLogsData.setIsImageModalOpen}
+        modalContent={taskLogsData.imageUrl}
+        isVideo={false}
+        isImage={true}
       />
       <AudioPreviewModal
         isModalOpen={taskLogsData.isAudioModalOpen}
