@@ -379,7 +379,11 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 			taskErr = service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", string(inner)), "unmarshal_response_body_failed", http.StatusInternalServerError)
 			return
 		}
-		if dResp.ID == "" {
+		upstreamID := strings.TrimSpace(dResp.ID)
+		if upstreamID == "" {
+			upstreamID = extractVideoCreateTaskID(inner)
+		}
+		if upstreamID == "" {
 			taskErr = service.TaskErrorWrapper(fmt.Errorf("task_id is empty"), "invalid_response", http.StatusInternalServerError)
 			return
 		}
@@ -392,8 +396,50 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 			ov.SetMetadata("upstream", ux)
 		}
 		c.JSON(http.StatusOK, ov)
-		return dResp.ID, append([]byte(nil), responseBody...), nil
+		return upstreamID, append([]byte(nil), responseBody...), nil
 	}
+}
+
+// extractVideoCreateTaskID resolves upstream task id from POST /v2/video/generations inner JSON.
+// Ark-style responses may use id, task_id, or nest under data / data.data (draft upscale and variants).
+func extractVideoCreateTaskID(inner []byte) string {
+	var m map[string]any
+	if common.Unmarshal(inner, &m) != nil {
+		return ""
+	}
+	if id := firstStringInMap(m, "id", "task_id", "TaskId", "taskId"); id != "" {
+		return id
+	}
+	for _, wrap := range []string{"Result", "result"} {
+		if r, ok := m[wrap].(map[string]any); ok {
+			if id := firstStringInMap(r, "id", "task_id", "TaskId", "taskId"); id != "" {
+				return id
+			}
+		}
+	}
+	if d, ok := m["data"].(map[string]any); ok {
+		if id := firstStringInMap(d, "id", "task_id", "TaskId", "taskId"); id != "" {
+			return id
+		}
+		if d2, ok := d["data"].(map[string]any); ok {
+			if id := firstStringInMap(d2, "id", "task_id", "TaskId", "taskId"); id != "" {
+				return id
+			}
+		}
+	}
+	return ""
+}
+
+func firstStringInMap(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k].(string); ok {
+			v = strings.TrimSpace(v)
+			if v != "" {
+				return v
+			}
+		}
+	}
+	return ""
 }
 
 func extractImageCreateTaskID(inner []byte) string {
