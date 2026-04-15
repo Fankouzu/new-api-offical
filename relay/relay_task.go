@@ -286,8 +286,18 @@ var fetchRespBuilders = map[int]func(c *gin.Context) (respBody []byte, taskResp 
 
 func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {
 	respBuilder, ok := fetchRespBuilders[relayMode]
-	if !ok {
+	// #region agent log
+	relaycommon.DebugSessionAgentLog("relay_task.go:RelayTaskFetch", "H1", "fetch_builder_lookup", map[string]any{
+		"relayMode":       relayMode,
+		"mapHasBuilder":   ok,
+		"path":            c.Request.URL.Path,
+		"videoFetchByID":  relayconstant.RelayModeVideoFetchByID,
+		"imagesGenerMode": relayconstant.RelayModeImagesGenerations,
+	})
+	// #endregion
+	if !ok || respBuilder == nil {
 		taskResp = service.TaskErrorWrapperLocal(errors.New("invalid_relay_mode"), "invalid_relay_mode", http.StatusBadRequest)
+		return
 	}
 
 	respBody, taskErr := respBuilder(c)

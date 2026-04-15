@@ -481,9 +481,27 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 		},
 	}
 
-	if info.RelayMode == relayconstant.RelayModeUnknown {
+	path2 := info.RelayMode
+	rmVal, rmExists := c.Get("relay_mode")
+	// Prefer relay_mode from Distribute() when set — Path2RelayMode may map GET /v1/images/generations/:id
+	// to RelayModeImagesGenerations, but task fetch must use RelayModeVideoFetchByID (see fetchRespBuilders).
+	if rmExists {
+		if v, ok := rmVal.(int); ok {
+			info.RelayMode = v
+		}
+	} else if info.RelayMode == relayconstant.RelayModeUnknown {
 		info.RelayMode = c.GetInt("relay_mode")
 	}
+	// #region agent log
+	DebugSessionAgentLog("relay_info.go:genBaseRelayInfo", "H1", "relay_mode_resolution", map[string]any{
+		"path":                c.Request.URL.Path,
+		"path2RelayMode":      path2,
+		"ctxRelayModeExists":  rmExists,
+		"ctxRelayModeRaw":     rmVal,
+		"finalRelayMode":      info.RelayMode,
+		"videoFetchByIDConst": relayconstant.RelayModeVideoFetchByID,
+	})
+	// #endregion
 
 	if strings.HasPrefix(c.Request.URL.Path, "/pg") {
 		info.IsPlayground = true
