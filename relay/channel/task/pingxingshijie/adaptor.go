@@ -529,12 +529,21 @@ func contentHasDraftTask(items []ContentItem) bool {
 	return false
 }
 
+// unwrapInnerForTaskData returns the inner JSON from a PingXingShiJie envelope, or the original
+// body if not wrapped. If the envelope has code==0 but an empty/missing "data" field, returns raw
+// so callers never pass an empty slice to json.Unmarshal (which yields "unexpected end of JSON input").
 func unwrapInnerForTaskData(raw []byte) ([]byte, error) {
-	inner, err := UnmarshalEnvelope(raw)
-	if err == nil {
-		return inner, nil
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return nil, fmt.Errorf("empty task data")
 	}
-	return raw, nil
+	inner, err := UnmarshalEnvelope(raw)
+	if err != nil {
+		return raw, nil
+	}
+	if len(bytes.TrimSpace(inner)) == 0 {
+		return raw, nil
+	}
+	return inner, nil
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
@@ -681,13 +690,20 @@ func mapImageTaskResult(resTask *imageResponseTask) (*relaycommon.TaskInfo, erro
 }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
-	inner, err := unwrapInnerForTaskData(originTask.Data)
-	if err != nil {
-		return nil, err
-	}
 	var dResp responseTask
-	if err := common.Unmarshal(inner, &dResp); err != nil {
-		return nil, errors.Wrap(err, "unmarshal pingxingshijie task data failed")
+	if len(bytes.TrimSpace(originTask.Data)) > 0 {
+		inner, err := unwrapInnerForTaskData(originTask.Data)
+		if err != nil {
+			return nil, err
+		}
+		if err := common.Unmarshal(inner, &dResp); err != nil {
+			return nil, errors.Wrap(err, "unmarshal pingxingshijie task data failed")
+		}
+	}
+
+	videoURL := strings.TrimSpace(dResp.Content.VideoURL)
+	if videoURL == "" {
+		videoURL = strings.TrimSpace(originTask.GetResultURL())
 	}
 
 	openAIVideo := dto.NewOpenAIVideo()
@@ -695,7 +711,7 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	openAIVideo.TaskID = originTask.TaskID
 	openAIVideo.Status = originTask.Status.ToVideoStatus()
 	openAIVideo.SetProgressStr(originTask.Progress)
-	openAIVideo.SetMetadata("url", dResp.Content.VideoURL)
+	openAIVideo.SetMetadata("url", videoURL)
 	openAIVideo.CreatedAt = originTask.CreatedAt
 	openAIVideo.CompletedAt = originTask.UpdatedAt
 	openAIVideo.Model = originTask.Properties.OriginModelName
