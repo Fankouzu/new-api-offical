@@ -342,12 +342,15 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 			taskErr = service.TaskErrorWrapper(fmt.Errorf("image task id is empty"), "invalid_response", http.StatusInternalServerError)
 			return
 		}
-		taskData = inner
+		taskData = append([]byte(nil), responseBody...)
 		ov := dto.NewOpenAIVideo()
 		ov.ID = info.PublicTaskID
 		ov.TaskID = info.PublicTaskID
 		ov.CreatedAt = time.Now().Unix()
 		ov.Model = info.OriginModelName
+		if ux := jsonAnyFromBytes(responseBody); ux != nil {
+			ov.SetMetadata("upstream", ux)
+		}
 		c.JSON(http.StatusOK, ov)
 		return id, taskData, nil
 
@@ -357,13 +360,17 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 			taskErr = service.TaskErrorWrapper(fmt.Errorf("asset id is empty"), "invalid_response", http.StatusInternalServerError)
 			return
 		}
-		taskData = inner
-		c.JSON(http.StatusOK, gin.H{
+		taskData = append([]byte(nil), responseBody...)
+		resp := gin.H{
 			"id":       info.PublicTaskID,
 			"task_id":  info.PublicTaskID,
 			"asset_id": id,
 			"object":   "pingxingshijie.asset.upload",
-		})
+		}
+		if ux := jsonAnyFromBytes(responseBody); ux != nil {
+			resp["upstream"] = ux
+		}
+		c.JSON(http.StatusOK, resp)
 		return id, taskData, nil
 
 	default:
@@ -381,8 +388,11 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		ov.TaskID = info.PublicTaskID
 		ov.CreatedAt = time.Now().Unix()
 		ov.Model = info.OriginModelName
+		if ux := jsonAnyFromBytes(responseBody); ux != nil {
+			ov.SetMetadata("upstream", ux)
+		}
 		c.JSON(http.StatusOK, ov)
-		return dResp.ID, inner, nil
+		return dResp.ID, append([]byte(nil), responseBody...), nil
 	}
 }
 
@@ -715,6 +725,9 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	openAIVideo.CreatedAt = originTask.CreatedAt
 	openAIVideo.CompletedAt = originTask.UpdatedAt
 	openAIVideo.Model = originTask.Properties.OriginModelName
+	if ux := jsonAnyFromBytes(originTask.Data); ux != nil {
+		openAIVideo.SetMetadata("upstream", ux)
+	}
 
 	if strings.EqualFold(dResp.Status, "failed") || strings.EqualFold(dResp.Status, "failure") {
 		openAIVideo.Error = &dto.OpenAIVideoError{
@@ -752,6 +765,9 @@ func (a *TaskAdaptor) ConvertToOpenAIAsyncImage(originTask *model.Task) ([]byte,
 	if strings.EqualFold(img.Status, "failed") || strings.EqualFold(img.Status, "failure") {
 		out["error"] = map[string]any{"message": img.Error.Message, "code": img.Error.Code}
 	}
+	if ux := jsonAnyFromBytes(originTask.Data); ux != nil {
+		out["upstream"] = ux
+	}
 	return common.Marshal(out)
 }
 
@@ -774,6 +790,9 @@ func (a *TaskAdaptor) ConvertToOpenAIAssetTask(originTask *model.Task) ([]byte, 
 		"created_at": originTask.CreatedAt,
 		"updated_at": originTask.UpdatedAt,
 		"data":       m,
+	}
+	if ux := jsonAnyFromBytes(originTask.Data); ux != nil {
+		out["upstream"] = ux
 	}
 	if originTask.FailReason != "" {
 		out["fail_reason"] = originTask.FailReason
