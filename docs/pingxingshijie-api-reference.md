@@ -57,6 +57,16 @@
 |--------|------|
 | `X-New-Api-Other-Ratios` | JSON 字符串：计费相关的其它倍率（如视频含视频输入时的 `video_input` 等），用于客户端或调试观测 |
 
+### 1.6 文本对话（Chat Completions）
+
+| 项目 | 说明 |
+|------|------|
+| 客户端路由 | 与其它渠道一致，使用全局 **`POST /v1/chat/completions`**（见 `router/relay-router.go`），认证与分组规则不变。 |
+| 网关 → 上游 | 渠道类型 **58** 在网关内映射为与 **火山 VolcEngine** 相同的 relay：`{Base URL}/api/v3/chat/completions`（Ark 豆包 HTTP 形态）。Base URL 默认 `https://api.pingxingshijie.cn`，以渠道配置为准。 |
+| `model` | Body 必填；值为控制台/方舟侧 **endpoint 模型 ID**（与后台模型映射一致）。 |
+| 响应包装 | 若上游返回统一 **`{"code":0,"msg":"...","data":{...}}`**，网关在 **非流式** 下会解包 **`data`** 后再按 OpenAI Chat Completion JSON 返回；流式（SSE）仍透传上游字节流（若上游对流也包装，需客户端或后续版本单独适配）。 |
+| 后台「测试渠道」 | 已支持 58：模型名 **含 `seedream`**（不区分大小写）时走 **`/v1/images/generations`** 测同步图；否则默认走 **`/v1/chat/completions`** 测文本。 |
+
 ---
 
 ## 2. 视频生成

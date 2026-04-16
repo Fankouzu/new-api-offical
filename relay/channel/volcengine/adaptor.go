@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
 	"github.com/QuantumNous/new-api/relay/channel/openai"
+	taskpxsj "github.com/QuantumNous/new-api/relay/channel/task/pingxingshijie"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/setting/model_setting"
@@ -386,6 +387,26 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 			return handleTTSWebSocketResponse(c, requestURL, volcRequest, info, encoding)
 		}
 		return handleTTSResponse(c, resp, info, encoding)
+	}
+
+	// PingXingShiJie (58) sync APIs often wrap JSON in {"code":0,"msg":"...","data":...}; unwrap for OpenAI-shaped inner body.
+	if info.ChannelMeta != nil && info.ChannelMeta.ChannelType == channelconstant.ChannelTypePingXingShiJie &&
+		!info.IsStream && resp != nil && resp.Body != nil {
+		body, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if readErr != nil {
+			return nil, types.NewErrorWithStatusCode(readErr, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+		}
+		if len(body) > 0 {
+			if inner, envErr := taskpxsj.UnmarshalEnvelope(body); envErr == nil && len(inner) > 0 {
+				body = inner
+			}
+			resp.Body = io.NopCloser(bytes.NewReader(body))
+			resp.ContentLength = int64(len(body))
+			resp.Header.Del("Content-Encoding")
+		} else {
+			resp.Body = io.NopCloser(bytes.NewReader(body))
+		}
 	}
 
 	adaptor := openai.Adaptor{}
