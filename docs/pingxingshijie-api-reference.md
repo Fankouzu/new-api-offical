@@ -87,6 +87,34 @@
 - 若 `metadata.content` 中已含 **`draft_task`**，则不再自动追加文本项。
 - 否则：先合并 `metadata` 解析出的 `content`/`resolution`/`ratio` 等，再追加一条 `type: text`、`text: prompt` 的条目（并过滤掉仅用于占位的旧 text 项）。
 
+**Seedance 1.5 Pro：草稿任务 ID 放大（仅 `draft_task`，不需要 `metadata.draft`）**
+
+「草稿 id 放大」只需在 **`metadata.content`** 里提供 **`type: "draft_task"`** 与 **`draft_task.id`**（指向上游已返回的 **draft 预览**任务 id，如 `cgt-...`）。**不需要**单独设置 **`metadata.draft`**；该布尔字段与「引用草稿任务 id 做放大」不是同一语义。网关仍会校验顶层 **`prompt` 非空**（可与业务无关的占位文案），但不会把 `prompt` 当作 `content` 文本发给上游。
+
+`resolution` 在 Seedance 1.5 Pro 放大场景下应为 **`720p`** 或 **`1080p`**（若误传 `480p` 等，网关会对该模型归一为合法放大档位）。其它 `metadata` 字段（如 **`watermark`**、**`return_last_frame`**）按上游支持情况原样合并。
+
+示例（下游 OpenAI 风格任务体）：
+
+```json
+{
+  "model": "doubao-seedance-1-5-pro-251215",
+  "prompt": "Generate from draft",
+  "metadata": {
+    "content": [
+      {
+        "type": "draft_task",
+        "draft_task": {
+          "id": "cgt-20260416103233-xccct"
+        }
+      }
+    ],
+    "watermark": false,
+    "resolution": "720p",
+    "return_last_frame": true
+  }
+}
+```
+
 #### 2.1.2 `metadata` 内常用字段（与上游 `requestPayload` 对齐）
 
 下列字段由网关合并进上游 JSON（与 `Pingxingshijie-AI接口.md` 中 POST body 一致；具体枚举与约束以该文档为准）。

@@ -302,7 +302,8 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	} else {
 		info.UpstreamModelName = body.Model
 	}
-	if body.GenerateAudio == nil {
+	// Draft upscale (draft_task only): upstream shape omits generate_audio; sending default true can break create responses.
+	if body.GenerateAudio == nil && !contentHasDraftTask(body.Content) {
 		body.GenerateAudio = lo.ToPtr(dto.BoolValue(true))
 	}
 	data, err := common.Marshal(body)
@@ -384,6 +385,9 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 			upstreamID = extractVideoCreateTaskID(inner)
 		}
 		if upstreamID == "" {
+			upstreamID = extractVideoCreateTaskID(responseBody)
+		}
+		if upstreamID == "" {
 			taskErr = service.TaskErrorWrapper(fmt.Errorf("task_id is empty"), "invalid_response", http.StatusInternalServerError)
 			return
 		}
@@ -400,42 +404,98 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 }
 
-// extractVideoCreateTaskID resolves upstream task id from POST /v2/video/generations inner JSON.
-// Ark-style responses may use id, task_id, or nest under data / data.data (draft upscale and variants).
+// extractVideoCreateTaskID resolves upstream task id from POST /v2/video/generations inner JSON,
+// full envelope JSON, or variants where id is nested (Volc/Ark-style) or data is a string id.
 func extractVideoCreateTaskID(inner []byte) string {
-	var m map[string]any
-	if common.Unmarshal(inner, &m) != nil {
+	inner = bytes.TrimSpace(inner)
+	if len(inner) == 0 {
 		return ""
 	}
-	if id := firstStringInMap(m, "id", "task_id", "TaskId", "taskId"); id != "" {
+	// Inner "data" may be a JSON string task id
+	if inner[0] == '"' {
+		var s string
+		if common.Unmarshal(inner, &s) == nil {
+			if tid := strings.TrimSpace(s); isPlausibleUpstreamTaskID(tid) {
+				return tid
+			}
+		}
+		return ""
+	}
+	var raw any
+	if common.Unmarshal(inner, &raw) != nil {
+		return ""
+	}
+	if id := deepFindVideoTaskID(raw, 0); id != "" {
 		return id
-	}
-	for _, wrap := range []string{"Result", "result"} {
-		if r, ok := m[wrap].(map[string]any); ok {
-			if id := firstStringInMap(r, "id", "task_id", "TaskId", "taskId"); id != "" {
-				return id
-			}
-		}
-	}
-	if d, ok := m["data"].(map[string]any); ok {
-		if id := firstStringInMap(d, "id", "task_id", "TaskId", "taskId"); id != "" {
-			return id
-		}
-		if d2, ok := d["data"].(map[string]any); ok {
-			if id := firstStringInMap(d2, "id", "task_id", "TaskId", "taskId"); id != "" {
-				return id
-			}
-		}
 	}
 	return ""
 }
 
-func firstStringInMap(m map[string]any, keys ...string) string {
-	for _, k := range keys {
-		if v, ok := m[k].(string); ok {
-			v = strings.TrimSpace(v)
-			if v != "" {
-				return v
+const maxVideoTaskIDDepth = 22
+
+// isPlausibleUpstreamTaskID avoids treating human messages (e.g. msg text) as ids when walking JSON.
+func isPlausibleUpstreamTaskID(s string) bool {
+	s = strings.TrimSpace(s)
+	if len(s) < 8 {
+		return false
+	}
+	if strings.HasPrefix(s, "cgt-") {
+		return true
+	}
+	// Image-style ids from same platform
+	if strings.HasPrefix(s, "I") && strings.Contains(s, "-") && len(s) >= 12 {
+		return true
+	}
+	// Hyphenated opaque ids (avoid short tokens like "ok")
+	if strings.Count(s, "-") >= 2 && len(s) >= 12 {
+		return true
+	}
+	return false
+}
+
+// deepFindVideoTaskID walks nested maps/arrays to find a task id string.
+func deepFindVideoTaskID(v any, depth int) string {
+	if depth > maxVideoTaskIDDepth || v == nil {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		s := strings.TrimSpace(t)
+		if isPlausibleUpstreamTaskID(s) {
+			return s
+		}
+		return ""
+	case map[string]any:
+		priority := []string{"id", "task_id", "taskId", "TaskId", "TaskID", "generation_id", "GenerationId"}
+		for _, k := range priority {
+			if s, ok := t[k].(string); ok {
+				if tid := strings.TrimSpace(s); tid != "" {
+					return tid
+				}
+			}
+		}
+		// Envelope or gateway: data may be the id string
+		if ds, ok := t["data"].(string); ok {
+			if tid := strings.TrimSpace(ds); isPlausibleUpstreamTaskID(tid) {
+				return tid
+			}
+		}
+		for _, k := range []string{"Result", "result", "data", "task", "Task", "output", "response", "Response"} {
+			if sub, ok := t[k]; ok {
+				if id := deepFindVideoTaskID(sub, depth+1); id != "" {
+					return id
+				}
+			}
+		}
+		for _, sub := range t {
+			if id := deepFindVideoTaskID(sub, depth+1); id != "" {
+				return id
+			}
+		}
+	case []any:
+		for _, el := range t {
+			if id := deepFindVideoTaskID(el, depth+1); id != "" {
+				return id
 			}
 		}
 	}
@@ -558,13 +618,18 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 		return nil, errors.Wrap(err, "unmarshal metadata failed")
 	}
 
-	if sec, _ := strconv.Atoi(req.Seconds); sec > 0 {
-		r.Duration = lo.ToPtr(dto.IntValue(sec))
-	}
-
+	// Draft ID upscale (draft_task): upstream body is content + resolution (+ optional flags like watermark).
+	// No top-level seconds -> duration merge here. If client ever sets metadata "draft" (bool), clear it —
+	// draft_task reference is unrelated to that field; typical clients omit metadata.draft entirely.
 	if contentHasDraftTask(r.Content) {
 		r.Content = lo.Reject(r.Content, func(c ContentItem, _ int) bool { return c.Type == "text" })
+		r.Resolution = normalizeSeedance15DraftUpscaleResolution(r.Model, r.Resolution)
+		r.Draft = nil
 		return &r, nil
+	}
+
+	if sec, _ := strconv.Atoi(req.Seconds); sec > 0 {
+		r.Duration = lo.ToPtr(dto.IntValue(sec))
 	}
 
 	r.Content = lo.Reject(r.Content, func(c ContentItem, _ int) bool { return c.Type == "text" })
@@ -583,6 +648,24 @@ func contentHasDraftTask(items []ContentItem) bool {
 		}
 	}
 	return false
+}
+
+// normalizeSeedance15DraftUpscaleResolution maps draft-ID upscale to allowed outputs only (720p / 1080p).
+// Downstream may send 480p from the draft preview tier; upstream rejects or returns empty id without this.
+func normalizeSeedance15DraftUpscaleResolution(model, resolution string) string {
+	if !strings.Contains(strings.ToLower(model), "seedance-1-5-pro") {
+		return resolution
+	}
+	low := strings.ToLower(strings.TrimSpace(resolution))
+	switch low {
+	case "1080p":
+		return "1080p"
+	case "720p":
+		return "720p"
+	default:
+		// 480p and any other value -> 720p (minimum supported upscale target per upstream rules)
+		return "720p"
+	}
 }
 
 // unwrapInnerForTaskData returns the inner JSON from a PingXingShiJie envelope, or the original
