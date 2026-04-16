@@ -242,6 +242,18 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if baseUrl == "" {
 		baseUrl = channelconstant.ChannelBaseURLs[channelconstant.ChannelTypeVolcEngine]
 	}
+	baseTrim := strings.TrimSuffix(strings.TrimSpace(baseUrl), "/")
+	// PingXingShiJie (58) uses OpenAI-compatible paths on the same host, not Ark /api/v3/* (those return "接口不存在").
+	if info.ChannelMeta != nil && info.ChannelMeta.ChannelType == channelconstant.ChannelTypePingXingShiJie {
+		switch info.RelayMode {
+		case constant.RelayModeChatCompletions:
+			return baseTrim + "/v1/chat/completions", nil
+		case constant.RelayModeEmbeddings:
+			return baseTrim + "/v1/embeddings", nil
+		case constant.RelayModeRerank:
+			return baseTrim + "/v1/rerank", nil
+		}
+	}
 	specialPlan, hasSpecialPlan := channelconstant.ChannelSpecialBases[baseUrl]
 
 	switch info.RelayFormat {

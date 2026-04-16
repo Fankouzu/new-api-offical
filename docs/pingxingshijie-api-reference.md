@@ -62,7 +62,7 @@
 | 项目 | 说明 |
 |------|------|
 | 客户端路由 | 与其它渠道一致，使用全局 **`POST /v1/chat/completions`**（见 `router/relay-router.go`），认证与分组规则不变。 |
-| 网关 → 上游 | 渠道类型 **58** 在网关内映射为与 **火山 VolcEngine** 相同的 relay：`{Base URL}/api/v3/chat/completions`（Ark 豆包 HTTP 形态）。Base URL 默认 `https://api.pingxingshijie.cn`，以渠道配置为准。 |
+| 网关 → 上游 | 渠道类型 **58** 复用 **Volcengine** adaptor 做请求/鉴权/部分响应处理，但上游路径为 **`{Base URL}/v1/chat/completions`**（与 OpenAI 一致）；**不会**请求 Ark 的 `/api/v3/chat/completions`（该域名下会返回「接口不存在」）。Base URL 默认 `https://api.pingxingshijie.cn`。 |
 | `model` | Body 必填；值为控制台/方舟侧 **endpoint 模型 ID**（与后台模型映射一致）。 |
 | 响应包装 | 若上游返回统一 **`{"code":0,"msg":"...","data":{...}}`**，网关在 **非流式** 下会解包 **`data`** 后再按 OpenAI Chat Completion JSON 返回；流式（SSE）仍透传上游字节流（若上游对流也包装，需客户端或后续版本单独适配）。 |
 | 后台「测试渠道」 | 已支持 58：模型名 **含 `seedream`**（不区分大小写）时走 **`/v1/images/generations`** 测同步图；否则默认走 **`/v1/chat/completions`** 测文本。 |
