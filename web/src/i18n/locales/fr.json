@@ -2204,6 +2204,8 @@
     "点击查看差异": "Cliquez pour voir les différences",
     "点击此处": "cliquez ici",
     "点击预览视频": "Cliquez pour prévisualiser la vidéo",
+    "点击预览图片": "Cliquez pour prévisualiser l’image",
+    "图片无法在当前浏览器中加载，这可能是由于跨域或防盗链。": "L’image n’a pas pu être chargée (CORS ou protection anti-hotlink).",
     "点击预览音乐": "Cliquez pour écouter la musique",
     "点击验证按钮，使用您的生物特征或安全密钥": "Cliquez sur le bouton de vérification pour utiliser vos caractéristiques biométriques ou votre clé de sécurité",
     "版权所有": "Tous droits réservés",

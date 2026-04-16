@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -99,7 +100,9 @@ func (m Properties) Value() (driver.Value, error) {
 type TaskPrivateData struct {
 	Key            string `json:"key,omitempty"`
 	UpstreamTaskID string `json:"upstream_task_id,omitempty"` // 上游真实 task ID
-	ResultURL      string `json:"result_url,omitempty"`       // 任务成功后的结果 URL（视频地址等）
+	// UpstreamKind is used by PingXingShiJie (channel 58) to route polling: video | image | asset.
+	UpstreamKind string `json:"upstream_kind,omitempty"`
+	ResultURL    string `json:"result_url,omitempty"` // 任务成功后的结果 URL（视频地址等）
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
 	BillingSource  string              `json:"billing_source,omitempty"`  // "wallet" 或 "subscription"
 	SubscriptionId int                 `json:"subscription_id,omitempty"` // 订阅 ID，用于订阅退款
@@ -128,11 +131,34 @@ func (t *Task) GetUpstreamTaskID() string {
 
 // GetResultURL 获取任务结果 URL（视频地址等）
 // 新数据存在 PrivateData.ResultURL 中；旧数据回退到 FailReason（历史兼容）
+// Async image tasks may have been mis-stored as /v1/videos/.../content when the adaptor returned no URL;
+// in that case, recover the real image URL from task.Data (PingXingShiJie / Seedream envelope).
 func (t *Task) GetResultURL() string {
-	if t.PrivateData.ResultURL != "" {
-		return t.PrivateData.ResultURL
+	u := t.PrivateData.ResultURL
+	if u == "" {
+		u = t.FailReason
 	}
-	return t.FailReason
+	if u == "" {
+		return ""
+	}
+	if !isVideoProxyContentURL(u, t.TaskID) {
+		return u
+	}
+	extracted := extractFirstImageLikeHTTPURLFromJSON(t.Data)
+	if extracted == "" {
+		return u
+	}
+	if t.PrivateData.UpstreamKind == "image" {
+		return extracted
+	}
+	// Legacy rows without upstream_kind: only override when payload clearly looks like an image task.
+	if t.PrivateData.UpstreamKind == "" && looksLikeImageAssetURL(extracted) {
+		if strings.Contains(strings.ToLower(t.Properties.UpstreamModelName), "seedream") ||
+			strings.Contains(strings.ToLower(t.Properties.OriginModelName), "seedream") {
+			return extracted
+		}
+	}
+	return u
 }
 
 // GenerateTaskID 生成对外暴露的 task_xxxx 格式 ID

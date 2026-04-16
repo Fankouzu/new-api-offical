@@ -81,3 +81,13 @@ type TaskAdaptor interface {
 type OpenAIVideoConverter interface {
 	ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error)
 }
+
+// OpenAIAsyncImageConverter converts stored PingXingShiJie image tasks to a client-friendly JSON for GET /v1/images/generations/:task_id.
+type OpenAIAsyncImageConverter interface {
+	ConvertToOpenAIAsyncImage(originTask *model.Task) ([]byte, error)
+}
+
+// OpenAIAssetTaskConverter converts stored PingXingShiJie asset tasks for GET /v1/assets/:task_id.
+type OpenAIAssetTaskConverter interface {
+	ConvertToOpenAIAssetTask(originTask *model.Task) ([]byte, error)
+}

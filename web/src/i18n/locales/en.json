@@ -2226,6 +2226,8 @@
     "点击查看差异": "Click to view differences",
     "点击此处": "click here",
     "点击预览视频": "Click to preview video",
+    "点击预览图片": "Click to preview image",
+    "图片无法在当前浏览器中加载，这可能是由于跨域或防盗链。": "The image could not be loaded in this browser (often due to CORS or hotlink protection).",
     "点击预览音乐": "Click to preview music",
     "点击验证按钮，使用您的生物特征或安全密钥": "Click the verification button and use your biometrics or security key",
     "版权所有": "All rights reserved",

@@ -286,8 +286,18 @@ var fetchRespBuilders = map[int]func(c *gin.Context) (respBody []byte, taskResp 
 
 func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {
 	respBuilder, ok := fetchRespBuilders[relayMode]
-	if !ok {
+	// #region agent log
+	relaycommon.DebugSessionAgentLog("relay_task.go:RelayTaskFetch", "H1", "fetch_builder_lookup", map[string]any{
+		"relayMode":       relayMode,
+		"mapHasBuilder":   ok,
+		"path":            c.Request.URL.Path,
+		"videoFetchByID":  relayconstant.RelayModeVideoFetchByID,
+		"imagesGenerMode": relayconstant.RelayModeImagesGenerations,
+	})
+	// #endregion
+	if !ok || respBuilder == nil {
 		taskResp = service.TaskErrorWrapperLocal(errors.New("invalid_relay_mode"), "invalid_relay_mode", http.StatusBadRequest)
+		return
 	}
 
 	respBody, taskErr := respBuilder(c)
@@ -376,12 +386,50 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		return
 	}
 
-	isOpenAIVideoAPI := strings.HasPrefix(c.Request.RequestURI, "/v1/videos/")
+	path := c.Request.URL.Path
+	isOpenAIVideoAPI := strings.HasPrefix(path, "/v1/videos/") || strings.HasPrefix(path, "/v1/video/generations/")
 
 	// Gemini/Vertex 支持实时查询：用户 fetch 时直接从上游拉取最新状态
 	if realtimeResp := tryRealtimeFetch(originTask, isOpenAIVideoAPI); len(realtimeResp) > 0 {
 		respBody = realtimeResp
 		return
+	}
+
+	// PingXingShiJie async image task (GET /v1/images/generations/:task_id)
+	uk := originTask.PrivateData.UpstreamKind
+	if strings.HasPrefix(path, "/v1/images/generations/") && (uk == "" || uk == "image") {
+		adaptor := GetTaskAdaptor(originTask.Platform)
+		if adaptor == nil {
+			taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("invalid channel id: %d", originTask.ChannelId), "invalid_channel_id", http.StatusBadRequest)
+			return
+		}
+		if converter, ok := adaptor.(channel.OpenAIAsyncImageConverter); ok {
+			data, err := converter.ConvertToOpenAIAsyncImage(originTask)
+			if err != nil {
+				taskResp = service.TaskErrorWrapper(err, "convert_to_openai_async_image_failed", http.StatusInternalServerError)
+				return
+			}
+			respBody = data
+			return
+		}
+	}
+
+	// PingXingShiJie asset task (GET /v1/assets/:task_id)
+	if strings.HasPrefix(path, "/v1/assets/") && (uk == "" || uk == "asset") {
+		adaptor := GetTaskAdaptor(originTask.Platform)
+		if adaptor == nil {
+			taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("invalid channel id: %d", originTask.ChannelId), "invalid_channel_id", http.StatusBadRequest)
+			return
+		}
+		if converter, ok := adaptor.(channel.OpenAIAssetTaskConverter); ok {
+			data, err := converter.ConvertToOpenAIAssetTask(originTask)
+			if err != nil {
+				taskResp = service.TaskErrorWrapper(err, "convert_to_openai_asset_task_failed", http.StatusInternalServerError)
+				return
+			}
+			respBody = data
+			return
+		}
 	}
 
 	// OpenAI Video API 格式: 走各 adaptor 的 ConvertToOpenAIVideo
@@ -437,10 +485,14 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		return nil
 	}
 
-	resp, err := adaptor.FetchTask(baseURL, channelModel.Key, map[string]any{
+	ft := map[string]any{
 		"task_id": task.GetUpstreamTaskID(),
 		"action":  task.Action,
-	}, proxy)
+	}
+	if task.PrivateData.UpstreamKind != "" {
+		ft["upstream_kind"] = task.PrivateData.UpstreamKind
+	}
+	resp, err := adaptor.FetchTask(baseURL, channelModel.Key, ft, proxy)
 	if err != nil || resp == nil {
 		return nil
 	}
@@ -540,25 +592,26 @@ func mapTaskStatusToSimple(status model.TaskStatus) string {
 
 func TaskModel2Dto(task *model.Task) *dto.TaskDto {
 	return &dto.TaskDto{
-		ID:         task.ID,
-		CreatedAt:  task.CreatedAt,
-		UpdatedAt:  task.UpdatedAt,
-		TaskID:     task.TaskID,
-		Platform:   string(task.Platform),
-		UserId:     task.UserId,
-		Group:      task.Group,
-		ChannelId:  task.ChannelId,
-		Quota:      task.Quota,
-		Action:     task.Action,
-		Status:     string(task.Status),
-		FailReason: task.FailReason,
-		ResultURL:  task.GetResultURL(),
-		SubmitTime: task.SubmitTime,
-		StartTime:  task.StartTime,
-		FinishTime: task.FinishTime,
-		Progress:   task.Progress,
-		Properties: task.Properties,
-		Username:   task.Username,
-		Data:       task.Data,
+		ID:           task.ID,
+		CreatedAt:    task.CreatedAt,
+		UpdatedAt:    task.UpdatedAt,
+		TaskID:       task.TaskID,
+		Platform:     string(task.Platform),
+		UserId:       task.UserId,
+		Group:        task.Group,
+		ChannelId:    task.ChannelId,
+		Quota:        task.Quota,
+		Action:       task.Action,
+		Status:       string(task.Status),
+		FailReason:   task.FailReason,
+		ResultURL:    task.GetResultURL(),
+		UpstreamKind: task.PrivateData.UpstreamKind,
+		SubmitTime:   task.SubmitTime,
+		StartTime:    task.StartTime,
+		FinishTime:   task.FinishTime,
+		Progress:     task.Progress,
+		Properties:   task.Properties,
+		Username:     task.Username,
+		Data:         task.Data,
 	}
 }

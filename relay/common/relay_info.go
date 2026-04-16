@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -481,9 +482,27 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 		},
 	}
 
-	if info.RelayMode == relayconstant.RelayModeUnknown {
+	path2 := info.RelayMode
+	rmVal, rmExists := c.Get("relay_mode")
+	// Prefer relay_mode from Distribute() when set — Path2RelayMode may map GET /v1/images/generations/:id
+	// to RelayModeImagesGenerations, but task fetch must use RelayModeVideoFetchByID (see fetchRespBuilders).
+	if rmExists {
+		if v, ok := rmVal.(int); ok {
+			info.RelayMode = v
+		}
+	} else if info.RelayMode == relayconstant.RelayModeUnknown {
 		info.RelayMode = c.GetInt("relay_mode")
 	}
+	// #region agent log
+	DebugSessionAgentLog("relay_info.go:genBaseRelayInfo", "H1", "relay_mode_resolution", map[string]any{
+		"path":                c.Request.URL.Path,
+		"path2RelayMode":      path2,
+		"ctxRelayModeExists":  rmExists,
+		"ctxRelayModeRaw":     rmVal,
+		"finalRelayMode":      info.RelayMode,
+		"videoFetchByIDConst": relayconstant.RelayModeVideoFetchByID,
+	})
+	// #endregion
 
 	if strings.HasPrefix(c.Request.URL.Path, "/pg") {
 		info.IsPlayground = true
@@ -685,10 +704,40 @@ func (t *TaskSubmitReq) GetPrompt() string {
 }
 
 func (t *TaskSubmitReq) HasImage() bool {
-	return len(t.Images) > 0
+	return len(t.Images) > 0 || strings.TrimSpace(t.Image) != ""
 }
 
 func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
+	// "image" may be a single URL string (OpenAI-style) or a list of reference URLs (Seedream / client convention).
+	var raw map[string]json.RawMessage
+	if err := common.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	var imageURLs []string
+	var imageStr string
+	if imgRaw, ok := raw["image"]; ok {
+		imgRaw = bytes.TrimSpace(imgRaw)
+		if len(imgRaw) > 0 && string(imgRaw) != "null" {
+			switch imgRaw[0] {
+			case '[':
+				if err := common.Unmarshal(imgRaw, &imageURLs); err != nil {
+					return err
+				}
+			case '"':
+				if err := common.Unmarshal(imgRaw, &imageStr); err != nil {
+					return err
+				}
+			default:
+				return fmt.Errorf("json: field \"image\" must be a string or array of strings")
+			}
+		}
+		delete(raw, "image")
+	}
+	stitched, err := common.Marshal(raw)
+	if err != nil {
+		return err
+	}
+
 	type Alias TaskSubmitReq
 	aux := &struct {
 		Metadata json.RawMessage `json:"metadata,omitempty"`
@@ -698,8 +747,18 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 		Alias: (*Alias)(t),
 	}
 
-	if err := common.Unmarshal(data, &aux); err != nil {
+	if err := common.Unmarshal(stitched, &aux); err != nil {
 		return err
+	}
+
+	if len(imageURLs) > 0 {
+		if len(t.Images) == 0 {
+			t.Images = imageURLs
+		} else {
+			t.Images = append(append([]string{}, t.Images...), imageURLs...)
+		}
+	} else if imageStr != "" {
+		t.Image = imageStr
 	}
 
 	if len(aux.Duration) > 0 {

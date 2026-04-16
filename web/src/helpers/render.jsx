@@ -397,6 +397,7 @@ export function getChannelIcon(channelType) {
     case 51: // 即梦 Jimeng
       return <Jimeng.Color size={iconSize} />;
     case 54: // 豆包视频 Doubao Video
+    case 58: // 平行视界 PingXingShiJie (fork of task/doubao)
       return <Doubao.Color size={iconSize} />;
     case 56: // Replicate
       return <Replicate size={iconSize} />;

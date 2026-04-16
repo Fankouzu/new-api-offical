@@ -31,8 +31,8 @@ import {
   Loader,
   List,
   Hash,
-  Video,
   Sparkles,
+  Image,
 } from 'lucide-react';
 import {
   TASK_ACTION_FIRST_TAIL_GENERATE,
@@ -90,7 +90,7 @@ function renderDuration(submit_time, finishTime) {
   );
 }
 
-const renderType = (type, t) => {
+const renderType = (type, t, record) => {
   switch (type) {
     case 'MUSIC':
       return (
@@ -105,6 +105,13 @@ const renderType = (type, t) => {
         </Tag>
       );
     case TASK_ACTION_GENERATE:
+      if (record?.upstream_kind === 'image') {
+        return (
+          <Tag color='cyan' shape='circle' prefixIcon={<Image size={14} />}>
+            {t('图像生成')}
+          </Tag>
+        );
+      }
       return (
         <Tag color='blue' shape='circle' prefixIcon={<Sparkles size={14} />}>
           {t('图生视频')}
@@ -169,6 +176,73 @@ const renderPlatform = (platform, t) => {
       );
   }
 };
+
+// Resolve preview URL: backend may expose corrected result_url; fallback to nested image URL in task data.
+function extractImageUrlFromTaskData(data) {
+  if (data == null) return '';
+  const walk = (v) => {
+    if (v == null || typeof v !== 'object') return '';
+    if (
+      typeof v.url === 'string' &&
+      /^https?:\/\//.test(v.url)
+    ) {
+      const lower = v.url.toLowerCase();
+      if (
+        /\.(jpe?g|png|webp|gif)(\?|$)/i.test(v.url) ||
+        lower.includes('seedream') ||
+        (lower.includes('tos-') && lower.includes('jpeg'))
+      ) {
+        return v.url;
+      }
+    }
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        const found = walk(item);
+        if (found) return found;
+      }
+      return '';
+    }
+    for (const k of Object.keys(v)) {
+      const found = walk(v[k]);
+      if (found) return found;
+    }
+    return '';
+  };
+  try {
+    const obj = typeof data === 'string' ? JSON.parse(data) : data;
+    return walk(obj);
+  } catch {
+    return '';
+  }
+}
+
+function resolveTaskPreviewUrl(record) {
+  const primary = record.result_url;
+  if (typeof primary !== 'string' || !/^https?:\/\//.test(primary)) {
+    return extractImageUrlFromTaskData(record.data) || '';
+  }
+  if (
+    record.upstream_kind === 'image' &&
+    primary.includes('/v1/videos/') &&
+    primary.includes('/content')
+  ) {
+    const fromData = extractImageUrlFromTaskData(record.data);
+    if (fromData) return fromData;
+  }
+  return primary;
+}
+
+function isAsyncImageTaskForPreview(record) {
+  if (record.upstream_kind === 'image') return true;
+  const u = resolveTaskPreviewUrl(record);
+  if (!u || !/^https?:\/\//.test(u)) return false;
+  const lower = u.toLowerCase();
+  return (
+    /\.(jpe?g|png|webp|gif)(\?|$)/i.test(u) ||
+    lower.includes('seedream') ||
+    (lower.includes('tos-') && lower.includes('jpeg'))
+  );
+}
 
 const renderStatus = (type, t) => {
   switch (type) {
@@ -240,6 +314,7 @@ export const getTaskLogsColumns = ({
   openContentModal,
   isAdminUser,
   openVideoModal,
+  openImageModal,
   openAudioModal,
 }) => {
   return [
@@ -327,7 +402,7 @@ export const getTaskLogsColumns = ({
       title: t('类型'),
       dataIndex: 'action',
       render: (text, record, index) => {
-        return <div>{renderType(text, t)}</div>;
+        return <div>{renderType(text, t, record)}</div>;
       },
     },
     {
@@ -407,23 +482,41 @@ export const getTaskLogsColumns = ({
           );
         }
 
-        // 视频预览：优先使用 result_url，兼容旧数据 fail_reason 中的 URL
-        const isVideoTask =
-          record.action === TASK_ACTION_GENERATE ||
-          record.action === TASK_ACTION_TEXT_GENERATE ||
-          record.action === TASK_ACTION_FIRST_TAIL_GENERATE ||
-          record.action === TASK_ACTION_REFERENCE_GENERATE ||
-          record.action === TASK_ACTION_REMIX_GENERATE;
         const isSuccess = record.status === 'SUCCESS';
-        const resultUrl = record.result_url;
-        const hasResultUrl = typeof resultUrl === 'string' && /^https?:\/\//.test(resultUrl);
-        if (isSuccess && isVideoTask && hasResultUrl) {
+        const previewUrl = resolveTaskPreviewUrl(record);
+        const hasPreviewUrl =
+          typeof previewUrl === 'string' && /^https?:\/\//.test(previewUrl);
+
+        // Async image (e.g. PingXingShiJie OpenAI-compatible image generations)
+        if (isSuccess && isAsyncImageTaskForPreview(record) && hasPreviewUrl) {
           return (
             <a
               href='#'
               onClick={(e) => {
                 e.preventDefault();
-                openVideoModal(resultUrl);
+                openImageModal(previewUrl);
+              }}
+            >
+              {t('点击预览图片')}
+            </a>
+          );
+        }
+
+        // Video preview: same action names as image async; use upstream_kind !== image
+        const isVideoTask =
+          (record.action === TASK_ACTION_GENERATE ||
+            record.action === TASK_ACTION_TEXT_GENERATE ||
+            record.action === TASK_ACTION_FIRST_TAIL_GENERATE ||
+            record.action === TASK_ACTION_REFERENCE_GENERATE ||
+            record.action === TASK_ACTION_REMIX_GENERATE) &&
+          record.upstream_kind !== 'image';
+        if (isSuccess && isVideoTask && hasPreviewUrl) {
+          return (
+            <a
+              href='#'
+              onClick={(e) => {
+                e.preventDefault();
+                openVideoModal(previewUrl);
               }}
             >
               {t('点击预览视频')}
