@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
 	"github.com/QuantumNous/new-api/relay/channel/openai"
+	taskpxsj "github.com/QuantumNous/new-api/relay/channel/task/pingxingshijie"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/setting/model_setting"
@@ -241,6 +242,18 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if baseUrl == "" {
 		baseUrl = channelconstant.ChannelBaseURLs[channelconstant.ChannelTypeVolcEngine]
 	}
+	baseTrim := strings.TrimSuffix(strings.TrimSpace(baseUrl), "/")
+	// PingXingShiJie (58): text chat is served under /v2/* (same API family as video/image). /v1/chat/completions and /api/v3/* return HTTP 400 "接口不存在" on api.pingxingshijie.cn.
+	if info.ChannelMeta != nil && info.ChannelMeta.ChannelType == channelconstant.ChannelTypePingXingShiJie {
+		switch info.RelayMode {
+		case constant.RelayModeChatCompletions:
+			return baseTrim + "/v2/chat/completions", nil
+		case constant.RelayModeEmbeddings:
+			return baseTrim + "/v1/embeddings", nil
+		case constant.RelayModeRerank:
+			return baseTrim + "/v1/rerank", nil
+		}
+	}
 	specialPlan, hasSpecialPlan := channelconstant.ChannelSpecialBases[baseUrl]
 
 	switch info.RelayFormat {
@@ -386,6 +399,32 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 			return handleTTSWebSocketResponse(c, requestURL, volcRequest, info, encoding)
 		}
 		return handleTTSResponse(c, resp, info, encoding)
+	}
+
+	// PingXingShiJie (58) sync APIs often wrap JSON in {"code":0,"msg":"...","data":...}; unwrap for OpenAI-shaped inner body.
+	if info.ChannelMeta != nil && info.ChannelMeta.ChannelType == channelconstant.ChannelTypePingXingShiJie &&
+		!info.IsStream && resp != nil && resp.Body != nil {
+		body, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if readErr != nil {
+			return nil, types.NewErrorWithStatusCode(readErr, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+		}
+		if len(body) > 0 {
+			inner, bizCode, bizMsg := taskpxsj.NormalizePingXingOpenAIShapedSyncBody(body)
+			if bizCode != 0 {
+				return nil, types.NewErrorWithStatusCode(
+					fmt.Errorf("%s", bizMsg),
+					types.ErrorCodeBadResponseBody,
+					taskpxsj.HTTPStatusForPingXingBizCode(bizCode),
+				)
+			}
+			body = inner
+			resp.Body = io.NopCloser(bytes.NewReader(body))
+			resp.ContentLength = int64(len(body))
+			resp.Header.Del("Content-Encoding")
+		} else {
+			resp.Body = io.NopCloser(bytes.NewReader(body))
+		}
 	}
 
 	adaptor := openai.Adaptor{}

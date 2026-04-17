@@ -3,7 +3,7 @@ package pingxingshijie
 // AssetPlaceholderModel is used when /v1/assets/upload JSON omits "model" (distributor still needs a model for routing).
 const AssetPlaceholderModel = "pingxingshijie-asset"
 
-// ModelList combines video + image model ids for channel configuration (align with PingXingShiJie console).
+// ModelList combines video + image + common text model ids for channel configuration (align with PingXingShiJie / Ark console).
 var ModelList = []string{
 	"doubao-seedance-1-0-pro-250528",
 	"doubao-seedance-1-0-lite-t2v",
@@ -13,6 +13,9 @@ var ModelList = []string{
 	"doubao-seedance-2-0-fast-260128",
 	"doubao-seedream-4-0-250828",
 	"doubao-seedream-4-0-250815",
+	// Text/chat (same host; upstream uses Volcengine Ark /api/v3/chat/completions — use exact endpoint IDs from your console when mapping models).
+	"doubao-pro-32k",
+	"doubao-lite-32k",
 }
 
 var ChannelName = "pingxingshijie-video"
