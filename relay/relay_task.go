@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
+	taskkie "github.com/QuantumNous/new-api/relay/channel/task/kie"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -163,6 +164,11 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if modelName == "" {
 		modelName = service.CoverTaskActionToModelName(platform, info.Action)
 	}
+	if info.ChannelType == constant.ChannelTypeKieAI && isKieFallbackTaskModel(modelName, platform, info.Action) {
+		if taskReq, err := relaycommon.GetTaskRequest(c); err == nil {
+			modelName = taskkie.DefaultModelForRequest(info.RequestURLPath, taskReq.HasImage())
+		}
+	}
 
 	// 2.5 应用渠道的模型映射（与同步任务对齐）
 	info.OriginModelName = modelName
@@ -255,6 +261,17 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		Platform:       platform,
 		Quota:          finalQuota,
 	}, nil
+}
+
+func isKieFallbackTaskModel(modelName string, platform constant.TaskPlatform, action string) bool {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" || modelName == "dall-e" {
+		return true
+	}
+	if modelName == service.CoverTaskActionToModelName(platform, action) {
+		return true
+	}
+	return modelName == taskkie.ChannelName+"_"+strings.ToLower(action)
 }
 
 // recalcQuotaFromRatios 根据 adjustedRatios 重新计算 quota。
