@@ -56,6 +56,9 @@ func ChannelType2APIType(channelType int) (int, bool) {
 	case constant.ChannelTypePingXingShiJie:
 		// Text/embed/rerank/image sync: same HTTP paths as Volcengine Ark (/api/v3/*). Async tasks still use task/pingxingshijie.
 		apiType = constant.APITypeVolcEngine
+	case constant.ChannelTypeKieAI:
+		// KieAI currently exposes async Market jobs through task/kie; sync calls fall back to OpenAI-compatible handling when used.
+		apiType = constant.APITypeOpenAI
 	case constant.ChannelTypeBaiduV2:
 		apiType = constant.APITypeBaiduV2
 	case constant.ChannelTypeOpenRouter:
