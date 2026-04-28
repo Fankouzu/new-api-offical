@@ -66,7 +66,6 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 		constant.ChannelTypeKling,
 		constant.ChannelTypeJimeng,
 		constant.ChannelTypeDoubaoVideo,
-		constant.ChannelTypePingXingShiJie,
 		constant.ChannelTypeVidu,
 	}
 	if lo.Contains(unsupportedTestChannelTypes, channel.Type) {
@@ -120,6 +119,11 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 
 		// VolcEngine 图像生成模型
 		if channel.Type == constant.ChannelTypeVolcEngine && strings.Contains(testModel, "seedream") {
+			requestPath = "/v1/images/generations"
+		}
+
+		// PingXingShiJie: sync image models use OpenAI image relay; text uses chat (Volc-style upstream via adaptor mapping).
+		if channel.Type == constant.ChannelTypePingXingShiJie && strings.Contains(strings.ToLower(testModel), "seedream") {
 			requestPath = "/v1/images/generations"
 		}
 

@@ -53,6 +53,9 @@ func ChannelType2APIType(channelType int) (int, bool) {
 		apiType = constant.APITypeMokaAI
 	case constant.ChannelTypeVolcEngine:
 		apiType = constant.APITypeVolcEngine
+	case constant.ChannelTypePingXingShiJie:
+		// Text/embed/rerank/image sync: same HTTP paths as Volcengine Ark (/api/v3/*). Async tasks still use task/pingxingshijie.
+		apiType = constant.APITypeVolcEngine
 	case constant.ChannelTypeBaiduV2:
 		apiType = constant.APITypeBaiduV2
 	case constant.ChannelTypeOpenRouter:
