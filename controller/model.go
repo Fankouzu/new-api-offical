@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/lingyiwanwu"
 	"github.com/QuantumNous/new-api/relay/channel/minimax"
 	"github.com/QuantumNous/new-api/relay/channel/moonshot"
+	taskkie "github.com/QuantumNous/new-api/relay/channel/task/kie"
 	taskpxsj "github.com/QuantumNous/new-api/relay/channel/task/pingxingshijie"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -80,6 +81,14 @@ func init() {
 			OwnedBy: minimax.ChannelName,
 		})
 	}
+	for _, modelName := range taskkie.ModelList {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: taskkie.ChannelName,
+		})
+	}
 	for modelName, _ := range constant.MidjourneyModel2Action {
 		openAIModels = append(openAIModels, dto.OpenAIModels{
 			Id:      modelName,
@@ -96,6 +105,10 @@ func init() {
 	for i := 1; i <= constant.ChannelTypeDummy; i++ {
 		if i == constant.ChannelTypePingXingShiJie {
 			channelId2Models[i] = append([]string(nil), taskpxsj.ModelList...)
+			continue
+		}
+		if i == constant.ChannelTypeKieAI {
+			channelId2Models[i] = append([]string(nil), taskkie.ModelList...)
 			continue
 		}
 		apiType, success := common.ChannelType2APIType(i)

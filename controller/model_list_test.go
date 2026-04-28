@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	taskkie "github.com/QuantumNous/new-api/relay/channel/task/kie"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
@@ -208,6 +209,14 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 	require.True(t, ok)
 	require.Empty(t, missingExprPricing.BillingMode)
 	require.Empty(t, missingExprPricing.BillingExpr)
+}
+
+func TestKieModelsAppearInGlobalModelRegistry(t *testing.T) {
+	for _, modelName := range taskkie.ModelList {
+		aiModel, ok := openAIModelsMap[modelName]
+		require.True(t, ok, "missing Kie model %s", modelName)
+		require.Equal(t, taskkie.ChannelName, aiModel.OwnedBy)
+	}
 }
 
 func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
