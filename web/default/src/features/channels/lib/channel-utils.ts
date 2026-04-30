@@ -83,6 +83,8 @@ export function getChannelTypeIcon(type: number): string {
     55: 'OpenAI', // Sora
     54: 'Doubao', // DoubaoVideo
     56: 'Replicate', // Replicate
+    58: 'https://www.pingxingshijie.cn/favicon.ico', // PingXingShiJie
+    59: 'https://kie.ai/logo.png', // KieAI
 
     // Tools & Platforms
     37: 'Dify', // Dify
