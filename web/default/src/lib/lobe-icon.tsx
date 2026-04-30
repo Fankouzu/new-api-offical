@@ -9,6 +9,22 @@
  */
 import * as LobeIcons from '@lobehub/icons'
 
+const EXTERNAL_ICON_SUFFIXES = ['.Color'] as const
+
+function normalizeExternalIconUrl(iconName: string): string | null {
+  if (!/^https?:\/\//.test(iconName)) {
+    return null
+  }
+
+  for (const suffix of EXTERNAL_ICON_SUFFIXES) {
+    if (iconName.endsWith(suffix)) {
+      return iconName.slice(0, -suffix.length)
+    }
+  }
+
+  return iconName
+}
+
 /**
  * Parse a property value from string to appropriate type
  * @param raw - Raw string value
@@ -78,6 +94,19 @@ export function getLobeIcon(
       >
         ?
       </div>
+    )
+  }
+
+  const externalIconUrl = normalizeExternalIconUrl(trimmedName)
+  if (externalIconUrl) {
+    return (
+      <img
+        src={externalIconUrl}
+        alt=''
+        aria-hidden='true'
+        className='rounded-full object-contain'
+        style={{ width: size, height: size }}
+      />
     )
   }
 
