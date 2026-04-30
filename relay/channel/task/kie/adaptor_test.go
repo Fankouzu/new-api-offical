@@ -102,6 +102,27 @@ func TestConvertImageModelPayloadsFromUnifiedImages(t *testing.T) {
 	}
 }
 
+func TestConvertImagePayloadIncludesTopLevelResolution(t *testing.T) {
+	var req relaycommon.TaskSubmitReq
+	if err := common.Unmarshal([]byte(`{
+		"model":"gpt-image-2-text-to-image",
+		"prompt":"make an image",
+		"aspect_ratio":"1:1",
+		"resolution":"4K"
+	}`), &req); err != nil {
+		t.Fatal(err)
+	}
+
+	a := &TaskAdaptor{}
+	body, err := a.convertToRequestPayload(&req, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: ModelGPTImage2TextToImage}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertInput(t, body.Input, "aspect_ratio", "1:1")
+	assertInput(t, body.Input, "resolution", "4K")
+}
+
 func TestResolveDefaultModelsForGenericFallbacks(t *testing.T) {
 	a := &TaskAdaptor{}
 

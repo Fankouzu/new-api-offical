@@ -720,6 +720,17 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 	if err := common.Unmarshal(data, &raw); err != nil {
 		return err
 	}
+	extraMetadata := map[string]interface{}{}
+	for key, value := range raw {
+		if isTaskSubmitReqKnownField(key) {
+			continue
+		}
+		var decoded interface{}
+		if err := common.Unmarshal(value, &decoded); err != nil {
+			return err
+		}
+		extraMetadata[key] = decoded
+	}
 	var imageURLs []string
 	var imageStr string
 	if imgRaw, ok := raw["image"]; ok {
@@ -787,19 +798,45 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 		if err := common.Unmarshal(aux.Metadata, &metadataStr); err == nil && metadataStr != "" {
 			var metadataObj map[string]interface{}
 			if err := common.Unmarshal([]byte(metadataStr), &metadataObj); err == nil {
-				t.Metadata = metadataObj
+				t.Metadata = mergeTaskMetadata(extraMetadata, metadataObj)
 				return nil
 			}
 		}
 
 		var metadataObj map[string]interface{}
 		if err := common.Unmarshal(aux.Metadata, &metadataObj); err == nil {
-			t.Metadata = metadataObj
+			t.Metadata = mergeTaskMetadata(extraMetadata, metadataObj)
 		}
+	} else if len(extraMetadata) > 0 {
+		t.Metadata = extraMetadata
 	}
 
 	return nil
 }
+
+func isTaskSubmitReqKnownField(key string) bool {
+	switch key {
+	case "prompt", "model", "mode", "image", "images", "size", "duration", "seconds", "input_reference", "metadata":
+		return true
+	default:
+		return false
+	}
+}
+
+func mergeTaskMetadata(extraMetadata, explicitMetadata map[string]interface{}) map[string]interface{} {
+	if len(extraMetadata) == 0 {
+		return explicitMetadata
+	}
+	merged := make(map[string]interface{}, len(extraMetadata)+len(explicitMetadata))
+	for k, v := range extraMetadata {
+		merged[k] = v
+	}
+	for k, v := range explicitMetadata {
+		merged[k] = v
+	}
+	return merged
+}
+
 func (t *TaskSubmitReq) UnmarshalMetadata(v any) error {
 	metadata := t.Metadata
 	if metadata != nil {
