@@ -821,6 +821,7 @@ func isTaskSubmitReqKnownJSONField(field string) bool {
 		return false
 	}
 }
+
 func (t *TaskSubmitReq) UnmarshalMetadata(v any) error {
 	metadata := t.Metadata
 	if metadata != nil {

@@ -102,6 +102,27 @@ func TestConvertImageModelPayloadsFromUnifiedImages(t *testing.T) {
 	}
 }
 
+func TestConvertImagePayloadIncludesTopLevelResolution(t *testing.T) {
+	var req relaycommon.TaskSubmitReq
+	if err := common.Unmarshal([]byte(`{
+		"model":"gpt-image-2-text-to-image",
+		"prompt":"make an image",
+		"aspect_ratio":"1:1",
+		"resolution":"4K"
+	}`), &req); err != nil {
+		t.Fatal(err)
+	}
+
+	a := &TaskAdaptor{}
+	body, err := a.convertToRequestPayload(&req, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: ModelGPTImage2TextToImage}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertInput(t, body.Input, "aspect_ratio", "1:1")
+	assertInput(t, body.Input, "resolution", "4K")
+}
+
 func TestResolveDefaultModelsForGenericFallbacks(t *testing.T) {
 	a := &TaskAdaptor{}
 
@@ -252,6 +273,56 @@ func TestConvertToOpenAIAsyncImageUsesStoredResultURL(t *testing.T) {
 	}
 	if got["status"] != "completed" {
 		t.Fatalf("status = %#v", got["status"])
+	}
+}
+
+func TestEstimateBillingAppliesImageResolutionRatios(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cases := []struct {
+		name       string
+		modelName  string
+		resolution string
+		wantRatio  float64
+	}{
+		{name: "nano banana 1K uses configured base price", modelName: ModelNanoBanana2, resolution: "1K", wantRatio: 1},
+		{name: "nano banana defaults to 1K base price", modelName: ModelNanoBanana2, resolution: "", wantRatio: 1},
+		{name: "nano banana normalizes resolution", modelName: ModelNanoBanana2, resolution: " 2k ", wantRatio: 8.0 / 5.0},
+		{name: "nano banana 2K scales from 1K base price", modelName: ModelNanoBanana2, resolution: "2K", wantRatio: 8.0 / 5.0},
+		{name: "nano banana 4K scales from 1K base price", modelName: ModelNanoBanana2, resolution: "4K", wantRatio: 12.0 / 5.0},
+		{name: "gpt image 2 text 2K scales from 1K base price", modelName: ModelGPTImage2TextToImage, resolution: "2K", wantRatio: 5.0 / 3.0},
+		{name: "gpt image 2 image 4K scales from 1K base price", modelName: ModelGPTImage2ImageToImage, resolution: "4K", wantRatio: 8.0 / 3.0},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &TaskAdaptor{}
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			req := relaycommon.TaskSubmitReq{Metadata: map[string]any{"resolution": tc.resolution}}
+			c.Set("task_request", req)
+
+			ratios := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: tc.modelName})
+			got, ok := ratios["resolution"]
+			if !ok {
+				t.Fatalf("missing resolution ratio in %#v", ratios)
+			}
+			if got != tc.wantRatio {
+				t.Fatalf("resolution ratio = %v, want %v", got, tc.wantRatio)
+			}
+		})
+	}
+}
+
+func TestEstimateBillingIgnoresUnsupportedKieResolutionPricing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	a := &TaskAdaptor{}
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Set("task_request", relaycommon.TaskSubmitReq{Metadata: map[string]any{"resolution": "4K"}})
+
+	ratios := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: ModelSeedream45TextToImage})
+	if len(ratios) != 0 {
+		t.Fatalf("ratios = %#v, want none", ratios)
 	}
 }
 

@@ -84,3 +84,38 @@ func TestTaskSubmitReq_UnmarshalJSON_PreservesProviderTopLevelFieldsAsMetadata(t
 		t.Fatalf("watermark metadata: %#v", req.Metadata["watermark"])
 	}
 }
+
+func TestTaskSubmitReq_UnmarshalJSON_PreservesKieTopLevelFields(t *testing.T) {
+	const payload = `{
+		"model": "gpt-image-2-text-to-image",
+		"prompt": "make an image",
+		"aspect_ratio": "1:1",
+		"resolution": "4K"
+	}`
+	var req TaskSubmitReq
+	if err := common.UnmarshalJsonStr(payload, &req); err != nil {
+		t.Fatal(err)
+	}
+	if req.Resolution != "4K" {
+		t.Fatalf("Resolution: got %q want 4K", req.Resolution)
+	}
+	if req.Metadata["aspect_ratio"] != "1:1" {
+		t.Fatalf("aspect_ratio metadata = %#v", req.Metadata["aspect_ratio"])
+	}
+}
+
+func TestTaskSubmitReq_UnmarshalJSON_ExplicitMetadataOverridesProviderTopLevelFields(t *testing.T) {
+	const payload = `{
+		"model": "gpt-image-2-text-to-image",
+		"prompt": "make an image",
+		"aspect_ratio": "1:1",
+		"metadata": {"aspect_ratio": "16:9"}
+	}`
+	var req TaskSubmitReq
+	if err := common.UnmarshalJsonStr(payload, &req); err != nil {
+		t.Fatal(err)
+	}
+	if req.Metadata["aspect_ratio"] != "16:9" {
+		t.Fatalf("aspect_ratio metadata = %#v", req.Metadata["aspect_ratio"])
+	}
+}

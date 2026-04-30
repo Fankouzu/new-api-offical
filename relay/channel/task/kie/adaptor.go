@@ -61,6 +61,24 @@ type resultJSONPayload struct {
 	LastFrameURL  []string `json:"lastFrameUrl"`
 }
 
+var imageResolutionRatioWeights = map[string]map[string]float64{
+	ModelNanoBanana2: {
+		"1K": 5,
+		"2K": 8,
+		"4K": 12,
+	},
+	ModelGPTImage2TextToImage: {
+		"1K": 3,
+		"2K": 5,
+		"4K": 8,
+	},
+	ModelGPTImage2ImageToImage: {
+		"1K": 3,
+		"2K": 5,
+		"4K": 8,
+	},
+}
+
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.baseURL = strings.TrimRight(DefaultBaseURL, "/")
 	if info != nil && strings.TrimSpace(info.ChannelBaseUrl) != "" {
@@ -73,6 +91,33 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
 	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
+}
+
+func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
+	if info == nil {
+		return nil
+	}
+	weights, ok := imageResolutionRatioWeights[info.OriginModelName]
+	if !ok {
+		return nil
+	}
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return nil
+	}
+	resolution := normalizeImageResolution(resolveBillingResolution(req))
+	if resolution == "" {
+		resolution = "1K"
+	}
+	weight, ok := weights[resolution]
+	if !ok {
+		return nil
+	}
+	baseWeight := weights["1K"]
+	if baseWeight == 0 {
+		return nil
+	}
+	return map[string]float64{"resolution": weight / baseWeight}
 }
 
 func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
@@ -250,6 +295,9 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	if req.Size != "" {
 		applySize(input, req.Size)
 	}
+	if req.Resolution != "" {
+		input["resolution"] = req.Resolution
+	}
 	if req.Duration > 0 {
 		input["duration"] = float64(req.Duration)
 	} else if sec, _ := strconv.Atoi(req.Seconds); sec > 0 {
@@ -319,6 +367,31 @@ func requestImages(req *relaycommon.TaskSubmitReq) []string {
 		images = append([]string{req.Image}, images...)
 	}
 	return images
+}
+
+func resolveBillingResolution(req relaycommon.TaskSubmitReq) string {
+	input := map[string]any{}
+	if req.Size != "" {
+		applySize(input, req.Size)
+	}
+	if req.Resolution != "" {
+		input["resolution"] = req.Resolution
+	}
+	if err := taskcommon.UnmarshalMetadata(req.Metadata, &input); err != nil {
+		return ""
+	}
+	resolution, _ := input["resolution"].(string)
+	return resolution
+}
+
+func normalizeImageResolution(resolution string) string {
+	resolution = strings.ToUpper(strings.TrimSpace(resolution))
+	switch resolution {
+	case "1K", "2K", "4K":
+		return resolution
+	default:
+		return ""
+	}
 }
 
 func applySize(input map[string]any, size string) {
