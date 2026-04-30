@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
+	taskkie "github.com/QuantumNous/new-api/relay/channel/task/kie"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -163,6 +164,11 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if modelName == "" {
 		modelName = service.CoverTaskActionToModelName(platform, info.Action)
 	}
+	if info.ChannelType == constant.ChannelTypeKieAI && isKieFallbackTaskModel(modelName, platform, info.Action) {
+		if taskReq, err := relaycommon.GetTaskRequest(c); err == nil {
+			modelName = taskkie.DefaultModelForRequest(info.RequestURLPath, taskReq.HasImage())
+		}
+	}
 
 	// 2.5 应用渠道的模型映射（与同步任务对齐）
 	info.OriginModelName = modelName
@@ -195,11 +201,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 
 	// 6. 将 OtherRatios 应用到基础额度
 	if !common.StringsContains(constant.TaskPricePatches, modelName) {
-		for _, ra := range info.PriceData.OtherRatios {
-			if ra != 1.0 {
-				info.PriceData.Quota = int(float64(info.PriceData.Quota) * ra)
-			}
-		}
+		info.PriceData.Quota = applyOtherRatiosToQuota(info.PriceData.Quota, info.PriceData.OtherRatios)
 	}
 
 	// 7. 预扣费（仅首次 — 重试时 info.Billing 已存在，跳过）
@@ -257,25 +259,44 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	}, nil
 }
 
+func isKieFallbackTaskModel(modelName string, platform constant.TaskPlatform, action string) bool {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" || modelName == "dall-e" {
+		return true
+	}
+	if modelName == service.CoverTaskActionToModelName(platform, action) {
+		return true
+	}
+	return modelName == taskkie.ChannelName+"_"+strings.ToLower(action)
+}
+
 // recalcQuotaFromRatios 根据 adjustedRatios 重新计算 quota。
 // 公式: baseQuota × ∏(ratio) — 其中 baseQuota 是不含 OtherRatios 的基础额度。
 func recalcQuotaFromRatios(info *relaycommon.RelayInfo, ratios map[string]float64) int {
 	// 从 PriceData 获取不含 OtherRatios 的基础价格
-	baseQuota := info.PriceData.Quota
+	baseQuota := float64(info.PriceData.Quota)
 	// 先除掉原有的 OtherRatios 恢复基础额度
-	for _, ra := range info.PriceData.OtherRatios {
-		if ra != 1.0 && ra > 0 {
-			baseQuota = int(float64(baseQuota) / ra)
-		}
+	oldMultiplier := otherRatiosProduct(info.PriceData.OtherRatios)
+	if oldMultiplier > 0 {
+		baseQuota /= oldMultiplier
 	}
 	// 应用新的 ratios
-	result := float64(baseQuota)
+	result := baseQuota * otherRatiosProduct(ratios)
+	return int(result)
+}
+
+func applyOtherRatiosToQuota(quota int, ratios map[string]float64) int {
+	return int(float64(quota) * otherRatiosProduct(ratios))
+}
+
+func otherRatiosProduct(ratios map[string]float64) float64 {
+	multiplier := 1.0
 	for _, ra := range ratios {
-		if ra != 1.0 {
-			result *= ra
+		if ra != 1.0 && ra > 0 {
+			multiplier *= ra
 		}
 	}
-	return int(result)
+	return multiplier
 }
 
 var fetchRespBuilders = map[int]func(c *gin.Context) (respBody []byte, taskResp *dto.TaskError){
@@ -286,15 +307,6 @@ var fetchRespBuilders = map[int]func(c *gin.Context) (respBody []byte, taskResp 
 
 func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {
 	respBuilder, ok := fetchRespBuilders[relayMode]
-	// #region agent log
-	relaycommon.DebugSessionAgentLog("relay_task.go:RelayTaskFetch", "H1", "fetch_builder_lookup", map[string]any{
-		"relayMode":       relayMode,
-		"mapHasBuilder":   ok,
-		"path":            c.Request.URL.Path,
-		"videoFetchByID":  relayconstant.RelayModeVideoFetchByID,
-		"imagesGenerMode": relayconstant.RelayModeImagesGenerations,
-	})
-	// #endregion
 	if !ok || respBuilder == nil {
 		taskResp = service.TaskErrorWrapperLocal(errors.New("invalid_relay_mode"), "invalid_relay_mode", http.StatusBadRequest)
 		return

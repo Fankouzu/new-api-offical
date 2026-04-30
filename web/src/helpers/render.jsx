@@ -404,6 +404,14 @@ export function getChannelIcon(channelType) {
     case 54: // 豆包视频 Doubao Video
     case 58: // 平行视界 PingXingShiJie (fork of task/doubao)
       return <Doubao.Color size={iconSize} />;
+    case 59: // Kie.ai
+      return (
+        <img
+          src='/kie-ai-logo.png'
+          alt='Kie.ai'
+          style={{ width: iconSize, height: iconSize, borderRadius: 3 }}
+        />
+      );
     case 56: // Replicate
       return <Replicate size={iconSize} />;
     case 8: // 自定义渠道
