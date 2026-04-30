@@ -216,7 +216,7 @@ func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *r
 	return nil
 }
 
-// EstimateBilling detects video input in metadata and returns video discount OtherRatio.
+// EstimateBilling detects Seedance 2.0 resolution pricing and video-input discounts.
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	path := requestPathFromRelay(info)
 	if UpstreamKindFromPath(path) != UpstreamKindVideo {
@@ -226,12 +226,34 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	if err != nil {
 		return nil
 	}
+	ratioMap := make(map[string]float64)
+	resolution := requestResolution(req)
+	if ratio, ok := GetResolutionRatio(info.OriginModelName, resolution); ok {
+		ratioMap["resolution"] = ratio
+	}
 	if hasVideoInMetadata(req.Metadata) {
-		if ratio, ok := GetVideoInputRatio(info.OriginModelName); ok {
-			return map[string]float64{"video_input": ratio}
+		if ratio, ok := GetVideoInputRatioForResolution(info.OriginModelName, resolution); ok {
+			ratioMap["video_input"] = ratio
 		}
 	}
-	return nil
+	if len(ratioMap) == 0 {
+		return nil
+	}
+	return ratioMap
+}
+
+func requestResolution(req relaycommon.TaskSubmitReq) string {
+	if req.Resolution != "" {
+		return strings.ToLower(strings.TrimSpace(req.Resolution))
+	}
+	if req.Metadata == nil {
+		return ""
+	}
+	resolution, ok := req.Metadata["resolution"].(string)
+	if !ok {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(resolution))
 }
 
 func hasVideoInMetadata(metadata map[string]interface{}) bool {
@@ -540,6 +562,15 @@ func extractAssetCreateID(inner []byte) string {
 			}
 		}
 	}
+	for _, resultKey := range []string{"Result", "result"} {
+		if res, ok := m[resultKey].(map[string]any); ok {
+			for _, k := range []string{"Id", "id", "asset_id", "AssetId", "ID"} {
+				if v, ok := res[k].(string); ok && v != "" {
+					return v
+				}
+			}
+		}
+	}
 	return ""
 }
 
@@ -617,6 +648,9 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 	if err := taskcommon.UnmarshalMetadata(metadata, &r); err != nil {
 		return nil, errors.Wrap(err, "unmarshal metadata failed")
 	}
+	if r.Resolution == "" {
+		r.Resolution = req.Resolution
+	}
 
 	// Draft ID upscale (draft_task): upstream body is content + resolution (+ optional flags like watermark).
 	// No top-level seconds -> duration merge here. If client ever sets metadata "draft" (bool), clear it —
@@ -630,13 +664,16 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 
 	if sec, _ := strconv.Atoi(req.Seconds); sec > 0 {
 		r.Duration = lo.ToPtr(dto.IntValue(sec))
+	} else if req.Duration > 0 && r.Duration == nil {
+		r.Duration = lo.ToPtr(dto.IntValue(req.Duration))
 	}
 
-	r.Content = lo.Reject(r.Content, func(c ContentItem, _ int) bool { return c.Type == "text" })
-	r.Content = append(r.Content, ContentItem{
-		Type: "text",
-		Text: req.Prompt,
-	})
+	if !contentHasText(r.Content) {
+		r.Content = append(r.Content, ContentItem{
+			Type: "text",
+			Text: req.Prompt,
+		})
+	}
 
 	return &r, nil
 }
@@ -644,6 +681,15 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 func contentHasDraftTask(items []ContentItem) bool {
 	for _, c := range items {
 		if c.Type == "draft_task" {
+			return true
+		}
+	}
+	return false
+}
+
+func contentHasText(items []ContentItem) bool {
+	for _, c := range items {
+		if c.Type == "text" {
 			return true
 		}
 	}
@@ -874,28 +920,33 @@ func (a *TaskAdaptor) ConvertToOpenAIAsyncImage(originTask *model.Task) ([]byte,
 	if err != nil {
 		return nil, err
 	}
-	var img imageResponseTask
-	if err := common.Unmarshal(inner, &img); err != nil {
-		return nil, errors.Wrap(err, "unmarshal image task data failed")
-	}
 	out := map[string]any{
-		"object":    "pingxingshijie.image.generation.task",
-		"id":        originTask.TaskID,
-		"task_id":   originTask.TaskID,
-		"status":    originTask.Status.ToVideoStatus(),
-		"progress":  originTask.Progress,
-		"model":     originTask.Properties.OriginModelName,
+		"object":     "pingxingshijie.image.generation.task",
+		"id":         originTask.TaskID,
+		"task_id":    originTask.TaskID,
+		"status":     originTask.Status.ToVideoStatus(),
+		"progress":   originTask.Progress,
+		"model":      originTask.Properties.OriginModelName,
 		"created_at": originTask.CreatedAt,
 		"updated_at": originTask.UpdatedAt,
+	}
+	if ux := jsonAnyFromBytes(originTask.Data); ux != nil {
+		out["upstream"] = ux
+	}
+
+	var img imageResponseTask
+	if err := common.Unmarshal(inner, &img); err != nil {
+		if upstreamID := extractImageCreateTaskID(inner); upstreamID != "" {
+			out["upstream_task_id"] = upstreamID
+			return common.Marshal(out)
+		}
+		return nil, errors.Wrap(err, "unmarshal image task data failed")
 	}
 	if u := img.resultImageURL(); u != "" {
 		out["url"] = u
 	}
 	if strings.EqualFold(img.Status, "failed") || strings.EqualFold(img.Status, "failure") {
 		out["error"] = map[string]any{"message": img.Error.Message, "code": img.Error.Code}
-	}
-	if ux := jsonAnyFromBytes(originTask.Data); ux != nil {
-		out["upstream"] = ux
 	}
 	return common.Marshal(out)
 }

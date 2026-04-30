@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	channelconstant "github.com/QuantumNous/new-api/constant"
@@ -216,6 +217,23 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 	}
 }
 
+func detectImageMimeType(filename string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".webp":
+		return "image/webp"
+	default:
+		if strings.HasPrefix(ext, ".jp") {
+			return "image/jpeg"
+		}
+		return "image/png"
+	}
+}
+
 func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 }
 
@@ -230,10 +248,10 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 		switch info.RelayMode {
 		case constant.RelayModeChatCompletions:
 			return baseTrim + "/v2/chat/completions", nil
-		case constant.RelayModeEmbeddings:
-			return baseTrim + "/v1/embeddings", nil
-		case constant.RelayModeRerank:
-			return baseTrim + "/v1/rerank", nil
+		case constant.RelayModeImagesGenerations:
+			return baseTrim + "/v2/image/generations", nil
+		default:
+			return "", fmt.Errorf("unsupported PingXingShiJie relay mode: %d", info.RelayMode)
 		}
 	}
 	specialPlan, hasSpecialPlan := channelconstant.ChannelSpecialBases[baseUrl]

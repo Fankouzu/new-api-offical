@@ -295,6 +295,9 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	if req.Size != "" {
 		applySize(input, req.Size)
 	}
+	if req.Resolution != "" {
+		input["resolution"] = req.Resolution
+	}
 	if req.Duration > 0 {
 		input["duration"] = float64(req.Duration)
 	} else if sec, _ := strconv.Atoi(req.Seconds); sec > 0 {
@@ -370,6 +373,9 @@ func resolveBillingResolution(req relaycommon.TaskSubmitReq) string {
 	input := map[string]any{}
 	if req.Size != "" {
 		applySize(input, req.Size)
+	}
+	if req.Resolution != "" {
+		input["resolution"] = req.Resolution
 	}
 	if err := taskcommon.UnmarshalMetadata(req.Metadata, &input); err != nil {
 		return ""
