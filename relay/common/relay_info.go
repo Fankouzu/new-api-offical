@@ -489,7 +489,6 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 		},
 	}
 
-	path2 := info.RelayMode
 	rmVal, rmExists := c.Get("relay_mode")
 	// Prefer relay_mode from Distribute() when set — Path2RelayMode may map GET /v1/images/generations/:id
 	// to RelayModeImagesGenerations, but task fetch must use RelayModeVideoFetchByID (see fetchRespBuilders).
@@ -500,16 +499,6 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 	} else if info.RelayMode == relayconstant.RelayModeUnknown {
 		info.RelayMode = c.GetInt("relay_mode")
 	}
-	// #region agent log
-	DebugSessionAgentLog("relay_info.go:genBaseRelayInfo", "H1", "relay_mode_resolution", map[string]any{
-		"path":                c.Request.URL.Path,
-		"path2RelayMode":      path2,
-		"ctxRelayModeExists":  rmExists,
-		"ctxRelayModeRaw":     rmVal,
-		"finalRelayMode":      info.RelayMode,
-		"videoFetchByIDConst": relayconstant.RelayModeVideoFetchByID,
-	})
-	// #endregion
 
 	if strings.HasPrefix(c.Request.URL.Path, "/pg") {
 		info.IsPlayground = true
@@ -700,6 +689,7 @@ type TaskSubmitReq struct {
 	Image          string                 `json:"image,omitempty"`
 	Images         []string               `json:"images,omitempty"`
 	Size           string                 `json:"size,omitempty"`
+	Resolution     string                 `json:"resolution,omitempty"` // 分辨率参数（如 720p/1080p）
 	Duration       int                    `json:"duration,omitempty"`
 	Seconds        string                 `json:"seconds,omitempty"`
 	InputReference string                 `json:"input_reference,omitempty"`
@@ -782,23 +772,54 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 		}
 	}
 
+	metadataObj := make(map[string]interface{})
+	for key, rawValue := range raw {
+		if isTaskSubmitReqKnownJSONField(key) {
+			continue
+		}
+		var value interface{}
+		if err := common.Unmarshal(rawValue, &value); err != nil {
+			return err
+		}
+		metadataObj[key] = value
+	}
+
 	if len(aux.Metadata) > 0 {
 		var metadataStr string
 		if err := common.Unmarshal(aux.Metadata, &metadataStr); err == nil && metadataStr != "" {
-			var metadataObj map[string]interface{}
-			if err := common.Unmarshal([]byte(metadataStr), &metadataObj); err == nil {
-				t.Metadata = metadataObj
+			var explicitMetadata map[string]interface{}
+			if err := common.Unmarshal([]byte(metadataStr), &explicitMetadata); err == nil {
+				for key, value := range explicitMetadata {
+					metadataObj[key] = value
+				}
+				if len(metadataObj) > 0 {
+					t.Metadata = metadataObj
+				}
 				return nil
 			}
 		}
 
-		var metadataObj map[string]interface{}
-		if err := common.Unmarshal(aux.Metadata, &metadataObj); err == nil {
-			t.Metadata = metadataObj
+		var explicitMetadata map[string]interface{}
+		if err := common.Unmarshal(aux.Metadata, &explicitMetadata); err == nil {
+			for key, value := range explicitMetadata {
+				metadataObj[key] = value
+			}
 		}
+	}
+	if len(metadataObj) > 0 {
+		t.Metadata = metadataObj
 	}
 
 	return nil
+}
+
+func isTaskSubmitReqKnownJSONField(field string) bool {
+	switch field {
+	case "prompt", "model", "mode", "image", "images", "size", "resolution", "duration", "seconds", "input_reference", "metadata":
+		return true
+	default:
+		return false
+	}
 }
 func (t *TaskSubmitReq) UnmarshalMetadata(v any) error {
 	metadata := t.Metadata
