@@ -1,18 +1,19 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState, useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Music } from 'lucide-react'
+import { Images, Music, Video } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatTimestampToDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { StatusBadge } from '@/components/status-badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { TASK_ACTIONS, TASK_STATUS } from '../../constants'
+import { TASK_STATUS } from '../../constants'
 import {
   taskActionMapper,
   taskStatusMapper,
 } from '../../lib/mappers'
+import { extractTaskMediaResults } from '../../lib/task-media-results'
 import type { TaskLog } from '../../types'
 import { getLogAvatarStyle } from '../../lib/avatar-color'
 import { useUsageLogsContext } from '../usage-logs-provider'
@@ -21,6 +22,7 @@ import {
   type AudioClip,
 } from '../dialogs/audio-preview-dialog'
 import { FailReasonDialog } from '../dialogs/fail-reason-dialog'
+import { TaskMediaResultsDialog } from '../dialogs/task-media-results-dialog'
 import {
   createDurationColumn,
   createChannelColumn,
@@ -69,6 +71,54 @@ function AudioPreviewCell({ log }: { log: TaskLog }) {
         open={open}
         onOpenChange={setOpen}
         clips={clips as AudioClip[]}
+      />
+    </>
+  )
+}
+
+function TaskMediaResultsCell({
+  log,
+  results,
+}: {
+  log: TaskLog
+  results: ReturnType<typeof extractTaskMediaResults>
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+
+  if (results.length === 0) return null
+
+  const imageCount = results.filter((result) => result.type === 'image').length
+  const videoCount = results.length - imageCount
+  let label = t('View generated results')
+  if (results.length === 1) {
+    label =
+      results[0]?.type === 'image'
+        ? t('Click to preview image')
+        : t('Click to preview video')
+  }
+
+  return (
+    <>
+      <button
+        type='button'
+        className='group flex max-w-[200px] items-center gap-1.5 text-left text-xs'
+        onClick={() => setOpen(true)}
+      >
+        {imageCount > 0 && <Images className='size-3 text-muted-foreground' />}
+        {videoCount > 0 && <Video className='size-3 text-muted-foreground' />}
+        <span className='text-foreground truncate leading-snug group-hover:underline'>
+          {label}
+        </span>
+        {results.length > 1 && (
+          <span className='text-muted-foreground'>({results.length})</span>
+        )}
+      </button>
+      <TaskMediaResultsDialog
+        open={open}
+        onOpenChange={setOpen}
+        results={results}
+        taskId={log.task_id}
       />
     </>
   )
@@ -241,27 +291,13 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
           }
         }
 
-        const isVideoTask =
-          log.action === TASK_ACTIONS.GENERATE ||
-          log.action === TASK_ACTIONS.TEXT_GENERATE ||
-          log.action === TASK_ACTIONS.FIRST_TAIL_GENERATE ||
-          log.action === TASK_ACTIONS.REFERENCE_GENERATE ||
-          log.action === TASK_ACTIONS.REMIX_GENERATE
         const isSuccess = status === TASK_STATUS.SUCCESS
-        const isUrl = failReason?.startsWith('http')
 
-        if (isSuccess && isVideoTask && isUrl) {
-          const videoUrl = `/v1/videos/${log.task_id}/content`
-          return (
-            <a
-              href={videoUrl}
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-xs text-foreground hover:underline'
-            >
-              {t('Click to preview video')}
-            </a>
-          )
+        if (isSuccess) {
+          const mediaResults = extractTaskMediaResults(log)
+          if (mediaResults.length > 0) {
+            return <TaskMediaResultsCell log={log} results={mediaResults} />
+          }
         }
 
         if (!failReason) {
