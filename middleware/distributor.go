@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
+	taskpxsj "github.com/QuantumNous/new-api/relay/channel/task/pingxingshijie"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -283,7 +284,7 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		}
 		modelRequest.Model = req.Model
 		if modelRequest.Model == "" {
-			modelRequest.Model = "pingxingshijie-asset"
+			modelRequest.Model = taskpxsj.AssetPlaceholderModel
 		}
 		c.Set("relay_mode", relayconstant.RelayModeVideoSubmit)
 	} else if strings.HasPrefix(c.Request.URL.Path, "/v1/assets/") && c.Request.Method == http.MethodGet {

@@ -385,7 +385,7 @@ curl -sS -X POST "${GATEWAY}/v1/images/generations/async" \
 curl -sS -X POST "${GATEWAY}/v1/assets/upload" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
-  -d '{"model":"pingxingshijie-asset","image_url":"https://example.com/a.jpg","asset_type":"Image"}'
+-d '{"model":"pingxingshijie-asset","image_url":"https://example.com/a.jpg","asset_type":"Image"}'
 ```
 
 ---
