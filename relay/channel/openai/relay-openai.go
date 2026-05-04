@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -559,6 +560,60 @@ func preConsumeUsage(ctx *gin.Context, info *relaycommon.RelayInfo, usage *dto.R
 
 func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
 	defer service.CloseResponseBodyGracefully(resp)
+
+	// For SSE streaming responses (image edits with stream=true), forward chunks to
+	// the client immediately rather than buffering in io.ReadAll. This keeps the
+	// connection alive during long generation (2m+) and prevents proxy timeouts.
+	ct := resp.Header.Get("Content-Type")
+	if strings.HasPrefix(ct, "text/event-stream") {
+		var buf bytes.Buffer
+		tee := io.TeeReader(resp.Body, &buf)
+		if _, err := io.Copy(c.Writer, tee); err != nil {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
+		}
+		c.Writer.Flush()
+
+		// Parse completed event for usage data
+		bodyStr := buf.String()
+		idx := strings.LastIndex(bodyStr, "\"image_edit.completed\"")
+		if idx < 0 {
+			idx = strings.LastIndex(bodyStr, `"type":"image_edit.completed"`)
+		}
+		if idx < 0 {
+			return nil, nil
+		}
+		dataStart := strings.Index(bodyStr[idx:], "\ndata:")
+		if dataStart < 0 {
+			dataStart = strings.Index(bodyStr[idx:], "data:")
+		}
+		if dataStart < 0 {
+			return nil, nil
+		}
+		dataLine := bodyStr[idx+dataStart:]
+		if nl := strings.IndexByte(dataLine, '\n'); nl > 0 {
+			dataLine = dataLine[:nl]
+		}
+		dataLine = strings.TrimPrefix(strings.TrimPrefix(dataLine, "data:"), " ")
+		if dataLine == "" {
+			return nil, nil
+		}
+		var usageResp dto.SimpleResponse
+		if err := common.Unmarshal([]byte(dataLine), &usageResp); err != nil {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+		}
+		if usageResp.InputTokens > 0 {
+			usageResp.PromptTokens += usageResp.InputTokens
+		}
+		if usageResp.OutputTokens > 0 {
+			usageResp.CompletionTokens += usageResp.OutputTokens
+		}
+		if usageResp.InputTokensDetails != nil {
+			usageResp.PromptTokensDetails.ImageTokens += usageResp.InputTokensDetails.ImageTokens
+			usageResp.PromptTokensDetails.TextTokens += usageResp.InputTokensDetails.TextTokens
+		}
+		applyUsagePostProcessing(info, &usageResp.Usage, []byte(dataLine))
+		return &usageResp.Usage, nil
+	}
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
