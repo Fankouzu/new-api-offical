@@ -573,33 +573,21 @@ func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 		}
 		c.Writer.Flush()
 
-		// Parse completed event for usage data
+		// Parse completed event for usage data: scan backwards for
+		// the last data: line and parse it as JSON.
 		bodyStr := buf.String()
-		idx := strings.LastIndex(bodyStr, "\"image_edit.completed\"")
-		if idx < 0 {
-			idx = strings.LastIndex(bodyStr, `"type":"image_edit.completed"`)
+		var lastDataLine string
+		for _, line := range strings.Split(bodyStr, "\n") {
+			if strings.HasPrefix(line, "data:") {
+				lastDataLine = strings.TrimSpace(line[5:])
+			}
 		}
-		if idx < 0 {
-			return &dto.Usage{}, nil
-		}
-		dataStart := strings.Index(bodyStr[idx:], "\ndata:")
-		if dataStart < 0 {
-			dataStart = strings.Index(bodyStr[idx:], "data:")
-		}
-		if dataStart < 0 {
-			return &dto.Usage{}, nil
-		}
-		dataLine := bodyStr[idx+dataStart:]
-		if nl := strings.IndexByte(dataLine, '\n'); nl > 0 {
-			dataLine = dataLine[:nl]
-		}
-		dataLine = strings.TrimPrefix(strings.TrimPrefix(dataLine, "data:"), " ")
-		if dataLine == "" {
+		if lastDataLine == "" {
 			return &dto.Usage{}, nil
 		}
 		var usageResp dto.SimpleResponse
-		if err := common.Unmarshal([]byte(dataLine), &usageResp); err != nil {
-			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+		if err := common.Unmarshal([]byte(lastDataLine), &usageResp); err != nil {
+			return &dto.Usage{}, nil
 		}
 		if usageResp.InputTokens > 0 {
 			usageResp.PromptTokens += usageResp.InputTokens
