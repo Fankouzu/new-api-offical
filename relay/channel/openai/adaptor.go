@@ -427,6 +427,10 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 	switch info.RelayMode {
 	case relayconstant.RelayModeImagesEdits:
 
+		if !strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") {
+			return request, nil
+		}
+
 		var requestBody bytes.Buffer
 		writer := multipart.NewWriter(&requestBody)
 
