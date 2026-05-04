@@ -580,14 +580,14 @@ func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 			idx = strings.LastIndex(bodyStr, `"type":"image_edit.completed"`)
 		}
 		if idx < 0 {
-			return nil, nil
+			return &dto.Usage{}, nil
 		}
 		dataStart := strings.Index(bodyStr[idx:], "\ndata:")
 		if dataStart < 0 {
 			dataStart = strings.Index(bodyStr[idx:], "data:")
 		}
 		if dataStart < 0 {
-			return nil, nil
+			return &dto.Usage{}, nil
 		}
 		dataLine := bodyStr[idx+dataStart:]
 		if nl := strings.IndexByte(dataLine, '\n'); nl > 0 {
@@ -595,7 +595,7 @@ func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 		}
 		dataLine = strings.TrimPrefix(strings.TrimPrefix(dataLine, "data:"), " ")
 		if dataLine == "" {
-			return nil, nil
+			return &dto.Usage{}, nil
 		}
 		var usageResp dto.SimpleResponse
 		if err := common.Unmarshal([]byte(dataLine), &usageResp); err != nil {
