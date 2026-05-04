@@ -599,7 +599,7 @@ func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 			usageResp.PromptTokensDetails.ImageTokens += usageResp.InputTokensDetails.ImageTokens
 			usageResp.PromptTokensDetails.TextTokens += usageResp.InputTokensDetails.TextTokens
 		}
-		applyUsagePostProcessing(info, &usageResp.Usage, []byte(dataLine))
+		applyUsagePostProcessing(info, &usageResp.Usage, []byte(lastDataLine))
 		return &usageResp.Usage, nil
 	}
 
