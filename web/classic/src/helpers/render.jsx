@@ -412,6 +412,14 @@ export function getChannelIcon(channelType) {
           style={{ width: iconSize, height: iconSize, borderRadius: 3 }}
         />
       );
+    case 60: // Fal.ai
+      return (
+        <img
+          src='https://icons.lobehub.com/components/fal'
+          alt='Fal.ai'
+          style={{ width: iconSize, height: iconSize, borderRadius: 3 }}
+        />
+      );
     case 56: // Replicate
       return <Replicate size={iconSize} />;
     case 8: // 自定义渠道

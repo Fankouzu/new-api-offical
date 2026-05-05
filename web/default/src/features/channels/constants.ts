@@ -60,7 +60,7 @@ export const CHANNEL_TYPES = {
   57: 'Codex',
   58: 'PingXingShiJie',
   59: 'KieAI',
-  60: 'FalAI',
+  60: 'Fal.ai',
 } as const
 
 const CHANNEL_TYPE_DISPLAY_ORDER: number[] = [

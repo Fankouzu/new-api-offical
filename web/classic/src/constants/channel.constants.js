@@ -202,7 +202,7 @@ export const CHANNEL_OPTIONS = [
   {
     value: 60,
     color: 'blue',
-    label: 'FalAI',
+    label: 'Fal.ai',
   },
 ];
 
