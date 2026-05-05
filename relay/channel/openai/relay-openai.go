@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -559,6 +560,48 @@ func preConsumeUsage(ctx *gin.Context, info *relaycommon.RelayInfo, usage *dto.R
 
 func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
 	defer service.CloseResponseBodyGracefully(resp)
+
+	// For SSE streaming responses (image edits with stream=true), forward chunks to
+	// the client immediately rather than buffering in io.ReadAll. This keeps the
+	// connection alive during long generation (2m+) and prevents proxy timeouts.
+	ct := resp.Header.Get("Content-Type")
+	if strings.HasPrefix(ct, "text/event-stream") {
+		var buf bytes.Buffer
+		tee := io.TeeReader(resp.Body, &buf)
+		if _, err := io.Copy(c.Writer, tee); err != nil {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
+		}
+		c.Writer.Flush()
+
+		// Parse completed event for usage data: scan backwards for
+		// the last data: line and parse it as JSON.
+		bodyStr := buf.String()
+		var lastDataLine string
+		for _, line := range strings.Split(bodyStr, "\n") {
+			if strings.HasPrefix(line, "data:") {
+				lastDataLine = strings.TrimSpace(line[5:])
+			}
+		}
+		if lastDataLine == "" {
+			return &dto.Usage{}, nil
+		}
+		var usageResp dto.SimpleResponse
+		if err := common.Unmarshal([]byte(lastDataLine), &usageResp); err != nil {
+			return &dto.Usage{}, nil
+		}
+		if usageResp.InputTokens > 0 {
+			usageResp.PromptTokens += usageResp.InputTokens
+		}
+		if usageResp.OutputTokens > 0 {
+			usageResp.CompletionTokens += usageResp.OutputTokens
+		}
+		if usageResp.InputTokensDetails != nil {
+			usageResp.PromptTokensDetails.ImageTokens += usageResp.InputTokensDetails.ImageTokens
+			usageResp.PromptTokensDetails.TextTokens += usageResp.InputTokensDetails.TextTokens
+		}
+		applyUsagePostProcessing(info, &usageResp.Usage, []byte(lastDataLine))
+		return &usageResp.Usage, nil
+	}
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
