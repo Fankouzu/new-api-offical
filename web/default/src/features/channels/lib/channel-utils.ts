@@ -84,7 +84,8 @@ export function getChannelTypeIcon(type: number): string {
     54: 'Doubao', // DoubaoVideo
     56: 'Replicate', // Replicate
     58: 'https://www.pingxingshijie.cn/favicon.ico', // PingXingShiJie
-    59: 'https://kie.ai/logo.png', // KieAI
+	59: 'https://kie.ai/logo.png', // KieAI
+	60: 'https://icons.lobehub.com/components/fal', // FalAI
 
     // Tools & Platforms
     37: 'Dify', // Dify
