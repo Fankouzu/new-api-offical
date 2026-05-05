@@ -123,7 +123,7 @@ var ChannelBaseURLs = []string{
 	"https://chatgpt.com",                       //57
 	"https://api.pingxingshijie.cn",             //58 PingXingShiJie
 	"https://api.kie.ai",                        //59 KieAI
-	"https://fal.run",                          //60 FalAI
+	"https://queue.fal.run",                          //60 FalAI
 }
 
 var ChannelTypeNames = map[int]string{

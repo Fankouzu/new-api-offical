@@ -29,14 +29,13 @@ type TaskAdaptor struct {
 }
 
 type falSubmitRequest struct {
-	Prompt      string   `json:"prompt"`
-	ImageSize   any      `json:"image_size,omitempty"`
-	Quality     string   `json:"quality,omitempty"`
-	NumImages   int      `json:"num_images,omitempty"`
-	OutputFmt   string   `json:"output_format,omitempty"`
-	SyncMode    bool     `json:"sync_mode,omitempty"`
-	ImageURLs   []string `json:"image_urls,omitempty"`
-	MaskURL     string   `json:"mask_url,omitempty"`
+	Prompt    string   `json:"prompt"`
+	ImageSize any      `json:"image_size,omitempty"`
+	Quality   string   `json:"quality,omitempty"`
+	NumImages int      `json:"num_images,omitempty"`
+	OutputFmt string   `json:"output_format,omitempty"`
+	ImageURLs []string `json:"image_urls,omitempty"`
+	MaskURL   string   `json:"mask_url,omitempty"`
 }
 
 type falSubmitResponse struct {
@@ -52,16 +51,19 @@ type falStatusResponse struct {
 }
 
 type falResultResponse struct {
-	RequestID string `json:"request_id"`
-	Status    string `json:"status"`
+	RequestID string           `json:"request_id"`
+	Status    string           `json:"status"`
 	Data      struct {
-		Images []struct {
-			URL         string `json:"url"`
-			ContentType string `json:"content_type"`
-			Width       int    `json:"width"`
-			Height      int    `json:"height"`
-		} `json:"images"`
+		Images []falResultImage `json:"images"`
 	} `json:"data"`
+	Images []falResultImage `json:"images"`
+}
+
+type falResultImage struct {
+	URL         string `json:"url"`
+	ContentType string `json:"content_type"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
 }
 
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
@@ -82,10 +84,6 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	if info == nil {
 		return nil
 	}
-	weights, ok := qualityRatioWeights[info.OriginModelName]
-	if !ok {
-		return nil
-	}
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
 		return nil
@@ -94,15 +92,15 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	if q, ok := req.Metadata["quality"].(string); ok && q != "" {
 		quality = strings.ToLower(strings.TrimSpace(q))
 	}
-	weight, ok := weights[quality]
+	size := strings.ReplaceAll(strings.TrimSpace(req.Size), " ", "")
+	if size == "" {
+		size = "1024x1024"
+	}
+	multiplier, ok := getPricingMultiplier(info.OriginModelName, size, quality)
 	if !ok {
 		return nil
 	}
-	baseWeight := weights["low"]
-	if baseWeight == 0 {
-		return nil
-	}
-	return map[string]float64{"quality": weight / baseWeight}
+	return map[string]float64{"quality": multiplier}
 }
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
@@ -235,12 +233,17 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	}
 
 	taskResult := &relaycommon.TaskInfo{Code: 0, TaskID: res.RequestID}
-	switch strings.ToLower(strings.TrimSpace(res.Status)) {
+	status := strings.ToLower(strings.TrimSpace(res.Status))
+	images := res.Data.Images
+	if len(images) == 0 {
+		images = res.Images
+	}
+	switch status {
 	case "completed":
 		taskResult.Status = model.TaskStatusSuccess
 		taskResult.Progress = "100%"
-		if len(res.Data.Images) > 0 {
-			taskResult.Url = res.Data.Images[0].URL
+		if len(images) > 0 {
+			taskResult.Url = images[0].URL
 		}
 	case "failed":
 		taskResult.Status = model.TaskStatusFailure
@@ -249,8 +252,15 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		taskResult.Status = model.TaskStatusInProgress
 		taskResult.Progress = "50%"
 	default:
-		taskResult.Status = model.TaskStatusInProgress
-		taskResult.Progress = "50%"
+		// Status field may be absent; presence of images means completion.
+		if len(images) > 0 {
+			taskResult.Status = model.TaskStatusSuccess
+			taskResult.Progress = "100%"
+			taskResult.Url = images[0].URL
+		} else {
+			taskResult.Status = model.TaskStatusInProgress
+			taskResult.Progress = "50%"
+		}
 	}
 	return taskResult, nil
 }
