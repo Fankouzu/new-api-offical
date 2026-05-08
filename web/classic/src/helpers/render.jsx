@@ -62,6 +62,7 @@ import {
   Perplexity,
   Replicate,
 } from '@lobehub/icons';
+import Fal from '@lobehub/icons/es/Fal';
 
 import {
   LayoutDashboard,
@@ -412,6 +413,8 @@ export function getChannelIcon(channelType) {
           style={{ width: iconSize, height: iconSize, borderRadius: 3 }}
         />
       );
+    case 60: // Fal.ai
+      return <Fal.Color size={iconSize} />;
     case 56: // Replicate
       return <Replicate size={iconSize} />;
     case 8: // 自定义渠道
