@@ -2,6 +2,7 @@ package fal
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -62,9 +63,10 @@ type falResultResponse struct {
 	} `json:"data"`
 	Images []falResultImage `json:"images"`
 	// Error fields — fal.ai may return these without a "status" field on failure.
-	Detail string        `json:"detail"`
-	Error  string        `json:"error"`
-	Logs   []falLogEntry `json:"logs,omitempty"`
+	// "detail" can be a string or an array (FastAPI validation errors).
+	Detail json.RawMessage `json:"detail"`
+	Error  string          `json:"error"`
+	Logs   []falLogEntry   `json:"logs,omitempty"`
 }
 
 type falResultImage struct {
@@ -266,10 +268,10 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		taskResult.Progress = "50%"
 	default:
 		// Check for error responses that don't contain a "status" field.
-		if res.Detail != "" {
+		if detailMsg := extractDetailMessage(res.Detail); detailMsg != "" {
 			taskResult.Status = model.TaskStatusFailure
 			taskResult.Progress = "100%"
-			taskResult.Reason = "fal: " + res.Detail
+			taskResult.Reason = "fal: " + detailMsg
 		} else if res.Error != "" {
 			taskResult.Status = model.TaskStatusFailure
 			taskResult.Progress = "100%"
@@ -316,6 +318,27 @@ func (a *TaskAdaptor) ConvertToOpenAIAsyncImage(originTask *model.Task) ([]byte,
 		"data":    []any{imgObj},
 	}
 	return common.Marshal(resp)
+}
+
+func extractDetailMessage(detail json.RawMessage) string {
+	if len(detail) == 0 {
+		return ""
+	}
+	// Try as a plain string first.
+	var s string
+	if json.Unmarshal(detail, &s) == nil {
+		return s
+	}
+	// Try as an array of FastAPI-style error objects.
+	var arr []struct {
+		Msg  string `json:"msg"`
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(detail, &arr) == nil && len(arr) > 0 {
+		return arr[0].Msg
+	}
+	// Fallback: return raw JSON.
+	return string(detail)
 }
 
 func parseDimensions(size string) (int, int, error) {
