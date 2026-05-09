@@ -2,6 +2,7 @@ package fal
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -50,6 +51,10 @@ type falStatusResponse struct {
 	} `json:"logs,omitempty"`
 }
 
+type falLogEntry struct {
+	Message string `json:"message"`
+}
+
 type falResultResponse struct {
 	RequestID string           `json:"request_id"`
 	Status    string           `json:"status"`
@@ -57,6 +62,11 @@ type falResultResponse struct {
 		Images []falResultImage `json:"images"`
 	} `json:"data"`
 	Images []falResultImage `json:"images"`
+	// Error fields — fal.ai may return these without a "status" field on failure.
+	// "detail" can be a string or an array (FastAPI validation errors).
+	Detail json.RawMessage `json:"detail"`
+	Error  string          `json:"error"`
+	Logs   []falLogEntry   `json:"logs,omitempty"`
 }
 
 type falResultImage struct {
@@ -223,7 +233,12 @@ func (a *TaskAdaptor) FetchTask(baseURL, key string, body map[string]any, proxy 
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return client.Do(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	// Let the caller read the error body — 4xx/5xx may still contain parseable status.
+	return resp, nil
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
@@ -252,8 +267,21 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		taskResult.Status = model.TaskStatusInProgress
 		taskResult.Progress = "50%"
 	default:
-		// Status field may be absent; presence of images means completion.
-		if len(images) > 0 {
+		// Check for error responses that don't contain a "status" field.
+		if detailMsg := extractDetailMessage(res.Detail); detailMsg != "" && !isTransientDetail(detailMsg) {
+			taskResult.Status = model.TaskStatusFailure
+			taskResult.Progress = "100%"
+			taskResult.Reason = "fal: " + detailMsg
+		} else if res.Error != "" {
+			taskResult.Status = model.TaskStatusFailure
+			taskResult.Progress = "100%"
+			taskResult.Reason = "fal: " + res.Error
+		} else if hasErrorInLogs(res.Logs) {
+			taskResult.Status = model.TaskStatusFailure
+			taskResult.Progress = "100%"
+			taskResult.Reason = "fal: error in logs"
+		} else if len(images) > 0 {
+			// Status field may be absent; presence of images means completion.
 			taskResult.Status = model.TaskStatusSuccess
 			taskResult.Progress = "100%"
 			taskResult.Url = images[0].URL
@@ -292,6 +320,27 @@ func (a *TaskAdaptor) ConvertToOpenAIAsyncImage(originTask *model.Task) ([]byte,
 	return common.Marshal(resp)
 }
 
+func extractDetailMessage(detail json.RawMessage) string {
+	if len(detail) == 0 {
+		return ""
+	}
+	// Try as a plain string first.
+	var s string
+	if json.Unmarshal(detail, &s) == nil {
+		return s
+	}
+	// Try as an array of FastAPI-style error objects.
+	var arr []struct {
+		Msg  string `json:"msg"`
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(detail, &arr) == nil && len(arr) > 0 {
+		return arr[0].Msg
+	}
+	// Fallback: return raw JSON.
+	return string(detail)
+}
+
 func parseDimensions(size string) (int, int, error) {
 	parts := strings.Split(size, "x")
 	if len(parts) != 2 {
@@ -306,4 +355,28 @@ func parseDimensions(size string) (int, int, error) {
 		return 0, 0, err
 	}
 	return w, h, nil
+}
+
+func isTransientDetail(msg string) bool {
+	lower := strings.ToLower(msg)
+	return lower == "request is still in progress" ||
+		strings.Contains(lower, "in progress") ||
+		strings.Contains(lower, "in queue") ||
+		strings.Contains(lower, "processing")
+}
+
+func hasErrorInLogs(logs []falLogEntry) bool {
+	for _, log := range logs {
+		msg := strings.ToLower(log.Message)
+		if strings.Contains(msg, "error") ||
+			strings.Contains(msg, "failed") ||
+			strings.Contains(msg, "policy") ||
+			strings.Contains(msg, "violation") ||
+			strings.Contains(msg, "rejected") ||
+			strings.Contains(msg, "blocked") ||
+			strings.Contains(msg, "content") {
+			return true
+		}
+	}
+	return false
 }
