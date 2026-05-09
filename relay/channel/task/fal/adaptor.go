@@ -268,7 +268,7 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		taskResult.Progress = "50%"
 	default:
 		// Check for error responses that don't contain a "status" field.
-		if detailMsg := extractDetailMessage(res.Detail); detailMsg != "" {
+		if detailMsg := extractDetailMessage(res.Detail); detailMsg != "" && !isTransientDetail(detailMsg) {
 			taskResult.Status = model.TaskStatusFailure
 			taskResult.Progress = "100%"
 			taskResult.Reason = "fal: " + detailMsg
@@ -355,6 +355,14 @@ func parseDimensions(size string) (int, int, error) {
 		return 0, 0, err
 	}
 	return w, h, nil
+}
+
+func isTransientDetail(msg string) bool {
+	lower := strings.ToLower(msg)
+	return lower == "request is still in progress" ||
+		strings.Contains(lower, "in progress") ||
+		strings.Contains(lower, "in queue") ||
+		strings.Contains(lower, "processing")
 }
 
 func hasErrorInLogs(logs []falLogEntry) bool {
