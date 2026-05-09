@@ -50,6 +50,10 @@ type falStatusResponse struct {
 	} `json:"logs,omitempty"`
 }
 
+type falLogEntry struct {
+	Message string `json:"message"`
+}
+
 type falResultResponse struct {
 	RequestID string           `json:"request_id"`
 	Status    string           `json:"status"`
@@ -57,6 +61,10 @@ type falResultResponse struct {
 		Images []falResultImage `json:"images"`
 	} `json:"data"`
 	Images []falResultImage `json:"images"`
+	// Error fields — fal.ai may return these without a "status" field on failure.
+	Detail string        `json:"detail"`
+	Error  string        `json:"error"`
+	Logs   []falLogEntry `json:"logs,omitempty"`
 }
 
 type falResultImage struct {
@@ -223,7 +231,12 @@ func (a *TaskAdaptor) FetchTask(baseURL, key string, body map[string]any, proxy 
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return client.Do(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	// Let the caller read the error body — 4xx/5xx may still contain parseable status.
+	return resp, nil
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
@@ -252,8 +265,21 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		taskResult.Status = model.TaskStatusInProgress
 		taskResult.Progress = "50%"
 	default:
-		// Status field may be absent; presence of images means completion.
-		if len(images) > 0 {
+		// Check for error responses that don't contain a "status" field.
+		if res.Detail != "" {
+			taskResult.Status = model.TaskStatusFailure
+			taskResult.Progress = "100%"
+			taskResult.Reason = "fal: " + res.Detail
+		} else if res.Error != "" {
+			taskResult.Status = model.TaskStatusFailure
+			taskResult.Progress = "100%"
+			taskResult.Reason = "fal: " + res.Error
+		} else if hasErrorInLogs(res.Logs) {
+			taskResult.Status = model.TaskStatusFailure
+			taskResult.Progress = "100%"
+			taskResult.Reason = "fal: error in logs"
+		} else if len(images) > 0 {
+			// Status field may be absent; presence of images means completion.
 			taskResult.Status = model.TaskStatusSuccess
 			taskResult.Progress = "100%"
 			taskResult.Url = images[0].URL
@@ -306,4 +332,20 @@ func parseDimensions(size string) (int, int, error) {
 		return 0, 0, err
 	}
 	return w, h, nil
+}
+
+func hasErrorInLogs(logs []falLogEntry) bool {
+	for _, log := range logs {
+		msg := strings.ToLower(log.Message)
+		if strings.Contains(msg, "error") ||
+			strings.Contains(msg, "failed") ||
+			strings.Contains(msg, "policy") ||
+			strings.Contains(msg, "violation") ||
+			strings.Contains(msg, "rejected") ||
+			strings.Contains(msg, "blocked") ||
+			strings.Contains(msg, "content") {
+			return true
+		}
+	}
+	return false
 }
