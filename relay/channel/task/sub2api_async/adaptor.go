@@ -244,9 +244,13 @@ func doSyncImageGeneration(ctx context.Context, baseURL, apiKey string, requestB
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
+	requestPath, err := syncImageGenerationRequestPath(requestBody)
+	if err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/v1/images/generations", bytes.NewReader(requestBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+requestPath, bytes.NewReader(requestBody))
 	if err != nil {
 		return nil, fmt.Errorf("new upstream request failed: %w", err)
 	}
@@ -269,6 +273,23 @@ func doSyncImageGeneration(ctx context.Context, baseURL, apiKey string, requestB
 		return nil, fmt.Errorf("upstream status %d: %s", resp.StatusCode, string(respBody))
 	}
 	return respBody, nil
+}
+
+func syncImageGenerationRequestPath(requestBody []byte) (string, error) {
+	var req struct {
+		Model string `json:"model"`
+	}
+	if err := common.Unmarshal(requestBody, &req); err != nil {
+		return "", errors.Wrap(err, "unmarshal upstream request body failed")
+	}
+	switch strings.TrimSpace(req.Model) {
+	case ModelGPTImage2TextToImage:
+		return "/v1/images/generations", nil
+	case ModelGPTImage2ImageToImage:
+		return "/v1/images/edits", nil
+	default:
+		return "", fmt.Errorf("unsupported model: %s", req.Model)
+	}
 }
 
 func parseSyncImageGenerationResult(respBody []byte) (string, error) {

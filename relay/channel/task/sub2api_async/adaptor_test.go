@@ -194,6 +194,50 @@ func TestDoRequestCarriesBuiltRequestBodyWithoutCallingUpstream(t *testing.T) {
 	}
 }
 
+func TestDoSyncImageGenerationRoutesByGPTImage2Mode(t *testing.T) {
+	cases := []struct {
+		name     string
+		model    string
+		wantPath string
+	}{
+		{
+			name:     "text to image uses generations",
+			model:    ModelGPTImage2TextToImage,
+			wantPath: "/v1/images/generations",
+		},
+		{
+			name:     "image to image uses edits",
+			model:    ModelGPTImage2ImageToImage,
+			wantPath: "/v1/images/edits",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			seenPath := ""
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				seenPath = r.URL.Path
+				if r.URL.Path != tc.wantPath {
+					http.Error(w, "wrong path", http.StatusNotFound)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"created":1,"data":[{"b64_json":"abc123"}]}`))
+			}))
+			defer server.Close()
+
+			body := []byte(`{"model":"` + tc.model + `","prompt":"make an image"}`)
+			_, err := doSyncImageGeneration(t.Context(), server.URL, "test-key", body)
+			if err != nil {
+				t.Fatalf("doSyncImageGeneration error = %v, seen path %q", err, seenPath)
+			}
+			if seenPath != tc.wantPath {
+				t.Fatalf("path = %q, want %q", seenPath, tc.wantPath)
+			}
+		})
+	}
+}
+
 func TestParseTaskResultMapsStatesAndResultURL(t *testing.T) {
 	a := &TaskAdaptor{}
 	info, err := a.ParseTaskResult([]byte(`{"id":"sub2_task_123","task_id":"sub2_task_123","status":"completed","url":"https://example.com/out.png"}`))
