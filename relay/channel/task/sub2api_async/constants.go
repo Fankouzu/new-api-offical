@@ -19,7 +19,7 @@ type modelConfig struct {
 
 var modelConfigs = map[string]modelConfig{
 	ModelGPTImage2TextToImage:  {},
-	ModelGPTImage2ImageToImage: {ImageKey: "input_urls"},
+	ModelGPTImage2ImageToImage: {ImageKey: "image"},
 }
 
 func getModelConfig(modelName string) modelConfig {

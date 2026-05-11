@@ -36,7 +36,7 @@ func TestConvertGPTImagePayloadsFromUnifiedRequest(t *testing.T) {
 		wantKey   string
 	}{
 		{name: "text to image", modelName: ModelGPTImage2TextToImage},
-		{name: "image to image", modelName: ModelGPTImage2ImageToImage, images: []string{"https://example.com/a.png", "https://example.com/b.png"}, wantKey: "input_urls"},
+		{name: "image to image", modelName: ModelGPTImage2ImageToImage, images: []string{"https://example.com/a.png", "https://example.com/b.png"}, wantKey: "image"},
 	}
 
 	for _, tc := range cases {
@@ -78,6 +78,9 @@ func TestConvertGPTImagePayloadsFromUnifiedRequest(t *testing.T) {
 			}
 			if _, hasImages := body["images"]; hasImages {
 				t.Fatalf("input should not also include generic images key: %#v", body)
+			}
+			if _, hasInputURLs := body["input_urls"]; hasInputURLs {
+				t.Fatalf("input should use OpenAI-compatible image key, not input_urls: %#v", body)
 			}
 		})
 	}
