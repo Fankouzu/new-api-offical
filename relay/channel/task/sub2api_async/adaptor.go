@@ -468,9 +468,13 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	images := requestImages(req)
 	if len(images) > 0 {
 		if cfg.ImageKey != "" {
-			input[cfg.ImageKey] = images
-			if cfg.ImageKey == "image" && len(images) == 1 && strings.TrimSpace(req.Image) != "" {
-				input[cfg.ImageKey] = images[0]
+			if cfg.ImageURLKey != "" {
+				input[cfg.ImageKey] = imageURLObjects(images, cfg.ImageURLKey)
+			} else {
+				input[cfg.ImageKey] = images
+				if cfg.ImageKey == "image" && len(images) == 1 && strings.TrimSpace(req.Image) != "" {
+					input[cfg.ImageKey] = images[0]
+				}
 			}
 		} else if len(images) == 1 {
 			input["image"] = images[0]
@@ -480,6 +484,18 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	}
 
 	return input, nil
+}
+
+func imageURLObjects(images []string, key string) []map[string]string {
+	objects := make([]map[string]string, 0, len(images))
+	for _, image := range images {
+		image = strings.TrimSpace(image)
+		if image == "" {
+			continue
+		}
+		objects = append(objects, map[string]string{key: image})
+	}
+	return objects
 }
 
 func resolveModelName(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) string {

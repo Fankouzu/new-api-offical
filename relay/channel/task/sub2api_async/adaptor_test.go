@@ -36,7 +36,7 @@ func TestConvertGPTImagePayloadsFromUnifiedRequest(t *testing.T) {
 		wantKey   string
 	}{
 		{name: "text to image", modelName: ModelGPTImage2TextToImage},
-		{name: "image to image", modelName: ModelGPTImage2ImageToImage, images: []string{"https://example.com/a.png", "https://example.com/b.png"}, wantKey: "image"},
+		{name: "image to image", modelName: ModelGPTImage2ImageToImage, images: []string{"https://example.com/a.png", "https://example.com/b.png"}, wantKey: "images"},
 	}
 
 	for _, tc := range cases {
@@ -69,24 +69,24 @@ func TestConvertGPTImagePayloadsFromUnifiedRequest(t *testing.T) {
 				}
 				return
 			}
-			got, ok := body[tc.wantKey].([]string)
+			got, ok := body[tc.wantKey].([]map[string]string)
 			if !ok {
 				t.Fatalf("%s has type %T", tc.wantKey, body[tc.wantKey])
 			}
-			if len(got) != 2 || got[0] != "https://example.com/a.png" || got[1] != "https://example.com/b.png" {
+			if len(got) != 2 || got[0]["image_url"] != "https://example.com/a.png" || got[1]["image_url"] != "https://example.com/b.png" {
 				t.Fatalf("%s = %#v", tc.wantKey, got)
 			}
-			if _, hasImages := body["images"]; hasImages {
-				t.Fatalf("input should not also include generic images key: %#v", body)
+			if _, hasImage := body["image"]; hasImage {
+				t.Fatalf("input should not include OpenAI image key for Sub2API edits: %#v", body)
 			}
 			if _, hasInputURLs := body["input_urls"]; hasInputURLs {
-				t.Fatalf("input should use OpenAI-compatible image key, not input_urls: %#v", body)
+				t.Fatalf("input should not include input_urls: %#v", body)
 			}
 		})
 	}
 }
 
-func TestConvertGPTImageImageToImageUsesSingleOpenAIImageReference(t *testing.T) {
+func TestConvertGPTImageImageToImageUsesSingleSub2APIImageReference(t *testing.T) {
 	a := &TaskAdaptor{}
 	const imageURL = "https://example.com/reference.png"
 	req := relaycommon.TaskSubmitReq{
@@ -102,19 +102,22 @@ func TestConvertGPTImageImageToImageUsesSingleOpenAIImageReference(t *testing.T)
 		t.Fatal(err)
 	}
 
-	got, ok := body["image"].(string)
+	got, ok := body["images"].([]map[string]string)
 	if !ok {
-		t.Fatalf("image should be a single OpenAI-compatible string, got %T: %#v", body["image"], body["image"])
+		t.Fatalf("images should be Sub2API image_url objects, got %T: %#v", body["images"], body["images"])
 	}
-	if got != imageURL {
-		t.Fatalf("image = %q want %q", got, imageURL)
+	if len(got) != 1 || got[0]["image_url"] != imageURL {
+		t.Fatalf("images = %#v want image_url %q", got, imageURL)
+	}
+	if _, hasImage := body["image"]; hasImage {
+		t.Fatalf("input should not include image key: %#v", body)
 	}
 	if _, hasInputURLs := body["input_urls"]; hasInputURLs {
 		t.Fatalf("input should not include input_urls: %#v", body)
 	}
 }
 
-func TestConvertGPTImageImageToImagePreservesImageArrayFromJSON(t *testing.T) {
+func TestConvertGPTImageImageToImageConvertsImageArrayToSub2APIImageURLs(t *testing.T) {
 	a := &TaskAdaptor{}
 	const imageURL = "https://example.com/reference.png"
 	req := relaycommon.TaskSubmitReq{
@@ -129,12 +132,15 @@ func TestConvertGPTImageImageToImagePreservesImageArrayFromJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, ok := body["image"].([]string)
+	got, ok := body["images"].([]map[string]string)
 	if !ok {
-		t.Fatalf("image should preserve client JSON array shape, got %T: %#v", body["image"], body["image"])
+		t.Fatalf("images should be Sub2API image_url objects, got %T: %#v", body["images"], body["images"])
 	}
-	if len(got) != 1 || got[0] != imageURL {
-		t.Fatalf("image = %#v want [%q]", got, imageURL)
+	if len(got) != 1 || got[0]["image_url"] != imageURL {
+		t.Fatalf("images = %#v want image_url %q", got, imageURL)
+	}
+	if _, hasImage := body["image"]; hasImage {
+		t.Fatalf("input should not include image key: %#v", body)
 	}
 	if _, hasInputURLs := body["input_urls"]; hasInputURLs {
 		t.Fatalf("input should not include input_urls: %#v", body)

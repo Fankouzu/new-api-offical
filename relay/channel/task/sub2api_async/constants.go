@@ -14,12 +14,13 @@ var ModelList = []string{
 }
 
 type modelConfig struct {
-	ImageKey string
+	ImageKey    string
+	ImageURLKey string
 }
 
 var modelConfigs = map[string]modelConfig{
 	ModelGPTImage2TextToImage:  {},
-	ModelGPTImage2ImageToImage: {ImageKey: "image"},
+	ModelGPTImage2ImageToImage: {ImageKey: "images", ImageURLKey: "image_url"},
 }
 
 func getModelConfig(modelName string) modelConfig {
