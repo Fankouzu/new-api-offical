@@ -416,7 +416,7 @@ export function getChannelIcon(channelType) {
     case 60: // Fal.ai
       return <Fal.Color size={iconSize} />;
     case 61: // Sub2API-async
-      return <OpenAI.Color size={iconSize} />;
+      return <OpenAI size={iconSize} />;
     case 56: // Replicate
       return <Replicate size={iconSize} />;
     case 8: // 自定义渠道
