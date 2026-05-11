@@ -178,6 +178,8 @@ const renderPlatform = (platform, t) => {
 };
 
 // Resolve preview URL: backend may expose corrected result_url; fallback to nested image URL in task data.
+// Keep in sync with web/default/src/features/usage-logs/lib/task-media-results.ts.
+// TODO: extract shared media-result heuristics if the two frontend builds converge.
 function extractImageUrlFromTaskData(data) {
   if (data == null) return '';
   const walk = (v) => {

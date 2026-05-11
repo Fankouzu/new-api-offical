@@ -34,6 +34,9 @@ function TaskMediaCard({ result }: { result: TaskMediaResult }) {
   const { t } = useTranslation()
   const isImage = result.type === 'image'
   const title = isImage ? t('Generated image') : t('Generated video')
+  const displayUrl = result.url.startsWith('data:')
+    ? `${result.url.slice(0, 64)}...`
+    : result.url
 
   return (
     <div className='bg-card overflow-hidden rounded-lg border'>
@@ -84,7 +87,7 @@ function TaskMediaCard({ result }: { result: TaskMediaResult }) {
           </div>
         </div>
         <p className='text-muted-foreground font-mono text-xs break-all'>
-          {result.url}
+          {displayUrl}
         </p>
       </div>
     </div>

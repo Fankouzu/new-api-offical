@@ -76,6 +76,9 @@ func TestConvertGPTImagePayloadsFromUnifiedRequest(t *testing.T) {
 			if len(got) != 2 || got[0] != "https://example.com/a.png" || got[1] != "https://example.com/b.png" {
 				t.Fatalf("%s = %#v", tc.wantKey, got)
 			}
+			if _, hasImages := body["images"]; hasImages {
+				t.Fatalf("input should not also include generic images key: %#v", body)
+			}
 		})
 	}
 }

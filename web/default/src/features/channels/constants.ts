@@ -60,7 +60,7 @@ export const CHANNEL_TYPES = {
   57: 'Codex',
   58: 'PingXingShiJie',
   59: 'KieAI',
-  60: 'Fal.ai',
+  60: 'FalAI',
   61: 'Sub2API-async',
 } as const
 

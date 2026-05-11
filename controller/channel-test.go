@@ -140,6 +140,10 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 	if strings.HasPrefix(requestPath, "/v1/responses/compact") {
 		testModel = ratio_setting.WithCompactModelSuffix(testModel)
 	}
+	effectiveEndpointType := endpointType
+	if effectiveEndpointType == "" && requestPath == "/v1/images/generations" {
+		effectiveEndpointType = string(constant.EndpointTypeImageGeneration)
+	}
 
 	c.Request = &http.Request{
 		Method: "POST",
@@ -224,7 +228,7 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 		}
 	}
 
-	request := buildTestRequest(testModel, endpointType, channel, isStream)
+	request := buildTestRequest(testModel, effectiveEndpointType, channel, isStream)
 
 	info, err := relaycommon.GenRelayInfo(c, relayFormat, request, nil)
 

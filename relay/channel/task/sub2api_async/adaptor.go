@@ -244,6 +244,8 @@ func doSyncImageGeneration(ctx context.Context, baseURL, apiKey string, requestB
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/v1/images/generations", bytes.NewReader(requestBody))
 	if err != nil {
 		return nil, fmt.Errorf("new upstream request failed: %w", err)
@@ -252,7 +254,8 @@ func doSyncImageGeneration(ctx context.Context, baseURL, apiKey string, requestB
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("upstream sync image request failed: %w", err)
 	}
@@ -431,8 +434,6 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	}
 	if req.Size != "" {
 		input["size"] = req.Size
-	}
-	if req.Size != "" {
 		applySize(input, req.Size)
 	}
 	if req.Resolution != "" {
@@ -444,13 +445,14 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 
 	cfg := getModelConfig(modelName)
 	images := requestImages(req)
-	if len(images) == 1 {
-		input["image"] = images[0]
-	} else if len(images) > 1 {
-		input["images"] = images
-	}
-	if len(images) > 0 && cfg.ImageKey != "" {
-		input[cfg.ImageKey] = images
+	if len(images) > 0 {
+		if cfg.ImageKey != "" {
+			input[cfg.ImageKey] = images
+		} else if len(images) == 1 {
+			input["image"] = images[0]
+		} else {
+			input["images"] = images
+		}
 	}
 
 	return input, nil

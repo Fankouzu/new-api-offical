@@ -1,3 +1,4 @@
+import { t } from 'i18next'
 import { CHANNEL_TYPES } from '../constants'
 
 // ============================================================================
@@ -122,10 +123,10 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
     icon: 'openai',
     defaultBaseUrl: 'https://api.sub2api.com',
     hints: {
-      baseUrl: 'Default: https://api.sub2api.com',
-      key: 'Bearer API key',
-      models: 'gpt-image-2-text-to-image,gpt-image-2-image-to-image',
-      other: 'Task-only channel for POST /v1/images/generations/async',
+      baseUrl: t('Default: https://api.sub2api.com'),
+      key: t('Bearer API key'),
+      models: t('gpt-image-2-text-to-image,gpt-image-2-image-to-image'),
+      other: t('Task-only channel for POST /v1/images/generations/async'),
     },
   },
 }
