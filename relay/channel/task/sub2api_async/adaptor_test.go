@@ -22,7 +22,7 @@ func TestBuildRequestURLUsesConfiguredBaseURL(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got != "https://example.sub2api.local/api/v1/jobs/createTask" {
+	if got != "https://example.sub2api.local/v1/images/generations/async" {
 		t.Fatalf("BuildRequestURL = %q", got)
 	}
 }
@@ -56,21 +56,22 @@ func TestConvertGPTImagePayloadsFromUnifiedRequest(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if body.Model != tc.modelName {
-				t.Fatalf("model = %q", body.Model)
+			if body["model"] != tc.modelName {
+				t.Fatalf("model = %q", body["model"])
 			}
-			assertInput(t, body.Input, "prompt", "make an image")
-			assertInput(t, body.Input, "aspect_ratio", "1:1")
-			assertInput(t, body.Input, "resolution", "2K")
+			assertInput(t, body, "prompt", "make an image")
+			assertInput(t, body, "size", "1024x1024")
+			assertInput(t, body, "aspect_ratio", "1:1")
+			assertInput(t, body, "resolution", "2K")
 			if tc.wantKey == "" {
-				if _, ok := body.Input["input_urls"]; ok {
-					t.Fatalf("text-to-image should not include input_urls: %#v", body.Input)
+				if _, ok := body["input_urls"]; ok {
+					t.Fatalf("text-to-image should not include input_urls: %#v", body)
 				}
 				return
 			}
-			got, ok := body.Input[tc.wantKey].([]string)
+			got, ok := body[tc.wantKey].([]string)
 			if !ok {
-				t.Fatalf("%s has type %T", tc.wantKey, body.Input[tc.wantKey])
+				t.Fatalf("%s has type %T", tc.wantKey, body[tc.wantKey])
 			}
 			if len(got) != 2 || got[0] != "https://example.com/a.png" || got[1] != "https://example.com/b.png" {
 				t.Fatalf("%s = %#v", tc.wantKey, got)
@@ -85,7 +86,7 @@ func TestDoResponseStoresUpstreamTaskIDAndReturnsPublicTask(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	resp := &http.Response{
-		Body: io.NopCloser(bytes.NewBufferString(`{"code":200,"msg":"success","data":{"taskId":"sub2_task_123"}}`)),
+		Body: io.NopCloser(bytes.NewBufferString(`{"id":"sub2_task_123","task_id":"sub2_task_123","status":"queued"}`)),
 	}
 
 	upstreamTaskID, rawBody, taskErr := a.DoResponse(c, resp, &relaycommon.RelayInfo{
@@ -113,11 +114,8 @@ func TestDoResponseStoresUpstreamTaskIDAndReturnsPublicTask(t *testing.T) {
 
 func TestFetchTaskUsesRecordInfoEndpointAndBearerToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/jobs/recordInfo" {
-			t.Fatalf("path = %q", r.URL.Path)
-		}
-		if r.URL.Query().Get("taskId") != "task/id with space" {
-			t.Fatalf("taskId query = %q", r.URL.Query().Get("taskId"))
+		if r.URL.EscapedPath() != "/v1/images/generations/task%2Fid%20with%20space" {
+			t.Fatalf("path = %q", r.URL.EscapedPath())
 		}
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Fatalf("Authorization = %q", r.Header.Get("Authorization"))
@@ -142,7 +140,7 @@ func TestFetchTaskUsesRecordInfoEndpointAndBearerToken(t *testing.T) {
 
 func TestParseTaskResultMapsStatesAndResultURL(t *testing.T) {
 	a := &TaskAdaptor{}
-	info, err := a.ParseTaskResult([]byte(`{"code":200,"msg":"success","data":{"taskId":"sub2_task_123","state":"success","resultJson":"{\"resultUrls\":[\"https://example.com/out.png\"]}"}}`))
+	info, err := a.ParseTaskResult([]byte(`{"id":"sub2_task_123","task_id":"sub2_task_123","status":"completed","url":"https://example.com/out.png"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +158,7 @@ func TestParseTaskResultMapsStatesAndResultURL(t *testing.T) {
 		t.Fatalf("url = %q", info.Url)
 	}
 
-	failed, err := a.ParseTaskResult([]byte(`{"code":200,"msg":"success","data":{"state":"fail","failMsg":"bad prompt"}}`))
+	failed, err := a.ParseTaskResult([]byte(`{"id":"sub2_task_123","status":"failed","error":{"message":"bad prompt"}}`))
 	if err != nil {
 		t.Fatal(err)
 	}

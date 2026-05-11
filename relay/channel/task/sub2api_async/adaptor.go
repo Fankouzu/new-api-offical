@@ -28,15 +28,14 @@ type TaskAdaptor struct {
 	baseURL string
 }
 
-type createTaskRequest struct {
-	Model string         `json:"model"`
-	Input map[string]any `json:"input"`
-}
-
 type createTaskResponse struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
-	Data struct {
+	ID     string                `json:"id"`
+	TaskID string                `json:"task_id"`
+	Status string                `json:"status"`
+	Error  *dto.OpenAIVideoError `json:"error"`
+	Code   int                   `json:"code"`
+	Msg    string                `json:"msg"`
+	Data   struct {
 		TaskID string `json:"taskId"`
 	} `json:"data"`
 }
@@ -115,7 +114,7 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
-	return a.baseURL + "/api/v1/jobs/createTask", nil
+	return a.baseURL + "/v1/images/generations/async", nil
 }
 
 func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *relaycommon.RelayInfo) error {
@@ -156,10 +155,14 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	if err := common.Unmarshal(responseBody, &taskResp); err != nil {
 		return "", nil, service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", string(responseBody)), "unmarshal_response_body_failed", http.StatusInternalServerError)
 	}
-	if taskResp.Code != http.StatusOK {
+	if taskResp.Code != 0 && taskResp.Code != http.StatusOK {
 		return "", nil, service.TaskErrorWrapper(fmt.Errorf("sub2api async error: %s", taskResp.Msg), strconv.Itoa(taskResp.Code), http.StatusBadRequest)
 	}
-	if taskResp.Data.TaskID == "" {
+	if taskResp.Error != nil && strings.TrimSpace(taskResp.Error.Message) != "" {
+		return "", nil, service.TaskErrorWrapper(fmt.Errorf("sub2api async error: %s", taskResp.Error.Message), "sub2api_async_error", http.StatusBadRequest)
+	}
+	upstreamTaskID := firstNonEmpty(taskResp.Data.TaskID, taskResp.TaskID, taskResp.ID)
+	if upstreamTaskID == "" {
 		return "", nil, service.TaskErrorWrapper(fmt.Errorf("task_id is empty"), "invalid_response", http.StatusInternalServerError)
 	}
 
@@ -169,7 +172,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	ov.CreatedAt = time.Now().Unix()
 	ov.Model = info.OriginModelName
 	c.JSON(http.StatusOK, ov)
-	return taskResp.Data.TaskID, responseBody, nil
+	return upstreamTaskID, responseBody, nil
 }
 
 func (a *TaskAdaptor) FetchTask(baseURL, key string, body map[string]any, proxy string) (*http.Response, error) {
@@ -181,7 +184,7 @@ func (a *TaskAdaptor) FetchTask(baseURL, key string, body map[string]any, proxy 
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
-	uri := fmt.Sprintf("%s/api/v1/jobs/recordInfo?taskId=%s", baseURL, url.QueryEscape(taskID))
+	uri := fmt.Sprintf("%s/v1/images/generations/%s", baseURL, url.PathEscape(taskID))
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, err
@@ -204,7 +207,10 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	if err := common.Unmarshal(respBody, &res); err != nil {
 		return nil, errors.Wrap(err, "unmarshal task result failed")
 	}
-	if res.Code != http.StatusOK {
+	if res.Data.State == "" && res.Data.TaskID == "" && res.Code == 0 {
+		return parseOpenAIAsyncImageTaskResult(respBody)
+	}
+	if res.Code != 0 && res.Code != http.StatusOK {
 		return &relaycommon.TaskInfo{Code: res.Code, Status: model.TaskStatusFailure, Progress: taskcommon.ProgressComplete, Reason: res.Msg}, nil
 	}
 
@@ -236,6 +242,51 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	default:
 		taskResult.Status = model.TaskStatusInProgress
 		taskResult.Progress = taskcommon.ProgressInProgress
+	}
+	return taskResult, nil
+}
+
+func parseOpenAIAsyncImageTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
+	var res struct {
+		ID       string `json:"id"`
+		TaskID   string `json:"task_id"`
+		Status   string `json:"status"`
+		Progress any    `json:"progress"`
+		URL      string `json:"url"`
+		Error    *struct {
+			Message string `json:"message"`
+			Code    string `json:"code"`
+		} `json:"error"`
+		Metadata map[string]any `json:"metadata"`
+	}
+	if err := common.Unmarshal(respBody, &res); err != nil {
+		return nil, errors.Wrap(err, "unmarshal openai async image result failed")
+	}
+
+	taskResult := &relaycommon.TaskInfo{Code: 0, TaskID: firstNonEmpty(res.TaskID, res.ID)}
+	switch strings.ToLower(strings.TrimSpace(res.Status)) {
+	case dto.VideoStatusQueued, "submitted", "pending":
+		taskResult.Status = model.TaskStatusQueued
+		taskResult.Progress = normalizeProgress(res.Progress, taskcommon.ProgressQueued)
+	case dto.VideoStatusInProgress, "running", "generating":
+		taskResult.Status = model.TaskStatusInProgress
+		taskResult.Progress = normalizeProgress(res.Progress, taskcommon.ProgressInProgress)
+	case dto.VideoStatusCompleted, "success", "succeeded":
+		taskResult.Status = model.TaskStatusSuccess
+		taskResult.Progress = taskcommon.ProgressComplete
+		taskResult.Url = firstNonEmpty(res.URL, metadataString(res.Metadata, "url"))
+	case dto.VideoStatusFailed, "failure", "fail":
+		taskResult.Status = model.TaskStatusFailure
+		taskResult.Progress = taskcommon.ProgressComplete
+		if res.Error != nil {
+			taskResult.Reason = firstNonEmpty(strings.TrimSpace(res.Error.Message), strings.TrimSpace(res.Error.Code))
+		}
+		if taskResult.Reason == "" {
+			taskResult.Reason = "task failed"
+		}
+	default:
+		taskResult.Status = model.TaskStatusInProgress
+		taskResult.Progress = normalizeProgress(res.Progress, taskcommon.ProgressInProgress)
 	}
 	return taskResult, nil
 }
@@ -276,7 +327,7 @@ func (a *TaskAdaptor) ConvertToOpenAIAsyncImage(originTask *model.Task) ([]byte,
 	return common.Marshal(out)
 }
 
-func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*createTaskRequest, error) {
+func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (map[string]any, error) {
 	modelName := resolveModelName(req, info)
 	if modelName == "" {
 		return nil, fmt.Errorf("model is required")
@@ -285,9 +336,12 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		return nil, fmt.Errorf("unsupported model: %s", modelName)
 	}
 
-	input := map[string]any{}
+	input := map[string]any{"model": modelName}
 	if req.Prompt != "" {
 		input["prompt"] = req.Prompt
+	}
+	if req.Size != "" {
+		input["size"] = req.Size
 	}
 	if req.Size != "" {
 		applySize(input, req.Size)
@@ -298,15 +352,19 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	if err := taskcommon.UnmarshalMetadata(req.Metadata, &input); err != nil {
 		return nil, err
 	}
-	delete(input, "model")
 
 	cfg := getModelConfig(modelName)
 	images := requestImages(req)
+	if len(images) == 1 {
+		input["image"] = images[0]
+	} else if len(images) > 1 {
+		input["images"] = images
+	}
 	if len(images) > 0 && cfg.ImageKey != "" {
 		input[cfg.ImageKey] = images
 	}
 
-	return &createTaskRequest{Model: modelName, Input: input}, nil
+	return input, nil
 }
 
 func resolveModelName(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) string {
@@ -393,6 +451,40 @@ func gcd(a, b int) int {
 		return -a
 	}
 	return a
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func metadataString(metadata map[string]any, key string) string {
+	if metadata == nil {
+		return ""
+	}
+	value, _ := metadata[key].(string)
+	return strings.TrimSpace(value)
+}
+
+func normalizeProgress(progress any, fallback string) string {
+	switch v := progress.(type) {
+	case string:
+		if strings.TrimSpace(v) != "" {
+			if strings.HasSuffix(strings.TrimSpace(v), "%") {
+				return strings.TrimSpace(v)
+			}
+			return strings.TrimSpace(v) + "%"
+		}
+	case float64:
+		return fmt.Sprintf("%.0f%%", v)
+	case int:
+		return fmt.Sprintf("%d%%", v)
+	}
+	return fallback
 }
 
 func firstResultURL(raw string) string {
