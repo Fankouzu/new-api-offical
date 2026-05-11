@@ -116,6 +116,18 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       baseUrl: 'Default: https://api.replicate.com',
     },
   },
+  61: {
+    id: 61,
+    name: CHANNEL_TYPES[61],
+    icon: 'openai',
+    defaultBaseUrl: 'https://api.sub2api.com',
+    hints: {
+      baseUrl: 'Default: https://api.sub2api.com',
+      key: 'Bearer API key',
+      models: 'gpt-image-2-text-to-image,gpt-image-2-image-to-image',
+      other: 'Task-only channel for POST /v1/images/generations/async',
+    },
+  },
 }
 
 /**

@@ -86,6 +86,7 @@ export function getChannelTypeIcon(type: number): string {
     58: 'https://www.pingxingshijie.cn/favicon.ico', // PingXingShiJie
 	59: 'https://kie.ai/logo.png', // KieAI
 	60: 'https://icons.lobehub.com/components/fal', // FalAI
+    61: 'OpenAI', // Sub2API-async
 
     // Tools & Platforms
     37: 'Dify', // Dify

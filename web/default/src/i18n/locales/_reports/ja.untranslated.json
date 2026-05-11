@@ -74,6 +74,7 @@
   "smtp.example.com": "smtp.example.com",
   "socks5://user:pass@host:port": "socks5://user:pass@host:port",
   "Stripe": "Stripe",
+  "Sub2API-async": "Sub2API-async",
   "Submodel": "Submodel",
   "SunoAPI": "SunoAPI",
   "Telegram": "Telegram",
