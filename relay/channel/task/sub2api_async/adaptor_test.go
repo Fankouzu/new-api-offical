@@ -22,7 +22,7 @@ func TestBuildRequestURLUsesConfiguredBaseURL(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got != "https://example.sub2api.local/v1/images/generations/async" {
+	if got != "https://example.sub2api.local/v1/images/generations" {
 		t.Fatalf("BuildRequestURL = %q", got)
 	}
 }
@@ -80,23 +80,24 @@ func TestConvertGPTImagePayloadsFromUnifiedRequest(t *testing.T) {
 	}
 }
 
-func TestDoResponseStoresUpstreamTaskIDAndReturnsPublicTask(t *testing.T) {
+func TestDoResponseReturnsPublicTaskAndSchedulesBackgroundWorker(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	a := &TaskAdaptor{}
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	resp := &http.Response{
-		Body: io.NopCloser(bytes.NewBufferString(`{"id":"sub2_task_123","task_id":"sub2_task_123","status":"queued"}`)),
+		Body: io.NopCloser(bytes.NewBufferString(`{"model":"gpt-image-2-text-to-image","prompt":"make an image"}`)),
 	}
-
-	upstreamTaskID, rawBody, taskErr := a.DoResponse(c, resp, &relaycommon.RelayInfo{
+	info := &relaycommon.RelayInfo{
 		OriginModelName: ModelGPTImage2TextToImage,
 		TaskRelayInfo:   &relaycommon.TaskRelayInfo{PublicTaskID: "task_public_123"},
-	})
+	}
+
+	upstreamTaskID, rawBody, taskErr := a.DoResponse(c, resp, info)
 	if taskErr != nil {
 		t.Fatalf("DoResponse error = %+v", taskErr)
 	}
-	if upstreamTaskID != "sub2_task_123" {
+	if upstreamTaskID != "task_public_123" {
 		t.Fatalf("upstreamTaskID = %q", upstreamTaskID)
 	}
 	if len(rawBody) == 0 {
@@ -110,31 +111,25 @@ func TestDoResponseStoresUpstreamTaskIDAndReturnsPublicTask(t *testing.T) {
 	if got["id"] != "task_public_123" || got["task_id"] != "task_public_123" {
 		t.Fatalf("public task response = %s", recorder.Body.String())
 	}
+	if info.AfterTaskInserted == nil {
+		t.Fatal("expected background worker callback to be registered")
+	}
 }
 
-func TestFetchTaskUsesRecordInfoEndpointAndBearerToken(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.EscapedPath() != "/v1/images/generations/task%2Fid%20with%20space" {
-			t.Fatalf("path = %q", r.URL.EscapedPath())
-		}
-		if r.Header.Get("Authorization") != "Bearer test-key" {
-			t.Fatalf("Authorization = %q", r.Header.Get("Authorization"))
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"code":200,"msg":"success","data":{"state":"generating"}}`))
-	}))
-	defer server.Close()
-
+func TestDoRequestCarriesBuiltRequestBodyWithoutCallingUpstream(t *testing.T) {
 	a := &TaskAdaptor{}
-	resp, err := a.FetchTask(server.URL, "test-key", map[string]any{"task_id": "task/id with space"}, "")
+	body := []byte(`{"model":"gpt-image-2-text-to-image","prompt":"make an image"}`)
+	resp, err := a.DoRequest(&gin.Context{}, &relaycommon.RelayInfo{}, bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d body = %s", resp.StatusCode, string(b))
+	got, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(body) {
+		t.Fatalf("body = %s, want %s", string(got), string(body))
 	}
 }
 
@@ -164,6 +159,32 @@ func TestParseTaskResultMapsStatesAndResultURL(t *testing.T) {
 	}
 	if failed.Status != model.TaskStatusFailure || failed.Reason != "bad prompt" {
 		t.Fatalf("failed result = %+v", failed)
+	}
+
+	inProgress, err := a.ParseTaskResult([]byte(`{"id":"task_local","task_id":"task_local","status":"in_progress","progress":"30%"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inProgress.Status != model.TaskStatusInProgress || inProgress.Progress != "30%" {
+		t.Fatalf("in progress result = %+v", inProgress)
+	}
+}
+
+func TestParseSyncImageGenerationResult(t *testing.T) {
+	urlResult, err := parseSyncImageGenerationResult([]byte(`{"created":1,"data":[{"url":"https://example.com/out.png"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if urlResult != "https://example.com/out.png" {
+		t.Fatalf("url result = %q", urlResult)
+	}
+
+	b64Result, err := parseSyncImageGenerationResult([]byte(`{"created":1,"data":[{"b64_json":"abc123"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b64Result != "data:image/png;base64,abc123" {
+		t.Fatalf("b64 result = %q", b64Result)
 	}
 }
 

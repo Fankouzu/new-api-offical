@@ -674,6 +674,10 @@ type TaskRelayInfo struct {
 	// 供 DoResponse 在返回给客户端时使用（避免暴露上游真实 ID）。
 	PublicTaskID string
 
+	// AfterTaskInserted is used by task adaptors that return immediately and
+	// complete work in the background after the local task row exists.
+	AfterTaskInserted func(taskID int64)
+
 	ConsumeQuota bool
 
 	// LockedChannel holds the full channel object when the request is bound to

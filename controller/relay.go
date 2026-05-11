@@ -16,10 +16,10 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay"
+	taskpxsj "github.com/QuantumNous/new-api/relay/channel/task/pingxingshijie"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
-	taskpxsj "github.com/QuantumNous/new-api/relay/channel/task/pingxingshijie"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -590,6 +590,8 @@ func RelayTask(c *gin.Context) {
 		task.Action = relayInfo.Action
 		if insertErr := task.Insert(); insertErr != nil {
 			common.SysError("insert task error: " + insertErr.Error())
+		} else if relayInfo.TaskRelayInfo != nil && relayInfo.AfterTaskInserted != nil {
+			relayInfo.AfterTaskInserted(task.ID)
 		}
 	}
 

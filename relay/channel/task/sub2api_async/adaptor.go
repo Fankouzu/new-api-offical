@@ -2,10 +2,10 @@ package sub2api_async
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -13,11 +13,12 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 )
@@ -28,35 +29,14 @@ type TaskAdaptor struct {
 	baseURL string
 }
 
-type createTaskResponse struct {
-	ID     string                `json:"id"`
-	TaskID string                `json:"task_id"`
-	Status string                `json:"status"`
-	Error  *dto.OpenAIVideoError `json:"error"`
-	Code   int                   `json:"code"`
-	Msg    string                `json:"msg"`
-	Data   struct {
-		TaskID string `json:"taskId"`
+type openAIImageGenerationResponse struct {
+	Created int64 `json:"created"`
+	Data    []struct {
+		URL           string `json:"url"`
+		B64JSON       string `json:"b64_json"`
+		RevisedPrompt string `json:"revised_prompt"`
 	} `json:"data"`
-}
-
-type recordInfoResponse struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
-	Data struct {
-		TaskID     string `json:"taskId"`
-		Model      string `json:"model"`
-		State      string `json:"state"`
-		ResultJSON string `json:"resultJson"`
-		FailCode   string `json:"failCode"`
-		FailMsg    string `json:"failMsg"`
-	} `json:"data"`
-}
-
-type resultJSONPayload struct {
-	ResultURLs    []string `json:"resultUrls"`
-	FirstFrameURL []string `json:"firstFrameUrl"`
-	LastFrameURL  []string `json:"lastFrameUrl"`
+	Error *dto.OpenAIVideoError `json:"error"`
 }
 
 var imageResolutionRatioWeights = map[string]map[string]float64{
@@ -114,7 +94,7 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
-	return a.baseURL + "/v1/images/generations/async", nil
+	return a.baseURL + "/v1/images/generations", nil
 }
 
 func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *relaycommon.RelayInfo) error {
@@ -141,109 +121,187 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 }
 
 func (a *TaskAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (*http.Response, error) {
-	return channel.DoTaskApiRequest(a, c, info, requestBody)
+	// Sub2API-async exposes an async contract to clients while the upstream
+	// only supports synchronous OpenAI-compatible image generation. Do not call
+	// upstream on the request path; DoResponse schedules the sync call after
+	// the local task row is inserted.
+	body, err := io.ReadAll(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("read request body failed: %w", err)
+	}
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader(body)),
+	}, nil
 }
 
 func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (string, []byte, *dto.TaskError) {
-	responseBody, err := io.ReadAll(resp.Body)
+	requestBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", nil, service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
 	}
 	_ = resp.Body.Close()
 
-	var taskResp createTaskResponse
-	if err := common.Unmarshal(responseBody, &taskResp); err != nil {
-		return "", nil, service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", string(responseBody)), "unmarshal_response_body_failed", http.StatusInternalServerError)
+	publicTaskID := strings.TrimSpace(info.PublicTaskID)
+	if publicTaskID == "" {
+		publicTaskID = model.GenerateTaskID()
+		info.PublicTaskID = publicTaskID
 	}
-	if taskResp.Code != 0 && taskResp.Code != http.StatusOK {
-		return "", nil, service.TaskErrorWrapper(fmt.Errorf("sub2api async error: %s", taskResp.Msg), strconv.Itoa(taskResp.Code), http.StatusBadRequest)
-	}
-	if taskResp.Error != nil && strings.TrimSpace(taskResp.Error.Message) != "" {
-		return "", nil, service.TaskErrorWrapper(fmt.Errorf("sub2api async error: %s", taskResp.Error.Message), "sub2api_async_error", http.StatusBadRequest)
-	}
-	upstreamTaskID := firstNonEmpty(taskResp.Data.TaskID, taskResp.TaskID, taskResp.ID)
-	if upstreamTaskID == "" {
-		return "", nil, service.TaskErrorWrapper(fmt.Errorf("task_id is empty"), "invalid_response", http.StatusInternalServerError)
+	if info.TaskRelayInfo != nil {
+		info.AfterTaskInserted = func(localTaskID int64) {
+			a.scheduleSyncImageGeneration(context.Background(), localTaskID, requestBody)
+		}
 	}
 
 	ov := dto.NewOpenAIVideo()
-	ov.ID = info.PublicTaskID
-	ov.TaskID = info.PublicTaskID
+	ov.ID = publicTaskID
+	ov.TaskID = publicTaskID
 	ov.CreatedAt = time.Now().Unix()
 	ov.Model = info.OriginModelName
 	c.JSON(http.StatusOK, ov)
-	return upstreamTaskID, responseBody, nil
+	return publicTaskID, requestBody, nil
 }
 
-func (a *TaskAdaptor) FetchTask(baseURL, key string, body map[string]any, proxy string) (*http.Response, error) {
-	taskID, ok := body["task_id"].(string)
-	if !ok || taskID == "" {
-		return nil, fmt.Errorf("invalid task_id")
+func (a *TaskAdaptor) FetchTask(_ string, _ string, body map[string]any, _ string) (*http.Response, error) {
+	taskID, _ := body["task_id"].(string)
+	task, exists, err := model.GetByOnlyTaskId(taskID)
+	if err != nil {
+		return nil, err
 	}
+	if !exists {
+		return nil, fmt.Errorf("task not found: %s", taskID)
+	}
+	respBody, err := a.ConvertToOpenAIAsyncImage(task)
+	if err != nil {
+		return nil, err
+	}
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader(respBody)),
+	}, nil
+}
+
+func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
+	return parseOpenAIAsyncImageTaskResult(respBody)
+}
+
+func (a *TaskAdaptor) scheduleSyncImageGeneration(ctx context.Context, localTaskID int64, requestBody []byte) {
+	baseURL := a.baseURL
+	apiKey := a.apiKey
+	gopool.Go(func() {
+		runSub2APIAsyncImageGeneration(ctx, localTaskID, baseURL, apiKey, requestBody)
+	})
+}
+
+func runSub2APIAsyncImageGeneration(ctx context.Context, localTaskID int64, baseURL, apiKey string, requestBody []byte) {
+	task, exists, err := model.GetTaskByID(localTaskID)
+	if err != nil {
+		logger.LogError(ctx, fmt.Sprintf("sub2api async get task failed: %v", err))
+		return
+	}
+	if !exists {
+		logger.LogError(ctx, fmt.Sprintf("sub2api async task not found: %d", localTaskID))
+		return
+	}
+
+	startedAt := time.Now().Unix()
+	task.Status = model.TaskStatusInProgress
+	task.Progress = taskcommon.ProgressInProgress
+	task.StartTime = startedAt
+	if won, err := task.UpdateWithStatus(model.TaskStatusNotStart); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("sub2api async mark running failed: %v", err))
+		return
+	} else if !won {
+		return
+	}
+
+	respBody, err := doSyncImageGeneration(ctx, baseURL, apiKey, requestBody)
+	if err != nil {
+		markSub2APIAsyncTaskFailed(ctx, task, err.Error())
+		return
+	}
+
+	resultURL, err := parseSyncImageGenerationResult(respBody)
+	if err != nil {
+		markSub2APIAsyncTaskFailed(ctx, task, err.Error())
+		return
+	}
+
+	task.Data = respBody
+	task.PrivateData.ResultURL = resultURL
+	task.Status = model.TaskStatusSuccess
+	task.Progress = taskcommon.ProgressComplete
+	task.FinishTime = time.Now().Unix()
+	if won, err := task.UpdateWithStatus(model.TaskStatusInProgress); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("sub2api async mark success failed: %v", err))
+	} else if !won {
+		logger.LogWarn(ctx, fmt.Sprintf("sub2api async task status changed before success update: %s", task.TaskID))
+	}
+}
+
+func doSyncImageGeneration(ctx context.Context, baseURL, apiKey string, requestBody []byte) ([]byte, error) {
 	baseURL = strings.TrimRight(baseURL, "/")
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
-	uri := fmt.Sprintf("%s/v1/images/generations/%s", baseURL, url.PathEscape(taskID))
-	req, err := http.NewRequest(http.MethodGet, uri, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/v1/images/generations", bytes.NewReader(requestBody))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new upstream request failed: %w", err)
 	}
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+key)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	client, err := service.GetHttpClientWithProxy(proxy)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("new proxy http client failed: %w", err)
+		return nil, fmt.Errorf("upstream sync image request failed: %w", err)
 	}
-	if client == nil {
-		client = http.DefaultClient
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read upstream response failed: %w", err)
 	}
-	return client.Do(req)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("upstream status %d: %s", resp.StatusCode, string(respBody))
+	}
+	return respBody, nil
 }
 
-func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
-	var res recordInfoResponse
+func parseSyncImageGenerationResult(respBody []byte) (string, error) {
+	var res openAIImageGenerationResponse
 	if err := common.Unmarshal(respBody, &res); err != nil {
-		return nil, errors.Wrap(err, "unmarshal task result failed")
+		return "", errors.Wrap(err, "unmarshal upstream image response failed")
 	}
-	if res.Data.State == "" && res.Data.TaskID == "" && res.Code == 0 {
-		return parseOpenAIAsyncImageTaskResult(respBody)
+	if res.Error != nil && strings.TrimSpace(res.Error.Message) != "" {
+		return "", fmt.Errorf("upstream image error: %s", res.Error.Message)
 	}
-	if res.Code != 0 && res.Code != http.StatusOK {
-		return &relaycommon.TaskInfo{Code: res.Code, Status: model.TaskStatusFailure, Progress: taskcommon.ProgressComplete, Reason: res.Msg}, nil
+	for _, item := range res.Data {
+		if strings.TrimSpace(item.URL) != "" {
+			return strings.TrimSpace(item.URL), nil
+		}
+		if strings.TrimSpace(item.B64JSON) != "" {
+			return "data:image/png;base64," + strings.TrimSpace(item.B64JSON), nil
+		}
 	}
+	return "", fmt.Errorf("upstream image response has no image data")
+}
 
-	taskResult := &relaycommon.TaskInfo{Code: 0, TaskID: res.Data.TaskID}
-	switch strings.ToLower(strings.TrimSpace(res.Data.State)) {
-	case "waiting":
-		taskResult.Status = model.TaskStatusSubmitted
-		taskResult.Progress = taskcommon.ProgressSubmitted
-	case "queuing":
-		taskResult.Status = model.TaskStatusQueued
-		taskResult.Progress = taskcommon.ProgressQueued
-	case "generating":
-		taskResult.Status = model.TaskStatusInProgress
-		taskResult.Progress = taskcommon.ProgressInProgress
-	case "success":
-		taskResult.Status = model.TaskStatusSuccess
-		taskResult.Progress = taskcommon.ProgressComplete
-		taskResult.Url = firstResultURL(res.Data.ResultJSON)
-	case "fail":
-		taskResult.Status = model.TaskStatusFailure
-		taskResult.Progress = taskcommon.ProgressComplete
-		taskResult.Reason = strings.TrimSpace(res.Data.FailMsg)
-		if taskResult.Reason == "" {
-			taskResult.Reason = strings.TrimSpace(res.Data.FailCode)
-		}
-		if taskResult.Reason == "" {
-			taskResult.Reason = "task failed"
-		}
-	default:
-		taskResult.Status = model.TaskStatusInProgress
-		taskResult.Progress = taskcommon.ProgressInProgress
+func markSub2APIAsyncTaskFailed(ctx context.Context, task *model.Task, reason string) {
+	task.Status = model.TaskStatusFailure
+	task.Progress = taskcommon.ProgressComplete
+	task.FailReason = strings.TrimSpace(reason)
+	if task.FailReason == "" {
+		task.FailReason = "sub2api async image generation failed"
 	}
-	return taskResult, nil
+	task.FinishTime = time.Now().Unix()
+	if won, err := task.UpdateWithStatus(model.TaskStatusInProgress); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("sub2api async mark failed failed: %v", err))
+	} else if !won {
+		logger.LogWarn(ctx, fmt.Sprintf("sub2api async task status changed before failure update: %s", task.TaskID))
+	} else if task.Quota != 0 {
+		service.RefundTaskQuota(ctx, task, task.FailReason)
+	}
 }
 
 func parseOpenAIAsyncImageTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
@@ -318,7 +376,7 @@ func (a *TaskAdaptor) ConvertToOpenAIAsyncImage(originTask *model.Task) ([]byte,
 		"created_at": originTask.CreatedAt,
 		"updated_at": originTask.UpdatedAt,
 	}
-	if u := originTask.GetResultURL(); u != "" {
+	if u := originTask.GetResultURL(); u != "" && originTask.Status != model.TaskStatusFailure {
 		out["url"] = u
 	}
 	if originTask.FailReason != "" {
@@ -485,22 +543,4 @@ func normalizeProgress(progress any, fallback string) string {
 		return fmt.Sprintf("%d%%", v)
 	}
 	return fallback
-}
-
-func firstResultURL(raw string) string {
-	if strings.TrimSpace(raw) == "" {
-		return ""
-	}
-	var payload resultJSONPayload
-	if err := common.UnmarshalJsonStr(raw, &payload); err != nil {
-		return ""
-	}
-	for _, urls := range [][]string{payload.ResultURLs, payload.FirstFrameURL, payload.LastFrameURL} {
-		for _, u := range urls {
-			if strings.TrimSpace(u) != "" {
-				return u
-			}
-		}
-	}
-	return ""
 }
