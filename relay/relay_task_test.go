@@ -1,10 +1,12 @@
 package relay
 
 import (
+	"net/http/httptest"
 	"testing"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
+	"github.com/gin-gonic/gin"
 )
 
 func TestApplyOtherRatiosToQuotaMultipliesBeforeTruncating(t *testing.T) {
@@ -31,5 +33,16 @@ func TestRecalcQuotaFromRatiosMultipliesBeforeTruncating(t *testing.T) {
 
 	if got := recalcQuotaFromRatios(info, ratios); got != 31 {
 		t.Fatalf("quota: got %d want 31", got)
+	}
+}
+
+func TestRewriteLocalTaskContentURLUsesRequestHost(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(nil)
+	c.Request = httptest.NewRequest("GET", "http://127.0.0.1:3001/v1/images/generations/task_123", nil)
+
+	got := rewriteLocalTaskContentURL(c, "http://localhost:3000/v1/videos/task_123/content")
+	if got != "http://127.0.0.1:3001/v1/videos/task_123/content" {
+		t.Fatalf("url = %q", got)
 	}
 }

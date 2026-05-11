@@ -228,7 +228,11 @@ func runSub2APIAsyncImageGeneration(ctx context.Context, localTaskID int64, base
 	}
 
 	task.Data = respBody
-	task.PrivateData.ResultURL = resultURL
+	if strings.HasPrefix(resultURL, "data:") {
+		task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
+	} else {
+		task.PrivateData.ResultURL = resultURL
+	}
 	task.Status = model.TaskStatusSuccess
 	task.Progress = taskcommon.ProgressComplete
 	task.FinishTime = time.Now().Unix()
@@ -377,6 +381,9 @@ func (a *TaskAdaptor) ConvertToOpenAIAsyncImage(originTask *model.Task) ([]byte,
 		"updated_at": originTask.UpdatedAt,
 	}
 	if u := originTask.GetResultURL(); u != "" && originTask.Status != model.TaskStatusFailure {
+		if strings.HasPrefix(u, "data:") {
+			u = taskcommon.BuildProxyURL(originTask.TaskID)
+		}
 		out["url"] = u
 	}
 	if originTask.FailReason != "" {

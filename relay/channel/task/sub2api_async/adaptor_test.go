@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -219,6 +220,38 @@ func TestConvertToOpenAIAsyncImageUsesStoredResultURL(t *testing.T) {
 	}
 	if got["status"] != "completed" {
 		t.Fatalf("status = %#v", got["status"])
+	}
+}
+
+func TestConvertToOpenAIAsyncImageUsesProxyURLForStoredDataURL(t *testing.T) {
+	a := &TaskAdaptor{}
+	task := &model.Task{
+		TaskID:    "task_public",
+		Status:    model.TaskStatusSuccess,
+		Progress:  "100%",
+		CreatedAt: 123,
+		UpdatedAt: 456,
+		Properties: model.Properties{
+			OriginModelName: ModelGPTImage2TextToImage,
+		},
+		PrivateData: model.TaskPrivateData{ResultURL: "data:image/png;base64,abc123"},
+	}
+
+	data, err := a.ConvertToOpenAIAsyncImage(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]any
+	if err := common.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	url, _ := got["url"].(string)
+	if strings.HasPrefix(url, "data:") {
+		t.Fatalf("url should not expose data URL: %q", url)
+	}
+	if !strings.Contains(url, "/v1/videos/task_public/content") {
+		t.Fatalf("url = %q, want local content proxy URL", url)
 	}
 }
 
