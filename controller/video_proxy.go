@@ -84,7 +84,6 @@ func VideoProxy(c *gin.Context) {
 		return
 	}
 
-	canServeStoredTaskContent := false
 	switch channel.Type {
 	case constant.ChannelTypeGemini:
 		apiKey := task.PrivateData.Key
@@ -113,17 +112,9 @@ func VideoProxy(c *gin.Context) {
 	default:
 		// Video URL is stored in PrivateData.ResultURL (fallback to FailReason for old data)
 		videoURL = task.GetResultURL()
-		canServeStoredTaskContent = true
 	}
 
 	videoURL = strings.TrimSpace(videoURL)
-	if canServeStoredTaskContent && isTaskProxyContentURL(videoURL, task.TaskID) {
-		if err := writeTaskDataContent(c, task); err != nil {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to write stored task content for task %s: %s", taskID, err.Error()))
-			videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to fetch task content")
-		}
-		return
-	}
 	if videoURL == "" {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Video URL is empty for task %s", taskID))
 		videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to fetch video content")
@@ -178,40 +169,6 @@ func VideoProxy(c *gin.Context) {
 	if _, err = io.Copy(c.Writer, resp.Body); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to stream video content: %s", err.Error()))
 	}
-}
-
-func writeTaskDataContent(c *gin.Context, task *model.Task) error {
-	if task == nil || len(task.Data) == 0 {
-		return fmt.Errorf("task data is empty")
-	}
-	if dataURL := extractOpenAIImageDataURL(task.Data); dataURL != "" {
-		return writeVideoDataURL(c, dataURL)
-	}
-	if dataURL := extractVertexVideoURLFromTaskData(task); dataURL != "" && strings.HasPrefix(dataURL, "data:") {
-		return writeVideoDataURL(c, dataURL)
-	}
-	return fmt.Errorf("stored task content not found")
-}
-
-func extractOpenAIImageDataURL(raw []byte) string {
-	var payload struct {
-		Data []struct {
-			URL     string `json:"url"`
-			B64JSON string `json:"b64_json"`
-		} `json:"data"`
-	}
-	if err := common.Unmarshal(raw, &payload); err != nil {
-		return ""
-	}
-	for _, item := range payload.Data {
-		if u := strings.TrimSpace(item.URL); strings.HasPrefix(u, "data:") {
-			return u
-		}
-		if b64 := strings.TrimSpace(item.B64JSON); b64 != "" {
-			return "data:image/png;base64," + b64
-		}
-	}
-	return ""
 }
 
 func writeVideoDataURL(c *gin.Context, dataURL string) error {

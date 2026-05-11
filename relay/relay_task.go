@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -422,7 +421,7 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 				taskResp = service.TaskErrorWrapper(err, "convert_to_openai_async_image_failed", http.StatusInternalServerError)
 				return
 			}
-			respBody = rewriteOpenAIAsyncImageLocalURLs(c, data)
+			respBody = data
 			return
 		}
 	}
@@ -474,53 +473,6 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
 	}
 	return
-}
-
-func rewriteOpenAIAsyncImageLocalURLs(c *gin.Context, data []byte) []byte {
-	var out map[string]any
-	if err := common.Unmarshal(data, &out); err != nil {
-		return data
-	}
-	u, _ := out["url"].(string)
-	rewritten := rewriteLocalTaskContentURL(c, u)
-	if rewritten == "" || rewritten == u {
-		return data
-	}
-	out["url"] = rewritten
-	next, err := common.Marshal(out)
-	if err != nil {
-		return data
-	}
-	return next
-}
-
-func rewriteLocalTaskContentURL(c *gin.Context, raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" || c == nil || c.Request == nil {
-		return raw
-	}
-	u, err := url.Parse(raw)
-	if err != nil || u.Path == "" || !strings.HasPrefix(u.Path, "/v1/videos/") || !strings.HasSuffix(u.Path, "/content") {
-		return raw
-	}
-	host := strings.TrimSpace(c.Request.Host)
-	if host == "" {
-		return raw
-	}
-	scheme := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto"))
-	if scheme == "" {
-		scheme = strings.TrimSpace(c.GetHeader("X-Forwarded-Protocol"))
-	}
-	if scheme == "" {
-		if c.Request.TLS != nil {
-			scheme = "https"
-		} else {
-			scheme = "http"
-		}
-	}
-	u.Scheme = scheme
-	u.Host = host
-	return u.String()
 }
 
 // tryRealtimeFetch 尝试从上游实时拉取 Gemini/Vertex 任务状态。

@@ -228,11 +228,7 @@ func runSub2APIAsyncImageGeneration(ctx context.Context, localTaskID int64, base
 	}
 
 	task.Data = respBody
-	if strings.HasPrefix(resultURL, "data:") {
-		task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
-	} else {
-		task.PrivateData.ResultURL = resultURL
-	}
+	task.PrivateData.ResultURL = resultURL
 	task.Status = model.TaskStatusSuccess
 	task.Progress = taskcommon.ProgressComplete
 	task.FinishTime = time.Now().Unix()
@@ -380,16 +376,44 @@ func (a *TaskAdaptor) ConvertToOpenAIAsyncImage(originTask *model.Task) ([]byte,
 		"created_at": originTask.CreatedAt,
 		"updated_at": originTask.UpdatedAt,
 	}
-	if u := originTask.GetResultURL(); u != "" && originTask.Status != model.TaskStatusFailure {
-		if strings.HasPrefix(u, "data:") {
-			u = taskcommon.BuildProxyURL(originTask.TaskID)
-		}
+	if b64 := firstOpenAIImageBase64(originTask.Data, originTask.GetResultURL()); b64 != "" && originTask.Status != model.TaskStatusFailure {
+		out["b64_json"] = b64
+	} else if u := originTask.GetResultURL(); u != "" && originTask.Status != model.TaskStatusFailure {
 		out["url"] = u
 	}
 	if originTask.FailReason != "" {
 		out["error"] = map[string]any{"message": originTask.FailReason}
 	}
 	return common.Marshal(out)
+}
+
+func firstOpenAIImageBase64(raw []byte, fallbackURL string) string {
+	if len(raw) != 0 {
+		var res openAIImageGenerationResponse
+		if err := common.Unmarshal(raw, &res); err == nil {
+			for _, item := range res.Data {
+				if b64 := strings.TrimSpace(item.B64JSON); b64 != "" {
+					return b64
+				}
+				if b64 := dataImageBase64(item.URL); b64 != "" {
+					return b64
+				}
+			}
+		}
+	}
+	return dataImageBase64(fallbackURL)
+}
+
+func dataImageBase64(dataURL string) string {
+	dataURL = strings.TrimSpace(dataURL)
+	if !strings.HasPrefix(dataURL, "data:image/") {
+		return ""
+	}
+	parts := strings.SplitN(dataURL, ",", 2)
+	if len(parts) != 2 || !strings.Contains(parts[0], ";base64") {
+		return ""
+	}
+	return strings.TrimSpace(parts[1])
 }
 
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (map[string]any, error) {

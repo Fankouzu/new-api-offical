@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -223,7 +222,7 @@ func TestConvertToOpenAIAsyncImageUsesStoredResultURL(t *testing.T) {
 	}
 }
 
-func TestConvertToOpenAIAsyncImageUsesProxyURLForStoredDataURL(t *testing.T) {
+func TestConvertToOpenAIAsyncImageReturnsStoredUpstreamBase64(t *testing.T) {
 	a := &TaskAdaptor{}
 	task := &model.Task{
 		TaskID:    "task_public",
@@ -234,6 +233,39 @@ func TestConvertToOpenAIAsyncImageUsesProxyURLForStoredDataURL(t *testing.T) {
 		Properties: model.Properties{
 			OriginModelName: ModelGPTImage2TextToImage,
 		},
+		Data:        []byte(`{"created":1,"data":[{"b64_json":"abc123"}]}`),
+		PrivateData: model.TaskPrivateData{ResultURL: "http://localhost:3001/v1/videos/task_public/content"},
+	}
+
+	data, err := a.ConvertToOpenAIAsyncImage(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]any
+	if err := common.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["b64_json"] != "abc123" {
+		t.Fatalf("b64_json = %#v", got["b64_json"])
+	}
+	if _, ok := got["url"]; ok {
+		t.Fatalf("url should be omitted when b64_json is available: %#v", got["url"])
+	}
+}
+
+func TestConvertToOpenAIAsyncImageConvertsStoredDataURLToBase64(t *testing.T) {
+	a := &TaskAdaptor{}
+	task := &model.Task{
+		TaskID:    "task_public",
+		Status:    model.TaskStatusSuccess,
+		Progress:  "100%",
+		CreatedAt: 123,
+		UpdatedAt: 456,
+		Properties: model.Properties{
+			OriginModelName: ModelGPTImage2TextToImage,
+		},
+		Data:        []byte(`{"created":1,"data":[{"url":"data:image/png;base64,abc123"}]}`),
 		PrivateData: model.TaskPrivateData{ResultURL: "data:image/png;base64,abc123"},
 	}
 
@@ -246,12 +278,11 @@ func TestConvertToOpenAIAsyncImageUsesProxyURLForStoredDataURL(t *testing.T) {
 	if err := common.Unmarshal(data, &got); err != nil {
 		t.Fatal(err)
 	}
-	url, _ := got["url"].(string)
-	if strings.HasPrefix(url, "data:") {
-		t.Fatalf("url should not expose data URL: %q", url)
+	if got["b64_json"] != "abc123" {
+		t.Fatalf("b64_json = %#v", got["b64_json"])
 	}
-	if !strings.Contains(url, "/v1/videos/task_public/content") {
-		t.Fatalf("url = %q, want local content proxy URL", url)
+	if _, ok := got["url"]; ok {
+		t.Fatalf("url should be omitted when data URL can be represented as b64_json: %#v", got["url"])
 	}
 }
 
