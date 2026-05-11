@@ -377,9 +377,9 @@ func (a *TaskAdaptor) ConvertToOpenAIAsyncImage(originTask *model.Task) ([]byte,
 		"updated_at": originTask.UpdatedAt,
 	}
 	if b64 := firstOpenAIImageBase64(originTask.Data, originTask.GetResultURL()); b64 != "" && originTask.Status != model.TaskStatusFailure {
-		out["b64_json"] = b64
+		out["data"] = []any{map[string]any{"b64_json": b64}}
 	} else if u := originTask.GetResultURL(); u != "" && originTask.Status != model.TaskStatusFailure {
-		out["url"] = u
+		out["data"] = []any{map[string]any{"url": u}}
 	}
 	if originTask.FailReason != "" {
 		out["error"] = map[string]any{"message": originTask.FailReason}

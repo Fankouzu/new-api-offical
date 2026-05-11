@@ -214,8 +214,16 @@ func TestConvertToOpenAIAsyncImageUsesStoredResultURL(t *testing.T) {
 	if got["object"] != "sub2api_async.image.generation.task" {
 		t.Fatalf("object = %#v", got["object"])
 	}
-	if got["url"] != "https://example.com/image.png" {
-		t.Fatalf("url = %#v", got["url"])
+	dataItems, ok := got["data"].([]any)
+	if !ok || len(dataItems) != 1 {
+		t.Fatalf("data = %#v", got["data"])
+	}
+	first, ok := dataItems[0].(map[string]any)
+	if !ok {
+		t.Fatalf("data[0] = %#v", dataItems[0])
+	}
+	if first["url"] != "https://example.com/image.png" {
+		t.Fatalf("data[0].url = %#v", first["url"])
 	}
 	if got["status"] != "completed" {
 		t.Fatalf("status = %#v", got["status"])
@@ -246,8 +254,16 @@ func TestConvertToOpenAIAsyncImageReturnsStoredUpstreamBase64(t *testing.T) {
 	if err := common.Unmarshal(data, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got["b64_json"] != "abc123" {
-		t.Fatalf("b64_json = %#v", got["b64_json"])
+	dataItems, ok := got["data"].([]any)
+	if !ok || len(dataItems) != 1 {
+		t.Fatalf("data = %#v", got["data"])
+	}
+	first, ok := dataItems[0].(map[string]any)
+	if !ok {
+		t.Fatalf("data[0] = %#v", dataItems[0])
+	}
+	if first["b64_json"] != "abc123" {
+		t.Fatalf("data[0].b64_json = %#v", first["b64_json"])
 	}
 	if _, ok := got["url"]; ok {
 		t.Fatalf("url should be omitted when b64_json is available: %#v", got["url"])
@@ -278,8 +294,16 @@ func TestConvertToOpenAIAsyncImageConvertsStoredDataURLToBase64(t *testing.T) {
 	if err := common.Unmarshal(data, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got["b64_json"] != "abc123" {
-		t.Fatalf("b64_json = %#v", got["b64_json"])
+	dataItems, ok := got["data"].([]any)
+	if !ok || len(dataItems) != 1 {
+		t.Fatalf("data = %#v", got["data"])
+	}
+	first, ok := dataItems[0].(map[string]any)
+	if !ok {
+		t.Fatalf("data[0] = %#v", dataItems[0])
+	}
+	if first["b64_json"] != "abc123" {
+		t.Fatalf("data[0].b64_json = %#v", first["b64_json"])
 	}
 	if _, ok := got["url"]; ok {
 		t.Fatalf("url should be omitted when data URL can be represented as b64_json: %#v", got["url"])
