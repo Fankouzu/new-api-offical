@@ -448,7 +448,7 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	if len(images) > 0 {
 		if cfg.ImageKey != "" {
 			input[cfg.ImageKey] = images
-			if cfg.ImageKey == "image" && len(images) == 1 {
+			if cfg.ImageKey == "image" && len(images) == 1 && strings.TrimSpace(req.Image) != "" {
 				input[cfg.ImageKey] = images[0]
 			}
 		} else if len(images) == 1 {

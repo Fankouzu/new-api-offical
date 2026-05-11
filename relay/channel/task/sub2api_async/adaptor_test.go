@@ -114,6 +114,33 @@ func TestConvertGPTImageImageToImageUsesSingleOpenAIImageReference(t *testing.T)
 	}
 }
 
+func TestConvertGPTImageImageToImagePreservesImageArrayFromJSON(t *testing.T) {
+	a := &TaskAdaptor{}
+	const imageURL = "https://example.com/reference.png"
+	req := relaycommon.TaskSubmitReq{
+		Model:  ModelGPTImage2ImageToImage,
+		Prompt: "use the reference",
+		Images: []string{imageURL},
+		Size:   "1440x2560",
+	}
+
+	body, err := a.convertToRequestPayload(&req, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: ModelGPTImage2ImageToImage}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok := body["image"].([]string)
+	if !ok {
+		t.Fatalf("image should preserve client JSON array shape, got %T: %#v", body["image"], body["image"])
+	}
+	if len(got) != 1 || got[0] != imageURL {
+		t.Fatalf("image = %#v want [%q]", got, imageURL)
+	}
+	if _, hasInputURLs := body["input_urls"]; hasInputURLs {
+		t.Fatalf("input should not include input_urls: %#v", body)
+	}
+}
+
 func TestDoResponseReturnsPublicTaskAndSchedulesBackgroundWorker(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	a := &TaskAdaptor{}
