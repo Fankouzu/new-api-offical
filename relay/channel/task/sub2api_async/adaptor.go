@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -449,13 +448,25 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		return nil, fmt.Errorf("unsupported model: %s", modelName)
 	}
 
+	// The W×H request shape (size, aspect_ratio, resolution) is owned by the
+	// client / pipeline. Sub2API-async is a pure pass-through channel: whatever
+	// the caller supplies is forwarded verbatim. Previously this branch called
+	// applySize() to reverse-derive `aspect_ratio` and `resolution` from a
+	// pixel-form `size` like "2560x1440"; that injected fields the caller never
+	// asked for and used a broken tier mapping (anything ≥ 1080 short-side was
+	// reported as "1080p", so a 1440p QHD request shipped a contradictory
+	// resolution="1080p" / size="2560x1440" pair to the actual upstream and
+	// triggered a 502). Do not re-introduce that derivation — if the upstream
+	// needs aspect_ratio or resolution, the caller must send them explicitly
+	// (kie/adaptor.go intentionally still derives them for the KIE channel
+	// because that upstream requires them; that pattern is NOT appropriate
+	// for sub2api).
 	input := map[string]any{"model": modelName}
 	if req.Prompt != "" {
 		input["prompt"] = req.Prompt
 	}
 	if req.Size != "" {
 		input["size"] = req.Size
-		applySize(input, req.Size)
 	}
 	if req.Resolution != "" {
 		input["resolution"] = req.Resolution
@@ -530,10 +541,12 @@ func requestImages(req *relaycommon.TaskSubmitReq) []string {
 }
 
 func resolveBillingResolution(req relaycommon.TaskSubmitReq) string {
+	// Billing tier lookup. Only consults what the caller explicitly sent:
+	// req.Resolution first, then metadata.resolution. Does NOT reverse-derive
+	// from pixel size — see convertToRequestPayload for the rationale.
+	// Callers that want tier-accurate billing for size-only requests must
+	// send `resolution` alongside (e.g. via metadata).
 	input := map[string]any{}
-	if req.Size != "" {
-		applySize(input, req.Size)
-	}
 	if req.Resolution != "" {
 		input["resolution"] = req.Resolution
 	}
@@ -552,51 +565,6 @@ func normalizeImageResolution(resolution string) string {
 	default:
 		return ""
 	}
-}
-
-func applySize(input map[string]any, size string) {
-	size = strings.TrimSpace(size)
-	if strings.Contains(size, "x") {
-		parts := strings.Split(size, "x")
-		if len(parts) == 2 {
-			w, wErr := strconv.Atoi(parts[0])
-			h, hErr := strconv.Atoi(parts[1])
-			if wErr == nil && hErr == nil && w > 0 && h > 0 {
-				input["aspect_ratio"] = simplifyRatio(w, h)
-				input["resolution"] = resolutionFromDimensions(w, h)
-				return
-			}
-		}
-	}
-	if strings.HasSuffix(strings.ToLower(size), "p") || strings.HasSuffix(strings.ToUpper(size), "K") {
-		input["resolution"] = size
-	}
-}
-
-func simplifyRatio(w, h int) string {
-	g := gcd(w, h)
-	return fmt.Sprintf("%d:%d", w/g, h/g)
-}
-
-func resolutionFromDimensions(w, h int) string {
-	shorter := min(w, h)
-	if shorter >= 1080 {
-		return "1080p"
-	}
-	if shorter >= 720 {
-		return "720p"
-	}
-	return "480p"
-}
-
-func gcd(a, b int) int {
-	for b != 0 {
-		a, b = b, a%b
-	}
-	if a < 0 {
-		return -a
-	}
-	return a
 }
 
 func firstNonEmpty(values ...string) string {

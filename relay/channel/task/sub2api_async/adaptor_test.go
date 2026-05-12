@@ -61,8 +61,14 @@ func TestConvertGPTImagePayloadsFromUnifiedRequest(t *testing.T) {
 			}
 			assertInput(t, body, "prompt", "make an image")
 			assertInput(t, body, "size", "1024x1024")
-			assertInput(t, body, "aspect_ratio", "1:1")
+			// `resolution` comes from the explicit metadata above. aspect_ratio
+			// is no longer auto-derived from size — the channel forwards the
+			// W×H request shape verbatim so the caller controls what upstream
+			// sees.
 			assertInput(t, body, "resolution", "2K")
+			if _, hasAspect := body["aspect_ratio"]; hasAspect {
+				t.Fatalf("aspect_ratio must not be auto-derived from size: %#v", body)
+			}
 			if tc.wantKey == "" {
 				if _, ok := body["input_urls"]; ok {
 					t.Fatalf("text-to-image should not include input_urls: %#v", body)
@@ -83,6 +89,36 @@ func TestConvertGPTImagePayloadsFromUnifiedRequest(t *testing.T) {
 				t.Fatalf("input should not include input_urls: %#v", body)
 			}
 		})
+	}
+}
+
+// TestConvertGPTImageDoesNotInjectResolutionOrAspectRatio codifies the
+// pass-through contract: when the caller sends only `size` (pixel form, e.g.
+// "2560x1440") and does not supply `resolution` or `aspect_ratio`, the
+// upstream payload MUST NOT have those fields auto-derived. The earlier
+// applySize() helper reverse-derived them with a broken tier mapping
+// (anything ≥ 1080 short-side → "1080p"), which produced a contradictory
+// resolution="1080p" / size="2560x1440" pair and triggered 502s on
+// 16:9 1440p / 4K requests.
+func TestConvertGPTImageDoesNotInjectResolutionOrAspectRatio(t *testing.T) {
+	a := &TaskAdaptor{}
+	req := relaycommon.TaskSubmitReq{
+		Model:  ModelGPTImage2TextToImage,
+		Prompt: "high-fidelity QHD mockup",
+		Size:   "2560x1440",
+	}
+
+	body, err := a.convertToRequestPayload(&req, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: ModelGPTImage2TextToImage}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertInput(t, body, "size", "2560x1440")
+	if _, hasAspect := body["aspect_ratio"]; hasAspect {
+		t.Fatalf("aspect_ratio must not be auto-derived from size: %#v", body)
+	}
+	if _, hasResolution := body["resolution"]; hasResolution {
+		t.Fatalf("resolution must not be auto-derived from size: %#v", body)
 	}
 }
 
