@@ -6,6 +6,13 @@ const (
 
 	ModelGPTImage2TextToImage  = "gpt-image-2-text-to-image"
 	ModelGPTImage2ImageToImage = "gpt-image-2-image-to-image"
+
+	// Upstream URL paths. Centralized here so the async submit endpoint
+	// (BuildRequestURL) and the deferred sync call (syncImageGenerationRequestPath)
+	// reference one source. Sub2API uses the OpenAI Images API shape; if the
+	// upstream renames or versions these paths, update them here only.
+	UpstreamPathImagesGenerations = "/v1/images/generations"
+	UpstreamPathImagesEdits       = "/v1/images/edits"
 )
 
 var ModelList = []string{

@@ -3,6 +3,7 @@ package sub2api_async
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,17 +39,21 @@ type openAIImageGenerationResponse struct {
 	Error *dto.OpenAIVideoError `json:"error"`
 }
 
+// Single weight table shared by every Sub2API GPT Image 2 variant — t2i and
+// i2i are priced identically per resolution tier today. Keeping one source
+// prevents drift when prices change (the previous duplicated-per-model table
+// required updating two parallel maps in lock-step). If a future variant
+// needs different weights, add it as a separate constant and reference it
+// from imageResolutionRatioWeights below — do not silently fork this map.
+var gptImage2ResolutionWeights = map[string]float64{
+	"1K": 3,
+	"2K": 5,
+	"4K": 8,
+}
+
 var imageResolutionRatioWeights = map[string]map[string]float64{
-	ModelGPTImage2TextToImage: {
-		"1K": 3,
-		"2K": 5,
-		"4K": 8,
-	},
-	ModelGPTImage2ImageToImage: {
-		"1K": 3,
-		"2K": 5,
-		"4K": 8,
-	},
+	ModelGPTImage2TextToImage:  gptImage2ResolutionWeights,
+	ModelGPTImage2ImageToImage: gptImage2ResolutionWeights,
 }
 
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
@@ -93,7 +98,7 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
-	return a.baseURL + "/v1/images/generations", nil
+	return a.baseURL + UpstreamPathImagesGenerations, nil
 }
 
 func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *relaycommon.RelayInfo) error {
@@ -147,8 +152,24 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		info.PublicTaskID = publicTaskID
 	}
 	if info.TaskRelayInfo != nil {
+		// Capture the inbound request id NOW (synchronously, while the gin
+		// context is still valid). The closure below fires after the task row
+		// is inserted — possibly after this handler has returned — and uses
+		// it to seed the background ctx so logger.LogError etc. carry the
+		// original request id instead of "SYSTEM". context.Background() is
+		// still the base so the goroutine outlives the http request.
+		var requestID string
+		if c != nil && c.Request != nil {
+			if v, ok := c.Request.Context().Value(common.RequestIdKey).(string); ok {
+				requestID = v
+			}
+		}
 		info.AfterTaskInserted = func(localTaskID int64) {
-			a.scheduleSyncImageGeneration(context.Background(), localTaskID, requestBody)
+			bgCtx := context.Background()
+			if requestID != "" {
+				bgCtx = context.WithValue(bgCtx, common.RequestIdKey, requestID)
+			}
+			a.scheduleSyncImageGeneration(bgCtx, localTaskID, requestBody)
 		}
 	}
 
@@ -211,6 +232,11 @@ func runSub2APIAsyncImageGeneration(ctx context.Context, localTaskID int64, base
 		logger.LogError(ctx, fmt.Sprintf("sub2api async mark running failed: %v", err))
 		return
 	} else if !won {
+		// Another goroutine already moved this task out of NotStart. Surface
+		// it so duplicate scheduling (gopool re-entry, process race, etc.) is
+		// observable — the success / failure CAS sites further down already
+		// log this case; keep all three CAS branches symmetric.
+		logger.LogWarn(ctx, fmt.Sprintf("sub2api async task status changed before start update: %s", task.TaskID))
 		return
 	}
 
@@ -247,7 +273,7 @@ func doSyncImageGeneration(ctx context.Context, baseURL, apiKey string, requestB
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, syncImageGenerationTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+requestPath, bytes.NewReader(requestBody))
 	if err != nil {
@@ -257,7 +283,7 @@ func doSyncImageGeneration(ctx context.Context, baseURL, apiKey string, requestB
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	client := &http.Client{Timeout: 5 * time.Minute}
+	client := &http.Client{Timeout: syncImageGenerationTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("upstream sync image request failed: %w", err)
@@ -269,9 +295,33 @@ func doSyncImageGeneration(ctx context.Context, baseURL, apiKey string, requestB
 		return nil, fmt.Errorf("read upstream response failed: %w", err)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("upstream status %d: %s", resp.StatusCode, string(respBody))
+		// Truncate the body before it becomes part of an error message that
+		// will land in task.FailReason. Upstream 502s commonly return full
+		// HTML error pages (multiple KB / occasionally MB); bloating the
+		// task row hurts admin list queries and rotating logs.
+		return nil, fmt.Errorf("upstream status %d: %s", resp.StatusCode, truncateUpstreamErrorBody(respBody))
 	}
 	return respBody, nil
+}
+
+// syncImageGenerationTimeout caps how long the deferred sync upstream call may
+// run. Sub2API's t2i / edits endpoints typically respond in < 90s; the 5-minute
+// ceiling is the worst-case allowance and is applied to BOTH the request
+// context deadline and the underlying http.Client timeout so a single source
+// of truth governs the bound.
+const syncImageGenerationTimeout = 5 * time.Minute
+
+// truncateUpstreamErrorBody keeps the leading 1KB of an upstream error
+// response and appends a marker indicating the original size, so admins can
+// still tell how big the truncated payload was. Operates on bytes not runes
+// because the body may not be UTF-8 (HTML error pages can be other encodings).
+const upstreamErrorBodyMaxBytes = 1024
+
+func truncateUpstreamErrorBody(body []byte) string {
+	if len(body) <= upstreamErrorBodyMaxBytes {
+		return string(body)
+	}
+	return fmt.Sprintf("%s...(truncated, %d bytes total)", string(body[:upstreamErrorBodyMaxBytes]), len(body))
 }
 
 func syncImageGenerationRequestPath(requestBody []byte) (string, error) {
@@ -283,9 +333,9 @@ func syncImageGenerationRequestPath(requestBody []byte) (string, error) {
 	}
 	switch strings.TrimSpace(req.Model) {
 	case ModelGPTImage2TextToImage:
-		return "/v1/images/generations", nil
+		return UpstreamPathImagesGenerations, nil
 	case ModelGPTImage2ImageToImage:
-		return "/v1/images/edits", nil
+		return UpstreamPathImagesEdits, nil
 	default:
 		return "", fmt.Errorf("unsupported model: %s", req.Model)
 	}
@@ -296,18 +346,63 @@ func parseSyncImageGenerationResult(respBody []byte) (string, error) {
 	if err := common.Unmarshal(respBody, &res); err != nil {
 		return "", errors.Wrap(err, "unmarshal upstream image response failed")
 	}
-	if res.Error != nil && strings.TrimSpace(res.Error.Message) != "" {
-		return "", fmt.Errorf("upstream image error: %s", res.Error.Message)
+	if res.Error != nil {
+		// Some upstreams return code-only errors (e.g. {"error":{"code":"quota_exceeded"}})
+		// without a human-readable message. Surface whichever is present so the task's
+		// FailReason names the actual upstream error class instead of degrading to
+		// the misleading "no image data" branch further down.
+		if reason := firstNonEmpty(res.Error.Message, res.Error.Code); reason != "" {
+			return "", fmt.Errorf("upstream image error: %s", reason)
+		}
 	}
 	for _, item := range res.Data {
 		if strings.TrimSpace(item.URL) != "" {
 			return strings.TrimSpace(item.URL), nil
 		}
-		if strings.TrimSpace(item.B64JSON) != "" {
-			return "data:image/png;base64," + strings.TrimSpace(item.B64JSON), nil
+		if b64 := strings.TrimSpace(item.B64JSON); b64 != "" {
+			return "data:" + detectImageMIME(b64) + ";base64," + b64, nil
 		}
 	}
 	return "", fmt.Errorf("upstream image response has no image data")
+}
+
+// detectImageMIME inspects the first few decoded bytes of a base64 image
+// payload to figure out the correct MIME type. The previous code hardcoded
+// "image/png" for every b64 response, which mislabeled JPEG / WebP / GIF
+// outputs and broke strict downstream MIME consumers (browsers tolerate it,
+// some HTTP clients and CDN edge rules do not). Falls back to image/png only
+// when the magic bytes match nothing recognised — that matches the previous
+// default so we never produce a *worse* label than before.
+func detectImageMIME(b64 string) string {
+	// Only need the first ~12 decoded bytes. Decoding a small prefix is cheap
+	// and avoids materialising the full image in memory.
+	const sniffLen = 16
+	enc := base64.StdEncoding
+	prefixLen := enc.EncodedLen(sniffLen)
+	if len(b64) < prefixLen {
+		prefixLen = len(b64)
+	}
+	// base64 length must be a multiple of 4 to decode; round down.
+	prefixLen -= prefixLen % 4
+	if prefixLen <= 0 {
+		return "image/png"
+	}
+	buf, err := enc.DecodeString(b64[:prefixLen])
+	if err != nil || len(buf) < 4 {
+		return "image/png"
+	}
+	switch {
+	case bytes.HasPrefix(buf, []byte{0xFF, 0xD8, 0xFF}):
+		return "image/jpeg"
+	case bytes.HasPrefix(buf, []byte{0x89, 0x50, 0x4E, 0x47}):
+		return "image/png"
+	case bytes.HasPrefix(buf, []byte("GIF87a")), bytes.HasPrefix(buf, []byte("GIF89a")):
+		return "image/gif"
+	case len(buf) >= 12 && bytes.Equal(buf[:4], []byte("RIFF")) && bytes.Equal(buf[8:12], []byte("WEBP")):
+		return "image/webp"
+	default:
+		return "image/png"
+	}
 }
 
 func markSub2APIAsyncTaskFailed(ctx context.Context, task *model.Task, reason string) {
@@ -366,8 +461,20 @@ func parseOpenAIAsyncImageTaskResult(respBody []byte) (*relaycommon.TaskInfo, er
 			taskResult.Reason = "task failed"
 		}
 	default:
-		taskResult.Status = model.TaskStatusInProgress
-		taskResult.Progress = normalizeProgress(res.Progress, taskcommon.ProgressInProgress)
+		// Unknown upstream status string. Previously this branch silently
+		// classified the task as InProgress, which left tasks polling forever
+		// when the upstream protocol drifted or a channel was misconfigured.
+		// Fail the task explicitly so the operator gets a visible signal
+		// instead of an indefinite-running phantom.
+		rawStatus := strings.TrimSpace(res.Status)
+		logger.LogWarn(context.Background(), fmt.Sprintf("sub2api async unknown upstream task status: %q", rawStatus))
+		taskResult.Status = model.TaskStatusFailure
+		taskResult.Progress = taskcommon.ProgressComplete
+		if rawStatus == "" {
+			taskResult.Reason = "upstream returned empty task status"
+		} else {
+			taskResult.Reason = fmt.Sprintf("unknown upstream task status: %s", rawStatus)
+		}
 	}
 	return taskResult, nil
 }
@@ -399,7 +506,15 @@ func (a *TaskAdaptor) ConvertToOpenAIAsyncImage(originTask *model.Task) ([]byte,
 		"created_at": originTask.CreatedAt,
 		"updated_at": originTask.UpdatedAt,
 	}
-	if b64 := firstOpenAIImageBase64(originTask.Data, originTask.GetResultURL()); b64 != "" && originTask.Status != model.TaskStatusFailure {
+	b64, b64Err := firstOpenAIImageBase64(originTask.Data, originTask.GetResultURL())
+	if b64Err != nil {
+		// Stored upstream payload is malformed. Surface it so admins notice
+		// the corruption, but degrade gracefully to the stored result URL
+		// so the task response is still served — the alternative is a 500 on
+		// every FetchTask hitting this row.
+		logger.LogError(context.Background(), fmt.Sprintf("sub2api async task %s base64 extraction failed: %v", originTask.TaskID, b64Err))
+	}
+	if b64 != "" && originTask.Status != model.TaskStatusFailure {
 		out["data"] = []any{map[string]any{"b64_json": b64}}
 	} else if u := originTask.GetResultURL(); u != "" && originTask.Status != model.TaskStatusFailure {
 		out["data"] = []any{map[string]any{"url": u}}
@@ -410,21 +525,26 @@ func (a *TaskAdaptor) ConvertToOpenAIAsyncImage(originTask *model.Task) ([]byte,
 	return common.Marshal(out)
 }
 
-func firstOpenAIImageBase64(raw []byte, fallbackURL string) string {
+func firstOpenAIImageBase64(raw []byte, fallbackURL string) (string, error) {
 	if len(raw) != 0 {
 		var res openAIImageGenerationResponse
-		if err := common.Unmarshal(raw, &res); err == nil {
-			for _, item := range res.Data {
-				if b64 := strings.TrimSpace(item.B64JSON); b64 != "" {
-					return b64
-				}
-				if b64 := dataImageBase64(item.URL); b64 != "" {
-					return b64
-				}
+		if err := common.Unmarshal(raw, &res); err != nil {
+			// Stored response cannot be parsed; let the caller decide whether
+			// to fail or fall back. Returning the URL-shaped fallback here too
+			// is harmless — callers that want to know about the parse failure
+			// inspect the returned error.
+			return dataImageBase64(fallbackURL), errors.Wrap(err, "unmarshal stored sub2api image response failed")
+		}
+		for _, item := range res.Data {
+			if b64 := strings.TrimSpace(item.B64JSON); b64 != "" {
+				return b64, nil
+			}
+			if b64 := dataImageBase64(item.URL); b64 != "" {
+				return b64, nil
 			}
 		}
 	}
-	return dataImageBase64(fallbackURL)
+	return dataImageBase64(fallbackURL), nil
 }
 
 func dataImageBase64(dataURL string) string {
@@ -471,7 +591,16 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	if req.Resolution != "" {
 		input["resolution"] = req.Resolution
 	}
-	if err := taskcommon.UnmarshalMetadata(req.Metadata, &input); err != nil {
+	// Strip authoritative request fields from metadata before the merge below.
+	// Sub2API-async treats `prompt`, `size`, and `resolution` as caller-owned
+	// request-shape inputs (read directly off TaskSubmitReq above); allowing
+	// metadata to silently override them would create a field-injection face
+	// — a caller (or a future caller) could send size=2K with metadata.size=8K
+	// and the upstream would see 8K. UnmarshalMetadata already deletes `model`
+	// for the same reason (billing-bypass guard); extend the same guard to the
+	// other authoritative fields.
+	sanitizedMetadata := stripAuthoritativeMetadataFields(req.Metadata)
+	if err := taskcommon.UnmarshalMetadata(sanitizedMetadata, &input); err != nil {
 		return nil, err
 	}
 
@@ -483,9 +612,6 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 				input[cfg.ImageKey] = imageURLObjects(images, cfg.ImageURLKey)
 			} else {
 				input[cfg.ImageKey] = images
-				if cfg.ImageKey == "image" && len(images) == 1 && strings.TrimSpace(req.Image) != "" {
-					input[cfg.ImageKey] = images[0]
-				}
 			}
 		} else if len(images) == 1 {
 			input["image"] = images[0]
@@ -555,6 +681,26 @@ func resolveBillingResolution(req relaycommon.TaskSubmitReq) string {
 	}
 	resolution, _ := input["resolution"].(string)
 	return resolution
+}
+
+// stripAuthoritativeMetadataFields returns a copy of metadata with keys that
+// duplicate authoritative request fields removed. `model`, `prompt`, `size`,
+// and `resolution` are owned by the typed TaskSubmitReq; allowing metadata to
+// shadow them would let a caller silently override the request shape after
+// the typed fields have already been read.
+func stripAuthoritativeMetadataFields(metadata map[string]any) map[string]any {
+	if metadata == nil {
+		return nil
+	}
+	sanitized := make(map[string]any, len(metadata))
+	for k, v := range metadata {
+		switch k {
+		case "model", "prompt", "size", "resolution":
+			continue
+		}
+		sanitized[k] = v
+	}
+	return sanitized
 }
 
 func normalizeImageResolution(resolution string) string {

@@ -41,14 +41,18 @@ func TestConvertGPTImagePayloadsFromUnifiedRequest(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Resolution is sent via the authoritative TaskSubmitReq.Resolution
+			// field, not through Metadata. The adapter now strips authoritative
+			// keys (model / prompt / size / resolution) out of metadata before
+			// merging, so a caller that wants to set resolution must use the
+			// typed field — this prevents a future caller from silently
+			// shadowing the request shape via metadata.
 			req := relaycommon.TaskSubmitReq{
-				Model:  tc.modelName,
-				Prompt: "make an image",
-				Images: tc.images,
-				Size:   "1024x1024",
-				Metadata: map[string]any{
-					"resolution": "2K",
-				},
+				Model:      tc.modelName,
+				Prompt:     "make an image",
+				Images:     tc.images,
+				Size:       "1024x1024",
+				Resolution: "2K",
 			}
 
 			body, err := a.convertToRequestPayload(&req, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: tc.modelName}})
@@ -90,6 +94,43 @@ func TestConvertGPTImagePayloadsFromUnifiedRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestConvertGPTImageMetadataCannotShadowAuthoritativeFields codifies the
+// field-injection guard added by convertToRequestPayload's
+// stripAuthoritativeMetadataFields. Authoritative request shape comes from
+// the typed TaskSubmitReq fields; metadata is for *extra* fields the upstream
+// understands, not a backdoor that can override size / resolution / prompt
+// / model after they have been set.
+func TestConvertGPTImageMetadataCannotShadowAuthoritativeFields(t *testing.T) {
+	a := &TaskAdaptor{}
+	req := relaycommon.TaskSubmitReq{
+		Model:      ModelGPTImage2TextToImage,
+		Prompt:     "authoritative prompt",
+		Size:       "2K",
+		Resolution: "2K",
+		Metadata: map[string]any{
+			"size":       "8K",       // attempted backdoor
+			"resolution": "8K",       // attempted backdoor
+			"prompt":     "injected", // attempted backdoor
+			"model":      "phantom",  // already stripped by UnmarshalMetadata
+			"quality":    "high",     // legitimate metadata passthrough
+		},
+	}
+
+	body, err := a.convertToRequestPayload(&req, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: ModelGPTImage2TextToImage}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Authoritative fields must survive verbatim from TaskSubmitReq.
+	assertInput(t, body, "model", ModelGPTImage2TextToImage)
+	assertInput(t, body, "prompt", "authoritative prompt")
+	assertInput(t, body, "size", "2K")
+	assertInput(t, body, "resolution", "2K")
+
+	// Non-authoritative metadata still passes through.
+	assertInput(t, body, "quality", "high")
 }
 
 // TestConvertGPTImageDoesNotInjectResolutionOrAspectRatio codifies the
