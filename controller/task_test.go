@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -31,6 +32,23 @@ type taskListItem struct {
 	TaskID    string          `json:"task_id"`
 	ResultURL string          `json:"result_url"`
 	Data      json.RawMessage `json:"data"`
+}
+
+type taskDetailResponse struct {
+	ID     int64 `json:"id"`
+	Result struct {
+		Available bool   `json:"available"`
+		Inline    bool   `json:"inline"`
+		Type      string `json:"type"`
+		Size      int    `json:"size"`
+		URL       string `json:"url"`
+	} `json:"result"`
+	DataSummary struct {
+		Bytes   int  `json:"bytes"`
+		Omitted bool `json:"omitted"`
+	} `json:"data_summary"`
+	Data      json.RawMessage `json:"data"`
+	ResultURL string          `json:"result_url"`
 }
 
 func setupTaskControllerTestDB(t *testing.T) *gorm.DB {
@@ -89,6 +107,9 @@ func TestGetAllTaskOmitsHeavyMediaPayloadFromList(t *testing.T) {
 		SubmitTime: 100,
 		FinishTime: 110,
 		Progress:   "100%",
+		Properties: model.Properties{
+			UpstreamModelName: "seedream",
+		},
 		PrivateData: model.TaskPrivateData{
 			ResultURL: largeDataURL,
 		},
@@ -112,12 +133,61 @@ func TestGetAllTaskOmitsHeavyMediaPayloadFromList(t *testing.T) {
 	require.NotContains(t, recorder.Body.String(), largeDataURL)
 }
 
-func TestGetTaskByIDReturnsFullPayloadForOnDemandDetails(t *testing.T) {
+func TestGetTaskByIDReturnsLightweightDetails(t *testing.T) {
 	db := setupTaskControllerTestDB(t)
 
 	largeDataURL := "data:image/png;base64," + strings.Repeat("b", 4096)
 	task := &model.Task{
 		TaskID:     "task_detail_media",
+		Platform:   constant.TaskPlatform("61"),
+		UserId:     1,
+		ChannelId:  7,
+		Action:     "generate",
+		Status:     model.TaskStatusSuccess,
+		SubmitTime: 100,
+		FinishTime: 110,
+		Progress:   "100%",
+		Properties: model.Properties{
+			UpstreamModelName: "seedream",
+		},
+		PrivateData: model.TaskPrivateData{
+			ResultURL: largeDataURL,
+		},
+		Data: json.RawMessage(`{"created":1,"data":[{"url":"` + largeDataURL + `"}]}`),
+	}
+	require.NoError(t, db.Create(task).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/task/%d", task.ID), nil)
+	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", task.ID)}}
+
+	GetTaskByID(ctx)
+
+	response := decodeTaskAPIResponse(t, recorder)
+	require.True(t, response.Success, response.Message)
+	require.NotContains(t, string(response.Data), largeDataURL)
+
+	var detail taskDetailResponse
+	require.NoError(t, common.Unmarshal(response.Data, &detail))
+	require.Equal(t, task.ID, detail.ID)
+	require.True(t, detail.Result.Available)
+	require.False(t, detail.Result.Inline)
+	require.Equal(t, "image", detail.Result.Type)
+	require.Zero(t, detail.Result.Size)
+	require.Equal(t, fmt.Sprintf("/api/task/%d/result", task.ID), detail.Result.URL)
+	require.True(t, detail.DataSummary.Omitted)
+	require.Zero(t, detail.DataSummary.Bytes)
+	require.Empty(t, detail.Data)
+	require.Empty(t, detail.ResultURL)
+}
+
+func TestGetTaskRawByIDReturnsFullPayloadOnDemand(t *testing.T) {
+	db := setupTaskControllerTestDB(t)
+
+	largeDataURL := "data:image/png;base64," + strings.Repeat("c", 4096)
+	task := &model.Task{
+		TaskID:     "task_raw_media",
 		Platform:   constant.TaskPlatform("61"),
 		UserId:     1,
 		ChannelId:  7,
@@ -135,12 +205,46 @@ func TestGetTaskByIDReturnsFullPayloadForOnDemandDetails(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/task/%d", task.ID), nil)
+	ctx.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/task/%d/raw", task.ID), nil)
 	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", task.ID)}}
 
-	GetTaskByID(ctx)
+	GetTaskRawByID(ctx)
 
 	response := decodeTaskAPIResponse(t, recorder)
 	require.True(t, response.Success, response.Message)
 	require.Contains(t, string(response.Data), largeDataURL)
+}
+
+func TestGetTaskResultByIDStreamsInlineMedia(t *testing.T) {
+	db := setupTaskControllerTestDB(t)
+
+	imageBytes := []byte("fake-png-bytes")
+	largeDataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(imageBytes)
+	task := &model.Task{
+		TaskID:     "task_result_media",
+		Platform:   constant.TaskPlatform("61"),
+		UserId:     1,
+		ChannelId:  7,
+		Action:     "generate",
+		Status:     model.TaskStatusSuccess,
+		SubmitTime: 100,
+		FinishTime: 110,
+		Progress:   "100%",
+		PrivateData: model.TaskPrivateData{
+			ResultURL: largeDataURL,
+		},
+		Data: json.RawMessage(`{"created":1,"data":[{"url":"` + largeDataURL + `"}]}`),
+	}
+	require.NoError(t, db.Create(task).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/task/%d/result", task.ID), nil)
+	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", task.ID)}}
+
+	GetTaskResultByID(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "image/png", recorder.Header().Get("Content-Type"))
+	require.Equal(t, imageBytes, recorder.Body.Bytes())
 }

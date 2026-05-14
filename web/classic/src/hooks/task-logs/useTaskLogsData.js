@@ -67,6 +67,8 @@ export const useTaskLogsData = () => {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState('');
+  const [taskDetail, setTaskDetail] = useState(null);
+  const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
 
   // 新增：视频预览弹窗状态
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
@@ -288,6 +290,18 @@ export const useTaskLogsData = () => {
     const res = await API.get(url);
     const { success, message, data } = res.data;
     if (success) {
+      setTaskDetail(data);
+      setIsTaskDetailOpen(true);
+    } else {
+      showError(message);
+    }
+  };
+
+  const openTaskRawModal = async (taskId) => {
+    const url = isAdminUser ? `/api/task/${taskId}/raw` : `/api/task/self/${taskId}/raw`;
+    const res = await API.get(url);
+    const { success, message, data } = res.data;
+    if (success) {
       openContentModal(JSON.stringify(data, null, 2));
     } else {
       showError(message);
@@ -346,6 +360,9 @@ export const useTaskLogsData = () => {
     isModalOpen,
     setIsModalOpen,
     modalContent,
+    taskDetail,
+    isTaskDetailOpen,
+    setIsTaskDetailOpen,
 
     // 新增：视频弹窗状态
     isVideoModalOpen,
@@ -394,6 +411,7 @@ export const useTaskLogsData = () => {
     copyText,
     openContentModal,
     openTaskDetailModal,
+    openTaskRawModal,
     openVideoModal,
     openImageModal,
     openAudioModal,
