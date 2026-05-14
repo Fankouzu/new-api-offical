@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	taskkie "github.com/QuantumNous/new-api/relay/channel/task/kie"
+	tasksub2apiasync "github.com/QuantumNous/new-api/relay/channel/task/sub2api_async"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
@@ -217,6 +218,10 @@ func TestKieModelsAppearInGlobalModelRegistry(t *testing.T) {
 		require.True(t, ok, "missing Kie model %s", modelName)
 		require.Equal(t, taskkie.ChannelName, aiModel.OwnedBy)
 	}
+}
+
+func TestSub2APIAsyncModelsAppearInChannelModelRegistry(t *testing.T) {
+	require.Equal(t, tasksub2apiasync.ModelList, channelId2Models[constant.ChannelTypeSub2APIAsync])
 }
 
 func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {

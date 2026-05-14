@@ -383,6 +383,19 @@ func GetByTaskIds(userId int, taskIds []any) ([]*Task, error) {
 	return task, nil
 }
 
+func GetTaskByID(id int64) (*Task, bool, error) {
+	if id <= 0 {
+		return nil, false, nil
+	}
+	var task *Task
+	err := DB.Where("id = ?", id).First(&task).Error
+	exist, err := RecordExist(err)
+	if err != nil {
+		return nil, false, err
+	}
+	return task, exist, nil
+}
+
 func (Task *Task) Insert() error {
 	var err error
 	err = DB.Create(Task).Error

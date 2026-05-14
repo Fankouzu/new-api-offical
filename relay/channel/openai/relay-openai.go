@@ -1,7 +1,7 @@
 package openai
 
 import (
-	"bytes"
+	"bufio"
 	"fmt"
 	"io"
 	"net/http"
@@ -566,20 +566,28 @@ func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 	// connection alive during long generation (2m+) and prevents proxy timeouts.
 	ct := resp.Header.Get("Content-Type")
 	if strings.HasPrefix(ct, "text/event-stream") {
-		var buf bytes.Buffer
-		tee := io.TeeReader(resp.Body, &buf)
-		if _, err := io.Copy(c.Writer, tee); err != nil {
-			return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
-		}
-		c.Writer.Flush()
-
-		// Parse completed event for usage data: scan backwards for
-		// the last data: line and parse it as JSON.
-		bodyStr := buf.String()
 		var lastDataLine string
-		for _, line := range strings.Split(bodyStr, "\n") {
-			if strings.HasPrefix(line, "data:") {
-				lastDataLine = strings.TrimSpace(line[5:])
+		reader := bufio.NewReader(resp.Body)
+		for {
+			line, readErr := reader.ReadString('\n')
+			if len(line) > 0 {
+				if _, err := c.Writer.Write([]byte(line)); err != nil {
+					return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
+				}
+				c.Writer.Flush()
+
+				if strings.HasPrefix(line, "data:") {
+					payload := strings.TrimSpace(line[5:])
+					if payload != "" && payload != "[DONE]" {
+						lastDataLine = payload
+					}
+				}
+			}
+			if readErr == io.EOF {
+				break
+			}
+			if readErr != nil {
+				return nil, types.NewOpenAIError(readErr, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
 			}
 		}
 		if lastDataLine == "" {

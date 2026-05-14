@@ -349,10 +349,10 @@ func loadFromBase64(base64String string, providedMimeType string) (*types.Cached
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode base64 data: %w", err)
 	}
-	if mimeType == "" {
+	if mimeType == "" || mimeType == "application/octet-stream" {
 		if sniffed := http.DetectContentType(decodedData); sniffed != "" && sniffed != "application/octet-stream" {
 			if idx := strings.Index(sniffed, ";"); idx != -1 {
-				sniffed = sniffed[:idx]
+				sniffed = strings.TrimSpace(sniffed[:idx])
 			}
 			mimeType = sniffed
 		}

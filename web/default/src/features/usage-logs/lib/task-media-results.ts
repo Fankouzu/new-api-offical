@@ -18,6 +18,7 @@ type TaskMediaSource = Pick<
 >
 
 const HTTP_URL_PATTERN = /^https?:\/\//i
+const DATA_IMAGE_URL_PATTERN = /^data:image\/[^;,]+;base64,/i
 const IMAGE_URL_PATTERN = /\.(jpe?g|png|webp|gif|bmp|avif)(\?|#|$)/i
 const VIDEO_URL_PATTERN = /\.(mp4|webm|mov|m4v|avi|mkv|m3u8)(\?|#|$)/i
 const VIDEO_ACTIONS = new Set<string>([
@@ -50,6 +51,17 @@ function parseTaskData(data: unknown): unknown {
 
 function isHttpUrl(value: unknown): value is string {
   return typeof value === 'string' && HTTP_URL_PATTERN.test(value.trim())
+}
+
+function isDataImageUrl(value: unknown): value is string {
+  return typeof value === 'string' && DATA_IMAGE_URL_PATTERN.test(value.trim())
+}
+
+function b64JsonToDataImage(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const b64 = value.trim()
+  if (!b64) return undefined
+  return `data:image/png;base64,${b64}`
 }
 
 function looksLikeImageUrl(url: string): boolean {
@@ -110,9 +122,16 @@ function addMediaResult(
   keyHint?: string,
   allowTaskFallback: boolean = false
 ): void {
-  if (!isHttpUrl(urlValue)) return
+  if (!isHttpUrl(urlValue) && !isDataImageUrl(urlValue)) return
 
   const url = urlValue.trim()
+  if (isDataImageUrl(url)) {
+    if (seen.has(url)) return
+    seen.add(url)
+    results.push({ type: 'image', url })
+    return
+  }
+
   if (isStaleImageProxyUrl(url, source)) return
   if (
     isTaskVideoProxyUrl(url, source) &&
@@ -158,7 +177,18 @@ function walkTaskData(
   for (const [key, nestedValue] of Object.entries(value)) {
     const nestedKeyHint = keyHint ? `${keyHint}.${key}` : key
     const allowTaskFallback = RESULT_KEY_PATTERN.test(nestedKeyHint)
-    if (isHttpUrl(nestedValue)) {
+    if (key === 'b64_json') {
+      addMediaResult(
+        results,
+        seen,
+        source,
+        b64JsonToDataImage(nestedValue),
+        nestedKeyHint,
+        true
+      )
+      continue
+    }
+    if (isHttpUrl(nestedValue) || isDataImageUrl(nestedValue)) {
       addMediaResult(
         results,
         seen,

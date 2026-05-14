@@ -56,8 +56,8 @@ type falLogEntry struct {
 }
 
 type falResultResponse struct {
-	RequestID string           `json:"request_id"`
-	Status    string           `json:"status"`
+	RequestID string `json:"request_id"`
+	Status    string `json:"status"`
 	Data      struct {
 		Images []falResultImage `json:"images"`
 	} `json:"data"`
@@ -156,8 +156,7 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	}
 
 	if taskReq.Size != "" {
-		if _, _, err := parseDimensions(taskReq.Size); err == nil {
-			w, h, _ := parseDimensions(taskReq.Size)
+		if w, h, err := parseDimensions(taskReq.Size); err == nil {
 			req.ImageSize = map[string]int{"width": w, "height": h}
 		} else {
 			req.ImageSize = imageSize
@@ -276,7 +275,7 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 			taskResult.Status = model.TaskStatusFailure
 			taskResult.Progress = "100%"
 			taskResult.Reason = "fal: " + res.Error
-		} else if hasErrorInLogs(res.Logs) {
+		} else if len(images) == 0 && hasErrorInLogs(res.Logs) {
 			taskResult.Status = model.TaskStatusFailure
 			taskResult.Progress = "100%"
 			taskResult.Reason = "fal: error in logs"
@@ -326,7 +325,7 @@ func extractDetailMessage(detail json.RawMessage) string {
 	}
 	// Try as a plain string first.
 	var s string
-	if json.Unmarshal(detail, &s) == nil {
+	if common.Unmarshal(detail, &s) == nil {
 		return s
 	}
 	// Try as an array of FastAPI-style error objects.
@@ -334,7 +333,7 @@ func extractDetailMessage(detail json.RawMessage) string {
 		Msg  string `json:"msg"`
 		Type string `json:"type"`
 	}
-	if json.Unmarshal(detail, &arr) == nil && len(arr) > 0 {
+	if common.Unmarshal(detail, &arr) == nil && len(arr) > 0 {
 		return arr[0].Msg
 	}
 	// Fallback: return raw JSON.
@@ -370,11 +369,10 @@ func hasErrorInLogs(logs []falLogEntry) bool {
 		msg := strings.ToLower(log.Message)
 		if strings.Contains(msg, "error") ||
 			strings.Contains(msg, "failed") ||
-			strings.Contains(msg, "policy") ||
+			strings.Contains(msg, "policy violation") ||
 			strings.Contains(msg, "violation") ||
 			strings.Contains(msg, "rejected") ||
-			strings.Contains(msg, "blocked") ||
-			strings.Contains(msg, "content") {
+			strings.Contains(msg, "content blocked") {
 			return true
 		}
 	}

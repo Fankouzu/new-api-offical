@@ -59,6 +59,9 @@ func ChannelType2APIType(channelType int) (int, bool) {
 	case constant.ChannelTypeKieAI:
 		// KieAI currently exposes async Market jobs through task/kie; sync calls fall back to OpenAI-compatible handling when used.
 		apiType = constant.APITypeOpenAI
+	case constant.ChannelTypeSub2APIAsync:
+		// Sub2API-async is task-only for async image jobs; keep API type OpenAI-compatible for channel metadata.
+		apiType = constant.APITypeOpenAI
 	case constant.ChannelTypeBaiduV2:
 		apiType = constant.APITypeBaiduV2
 	case constant.ChannelTypeOpenRouter:

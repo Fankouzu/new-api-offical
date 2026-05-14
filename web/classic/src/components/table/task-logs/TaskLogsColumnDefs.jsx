@@ -178,10 +178,21 @@ const renderPlatform = (platform, t) => {
 };
 
 // Resolve preview URL: backend may expose corrected result_url; fallback to nested image URL in task data.
+// Keep in sync with web/default/src/features/usage-logs/lib/task-media-results.ts.
+// TODO: extract shared media-result heuristics if the two frontend builds converge.
 function extractImageUrlFromTaskData(data) {
   if (data == null) return '';
   const walk = (v) => {
     if (v == null || typeof v !== 'object') return '';
+    if (typeof v.b64_json === 'string' && v.b64_json.trim()) {
+      return `data:image/png;base64,${v.b64_json.trim()}`;
+    }
+    if (
+      typeof v.url === 'string' &&
+      /^data:image\/[^;,]+;base64,/i.test(v.url.trim())
+    ) {
+      return v.url.trim();
+    }
     if (
       typeof v.url === 'string' &&
       /^https?:\/\//.test(v.url)
@@ -218,7 +229,11 @@ function extractImageUrlFromTaskData(data) {
 
 function resolveTaskPreviewUrl(record) {
   const primary = record.result_url;
-  if (typeof primary !== 'string' || !/^https?:\/\//.test(primary)) {
+  if (
+    typeof primary !== 'string' ||
+    (!/^https?:\/\//.test(primary) &&
+      !/^data:image\/[^;,]+;base64,/i.test(primary.trim()))
+  ) {
     return extractImageUrlFromTaskData(record.data) || '';
   }
   if (
@@ -235,7 +250,9 @@ function resolveTaskPreviewUrl(record) {
 function isAsyncImageTaskForPreview(record) {
   if (record.upstream_kind === 'image') return true;
   const u = resolveTaskPreviewUrl(record);
-  if (!u || !/^https?:\/\//.test(u)) return false;
+  if (!u) return false;
+  if (/^data:image\/[^;,]+;base64,/i.test(u)) return true;
+  if (!/^https?:\/\//.test(u)) return false;
   const lower = u.toLowerCase();
   return (
     /\.(jpe?g|png|webp|gif)(\?|$)/i.test(u) ||
@@ -485,7 +502,9 @@ export const getTaskLogsColumns = ({
         const isSuccess = record.status === 'SUCCESS';
         const previewUrl = resolveTaskPreviewUrl(record);
         const hasPreviewUrl =
-          typeof previewUrl === 'string' && /^https?:\/\//.test(previewUrl);
+          typeof previewUrl === 'string' &&
+          (/^https?:\/\//.test(previewUrl) ||
+            /^data:image\/[^;,]+;base64,/i.test(previewUrl));
 
         // Async image (e.g. PingXingShiJie OpenAI-compatible image generations)
         if (isSuccess && isAsyncImageTaskForPreview(record) && hasPreviewUrl) {

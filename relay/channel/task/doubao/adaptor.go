@@ -303,7 +303,9 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 	// Ark API: draft_task items must not be mixed with other content types (e.g. text, image_url).
 	// convertToRequestPayload normally appends prompt as text; skip that when content uses draft_task.
 	if contentHasDraftTask(r.Content) {
-		r.Content = lo.Reject(r.Content, func(c ContentItem, _ int) bool { return c.Type == "text" })
+		r.Content = lo.Filter(r.Content, func(c ContentItem, _ int) bool {
+			return c.Type == "draft_task" || c.DraftTask != nil
+		})
 		return &r, nil
 	}
 
@@ -318,7 +320,7 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 
 func contentHasDraftTask(items []ContentItem) bool {
 	for _, c := range items {
-		if c.Type == "draft_task" {
+		if c.Type == "draft_task" || c.DraftTask != nil {
 			return true
 		}
 	}
