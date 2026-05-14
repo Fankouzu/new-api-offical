@@ -227,21 +227,22 @@ function extractImageUrlFromTaskData(data) {
   }
 }
 
-function resolveTaskPreviewUrl(record) {
+function resolveTaskPreviewUrl(record, options = {}) {
+  const { allowDataFallback = false } = options;
   const primary = record.result_url;
   if (
     typeof primary !== 'string' ||
     (!/^https?:\/\//.test(primary) &&
       !/^data:image\/[^;,]+;base64,/i.test(primary.trim()))
   ) {
-    return extractImageUrlFromTaskData(record.data) || '';
+    return allowDataFallback ? extractImageUrlFromTaskData(record.data) || '' : '';
   }
   if (
     record.upstream_kind === 'image' &&
     primary.includes('/v1/videos/') &&
     primary.includes('/content')
   ) {
-    const fromData = extractImageUrlFromTaskData(record.data);
+    const fromData = allowDataFallback ? extractImageUrlFromTaskData(record.data) : '';
     if (fromData) return fromData;
   }
   return primary;
@@ -329,6 +330,7 @@ export const getTaskLogsColumns = ({
   COLUMN_KEYS,
   copyText,
   openContentModal,
+  openTaskDetailModal,
   isAdminUser,
   openVideoModal,
   openImageModal,
@@ -431,7 +433,7 @@ export const getTaskLogsColumns = ({
           <Typography.Text
             ellipsis={{ showTooltip: true }}
             onClick={() => {
-              openContentModal(JSON.stringify(record, null, 2));
+              openTaskDetailModal(record);
             }}
           >
             <div>{text}</div>

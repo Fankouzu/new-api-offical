@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"net/http"
 	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
@@ -64,6 +65,52 @@ func GetUserTask(c *gin.Context) {
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(tasksToDto(items, false))
 	common.ApiSuccess(c, pageInfo)
+}
+
+func GetTaskByID(c *gin.Context) {
+	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || taskID <= 0 {
+		common.ApiErrorMsg(c, "invalid task id")
+		return
+	}
+
+	task, exist, err := model.GetTaskByID(taskID)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if !exist {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"message": "task not found",
+		})
+		return
+	}
+
+	common.ApiSuccess(c, relay.TaskModel2Dto(task))
+}
+
+func GetUserTaskByID(c *gin.Context) {
+	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || taskID <= 0 {
+		common.ApiErrorMsg(c, "invalid task id")
+		return
+	}
+
+	task, exist, err := model.GetTaskByID(taskID)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if !exist || task.UserId != c.GetInt("id") {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"message": "task not found",
+		})
+		return
+	}
+
+	common.ApiSuccess(c, relay.TaskModel2Dto(task))
 }
 
 func tasksToDto(tasks []*model.Task, fillUser bool) []*dto.TaskDto {

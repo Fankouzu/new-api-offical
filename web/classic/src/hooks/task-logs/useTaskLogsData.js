@@ -279,6 +279,21 @@ export const useTaskLogsData = () => {
     setIsModalOpen(true);
   };
 
+  const openTaskDetailModal = async (record) => {
+    if (!record?.id) {
+      openContentModal(JSON.stringify(record, null, 2));
+      return;
+    }
+    const url = isAdminUser ? `/api/task/${record.id}` : `/api/task/self/${record.id}`;
+    const res = await API.get(url);
+    const { success, message, data } = res.data;
+    if (success) {
+      openContentModal(JSON.stringify(data, null, 2));
+    } else {
+      showError(message);
+    }
+  };
+
   // 新增：打开视频预览弹窗
   const openVideoModal = (url) => {
     setVideoUrl(url);
@@ -378,6 +393,7 @@ export const useTaskLogsData = () => {
     refresh,
     copyText,
     openContentModal,
+    openTaskDetailModal,
     openVideoModal,
     openImageModal,
     openAudioModal,
