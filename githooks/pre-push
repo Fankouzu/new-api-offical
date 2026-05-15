@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+remote_name="${1:-}"
+remote_url="${2:-}"
+
+if [[ "${remote_name}" == "upstream" ]] || [[ "${remote_url}" == *"github.com/QuantumNous/new-api"* ]] || [[ "${remote_url}" == *"QuantumNous/new-api.git"* ]]; then
+  cat >&2 <<'MESSAGE'
+error: refusing to push to QuantumNous/new-api.
+
+This working copy contains private fork changes. Push to origin
+Fankouzu/new-api-offical only.
+MESSAGE
+  exit 1
+fi
