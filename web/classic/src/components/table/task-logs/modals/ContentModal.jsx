@@ -21,6 +21,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Button, Typography, Spin } from '@douyinfe/semi-ui';
 import { IconExternalOpen, IconCopy } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
+import { API } from '../../../../helpers';
 
 const { Text } = Typography;
 
@@ -35,6 +36,68 @@ const ContentModal = ({
   const [videoError, setVideoError] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [mediaSrc, setMediaSrc] = useState('');
+
+  useEffect(() => {
+    if (!isModalOpen || (!isVideo && !isImage)) {
+      setMediaSrc('');
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl = '';
+    const normalizedContent =
+      typeof modalContent === 'string' ? modalContent.trim() : '';
+
+    setVideoError(false);
+    setImageError(false);
+    setIsLoading(true);
+    setMediaSrc('');
+
+    const setDirectMedia = () => {
+      if (cancelled) return;
+      setMediaSrc(normalizedContent);
+      setIsLoading(false);
+    };
+
+    if (!normalizedContent || normalizedContent.startsWith('data:')) {
+      setDirectMedia();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    API.get(normalizedContent, {
+      responseType: 'blob',
+      disableDuplicate: true,
+      skipErrorHandler: true,
+    })
+      .then((res) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(res.data);
+        setMediaSrc(objectUrl);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        if (isVideo) {
+          setVideoError(true);
+        } else {
+          setImageError(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [isModalOpen, isVideo, isImage, modalContent]);
 
   useEffect(() => {
     if (isModalOpen && isVideo) {
@@ -150,7 +213,7 @@ const ContentModal = ({
           </div>
         )}
         <video
-          src={modalContent}
+          src={mediaSrc}
           controls
           style={{
             width: '100%',
@@ -223,18 +286,19 @@ const ContentModal = ({
             <Spin size='large' />
           </div>
         )}
-        <img
-          src={modalContent}
-          alt=''
-          style={{
-            maxWidth: '100%',
-            maxHeight: '65vh',
-            objectFit: 'contain',
-          }}
-          onError={handleImageError}
-          onLoad={handleImageLoaded}
-          onLoadStart={() => setIsLoading(true)}
-        />
+        {mediaSrc ? (
+          <img
+            src={mediaSrc}
+            alt=''
+            style={{
+              maxWidth: '100%',
+              maxHeight: '65vh',
+              objectFit: 'contain',
+            }}
+            onError={handleImageError}
+            onLoad={handleImageLoaded}
+          />
+        ) : null}
       </div>
     );
   };

@@ -43,7 +43,7 @@ const (
 )
 
 type Task struct {
-	ID         int64                 `json:"id" gorm:"primary_key;AUTO_INCREMENT"`
+	ID         int64                 `json:"id" gorm:"primary_key;AUTO_INCREMENT;index:idx_tasks_submit_time_id,priority:2"`
 	CreatedAt  int64                 `json:"created_at" gorm:"index"`
 	UpdatedAt  int64                 `json:"updated_at"`
 	TaskID     string                `json:"task_id" gorm:"type:varchar(191);index"` // 第三方id，不一定有/ song id\ Task id
@@ -55,7 +55,7 @@ type Task struct {
 	Action     string                `json:"action" gorm:"type:varchar(40);index"` // 任务类型, song, lyrics, description-mode
 	Status     TaskStatus            `json:"status" gorm:"type:varchar(20);index"` // 任务状态
 	FailReason string                `json:"fail_reason"`
-	SubmitTime int64                 `json:"submit_time" gorm:"index"`
+	SubmitTime int64                 `json:"submit_time" gorm:"index;index:idx_tasks_submit_time_id,priority:1"`
 	StartTime  int64                 `json:"start_time" gorm:"index"`
 	FinishTime int64                 `json:"finish_time" gorm:"index"`
 	Progress   string                `json:"progress" gorm:"type:varchar(20);index"`
@@ -131,8 +131,8 @@ func (t *Task) GetUpstreamTaskID() string {
 
 // GetResultURL 获取任务结果 URL（视频地址等）
 // 新数据存在 PrivateData.ResultURL 中；旧数据回退到 FailReason（历史兼容）
-// Async image tasks may have been mis-stored as /v1/videos/.../content when the adaptor returned no URL;
-// in that case, recover the real image URL from task.Data (PingXingShiJie / Seedream envelope).
+// Async image tasks may have been mis-stored as proxy URLs when the adaptor returned no URL;
+// in that case, recover the real image URL from task.Data.
 func (t *Task) GetResultURL() string {
 	u := t.PrivateData.ResultURL
 	if u == "" {
@@ -141,12 +141,15 @@ func (t *Task) GetResultURL() string {
 	if u == "" {
 		return ""
 	}
-	if !isVideoProxyContentURL(u, t.TaskID) {
+	if !isVideoProxyContentURL(u, t.TaskID) && !isTaskResultProxyURL(u) {
 		return u
 	}
 	extracted := extractFirstImageLikeHTTPURLFromJSON(t.Data)
 	if extracted == "" {
 		return u
+	}
+	if isImageDataURL(extracted) {
+		return extracted
 	}
 	if t.PrivateData.UpstreamKind == "image" {
 		return extracted
@@ -262,7 +265,7 @@ func TaskGetAllUserTask(userId int, startIdx int, num int, queryParams SyncTaskQ
 	}
 
 	// 获取数据
-	err = query.Omit("channel_id").Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
+	err = query.Omit("channel_id", "private_data", "data").Order("submit_time desc, id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
 	if err != nil {
 		return nil
 	}
@@ -307,7 +310,7 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 	}
 
 	// 获取数据
-	err = query.Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
+	err = query.Omit("private_data", "data").Order("submit_time desc, id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
 	if err != nil {
 		return nil
 	}

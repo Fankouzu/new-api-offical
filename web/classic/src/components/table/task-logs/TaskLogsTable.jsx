@@ -39,6 +39,7 @@ const TaskLogsTable = (taskLogsData) => {
     handlePageSizeChange,
     copyText,
     openContentModal,
+    openTaskDetailModal,
     openVideoModal,
     openImageModal,
     openAudioModal,
@@ -55,13 +56,14 @@ const TaskLogsTable = (taskLogsData) => {
       COLUMN_KEYS,
       copyText,
       openContentModal,
+      openTaskDetailModal,
       openVideoModal,
       openImageModal,
       openAudioModal,
       showUserInfoFunc,
       isAdminUser,
     });
-  }, [t, COLUMN_KEYS, copyText, openContentModal, openVideoModal, openImageModal, openAudioModal, showUserInfoFunc, isAdminUser]);
+  }, [t, COLUMN_KEYS, copyText, openContentModal, openTaskDetailModal, openVideoModal, openImageModal, openAudioModal, showUserInfoFunc, isAdminUser]);
 
   // Filter columns based on visibility settings
   const getVisibleColumns = () => {

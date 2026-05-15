@@ -67,6 +67,8 @@ export const useTaskLogsData = () => {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState('');
+  const [taskDetail, setTaskDetail] = useState(null);
+  const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
 
   // 新增：视频预览弹窗状态
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
@@ -279,6 +281,40 @@ export const useTaskLogsData = () => {
     setIsModalOpen(true);
   };
 
+  const openTaskDetailModal = async (record) => {
+    if (!record?.id) {
+      openContentModal(JSON.stringify(record, null, 2));
+      return;
+    }
+    const url = isAdminUser ? `/api/task/${record.id}` : `/api/task/self/${record.id}`;
+    const res = await API.get(url);
+    const { success, message, data } = res.data;
+    if (success) {
+      setTaskDetail(data);
+      setIsTaskDetailOpen(true);
+    } else {
+      showError(message);
+    }
+  };
+
+  const loadTaskRaw = async (taskId) => {
+    const url = isAdminUser ? `/api/task/${taskId}/raw` : `/api/task/self/${taskId}/raw`;
+    const res = await API.get(url);
+    const { success, message, data } = res.data;
+    if (success) {
+      return data;
+    }
+    showError(message);
+    return null;
+  };
+
+  const openTaskRawModal = async (taskId) => {
+    const data = await loadTaskRaw(taskId);
+    if (data) {
+      openContentModal(JSON.stringify(data, null, 2));
+    }
+  };
+
   // 新增：打开视频预览弹窗
   const openVideoModal = (url) => {
     setVideoUrl(url);
@@ -331,6 +367,9 @@ export const useTaskLogsData = () => {
     isModalOpen,
     setIsModalOpen,
     modalContent,
+    taskDetail,
+    isTaskDetailOpen,
+    setIsTaskDetailOpen,
 
     // 新增：视频弹窗状态
     isVideoModalOpen,
@@ -378,6 +417,8 @@ export const useTaskLogsData = () => {
     refresh,
     copyText,
     openContentModal,
+    openTaskDetailModal,
+    openTaskRawModal,
     openVideoModal,
     openImageModal,
     openAudioModal,
