@@ -419,7 +419,6 @@ export const useTaskLogsData = () => {
     openContentModal,
     openTaskDetailModal,
     openTaskRawModal,
-    loadTaskRaw,
     openVideoModal,
     openImageModal,
     openAudioModal,

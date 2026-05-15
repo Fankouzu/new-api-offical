@@ -90,9 +90,3 @@ export function resolveTaskPreviewUrl(record, options = {}) {
   }
   return primary;
 }
-
-export function resolveTaskDetailPreviewUrl(detail, rawTask) {
-  const rawImageUrl = extractImageUrlFromTaskData(rawTask?.data);
-  if (rawImageUrl) return rawImageUrl;
-  return detail?.result?.url || '';
-}

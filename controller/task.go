@@ -116,7 +116,7 @@ func GetUserTaskRawByID(c *gin.Context) {
 }
 
 func GetTaskResultByID(c *gin.Context) {
-	task, ok := loadTaskByIDParam(c)
+	task, ok := loadTaskResultByIDParam(c)
 	if !ok {
 		return
 	}
@@ -124,7 +124,7 @@ func GetTaskResultByID(c *gin.Context) {
 }
 
 func GetUserTaskResultByID(c *gin.Context) {
-	task, ok := loadTaskByIDParam(c)
+	task, ok := loadTaskResultByIDParam(c)
 	if !ok {
 		return
 	}
@@ -143,6 +143,25 @@ func loadTaskByIDParam(c *gin.Context) (*model.Task, bool) {
 	}
 
 	task, exist, err := model.GetTaskByID(taskID)
+	if err != nil {
+		common.ApiError(c, err)
+		return nil, false
+	}
+	if !exist {
+		taskNotFound(c)
+		return nil, false
+	}
+	return task, true
+}
+
+func loadTaskResultByIDParam(c *gin.Context) (*model.Task, bool) {
+	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || taskID <= 0 {
+		common.ApiErrorMsg(c, "invalid task id")
+		return nil, false
+	}
+
+	task, exist, err := getLightweightTaskResultByID(taskID)
 	if err != nil {
 		common.ApiError(c, err)
 		return nil, false
@@ -199,6 +218,40 @@ type lightweightTaskDetailRow struct {
 	Progress   string                `gorm:"column:progress"`
 	Properties model.Properties      `gorm:"column:properties"`
 	Username   string                `gorm:"column:username"`
+}
+
+func getLightweightTaskResultByID(id int64) (*model.Task, bool, error) {
+	if id <= 0 {
+		return nil, false, nil
+	}
+
+	task := &model.Task{}
+	err := model.DB.Select(
+		"id",
+		"task_id",
+		"user_id",
+		"status",
+		"fail_reason",
+		"private_data",
+		"properties",
+	).Where("id = ?", id).Take(task).Error
+	exist, err := model.RecordExist(err)
+	if err != nil || !exist {
+		return nil, exist, err
+	}
+
+	resultURL := strings.TrimSpace(task.GetResultURL())
+	if resultURL != "" && !isRecoverableStoredProxyResult(resultURL) {
+		return task, true, nil
+	}
+
+	return model.GetTaskByID(id)
+}
+
+func isRecoverableStoredProxyResult(resultURL string) bool {
+	resultURL = strings.TrimSpace(resultURL)
+	return strings.Contains(resultURL, "/v1/videos/") && strings.Contains(resultURL, "/content") ||
+		strings.Contains(resultURL, "/api/task/") && strings.Contains(resultURL, "/result")
 }
 
 func getLightweightTaskDetailByID(id int64, self bool) (*dto.TaskDetailDto, bool, error) {

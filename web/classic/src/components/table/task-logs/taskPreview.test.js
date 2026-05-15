@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   extractImageUrlFromTaskData,
-  resolveTaskDetailPreviewUrl,
+  resolveTaskPreviewUrl,
 } from './taskPreview.js';
 
 describe('task preview helpers', () => {
@@ -16,15 +16,17 @@ describe('task preview helpers', () => {
     expect(url).toBe('data:image/png;base64,abc123');
   });
 
-  test('prefers raw task base64 over lightweight detail result proxy URL', () => {
-    const previewUrl = resolveTaskDetailPreviewUrl(
-      { result: { url: '/api/task/642/result', type: 'image' } },
+  test('can use task data fallback when list records include provider payloads', () => {
+    const previewUrl = resolveTaskPreviewUrl(
       {
         data: {
           created: 1778776346,
           data: [{ url: 'data:image/png;base64,abc123' }],
         },
-      }
+        result_url: '/api/task/642/result',
+        upstream_kind: 'image',
+      },
+      { allowDataFallback: true }
     );
 
     expect(previewUrl).toBe('data:image/png;base64,abc123');

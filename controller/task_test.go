@@ -249,6 +249,32 @@ func TestGetTaskResultByIDStreamsInlineMedia(t *testing.T) {
 	require.Equal(t, imageBytes, recorder.Body.Bytes())
 }
 
+func TestGetLightweightTaskResultByIDUsesPrivateResultWithoutLoadingData(t *testing.T) {
+	db := setupTaskControllerTestDB(t)
+
+	imageBytes := []byte("private-png-bytes")
+	privateDataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(imageBytes)
+	task := &model.Task{
+		TaskID:    "task_private_result_media",
+		Platform:  constant.TaskPlatform("61"),
+		UserId:    1,
+		ChannelId: 7,
+		Action:    "generate",
+		Status:    model.TaskStatusSuccess,
+		PrivateData: model.TaskPrivateData{
+			ResultURL: privateDataURL,
+		},
+		Data: json.RawMessage(`{"created":1,"data":[{"url":"data:image/png;base64,` + strings.Repeat("a", 4096) + `"}]}`),
+	}
+	require.NoError(t, db.Create(task).Error)
+
+	resultTask, exist, err := getLightweightTaskResultByID(task.ID)
+	require.NoError(t, err)
+	require.True(t, exist)
+	require.Empty(t, resultTask.Data)
+	require.Equal(t, privateDataURL, resultTask.GetResultURL())
+}
+
 func TestGetTaskResultByIDStreamsInlineMediaFromStoredResultProxy(t *testing.T) {
 	db := setupTaskControllerTestDB(t)
 

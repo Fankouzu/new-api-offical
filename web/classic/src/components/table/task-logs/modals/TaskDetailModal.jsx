@@ -21,7 +21,6 @@ import React from 'react';
 import { Button, Descriptions, Modal, Space, Tag, Typography } from '@douyinfe/semi-ui';
 import { IconCode, IconEyeOpened } from '@douyinfe/semi-icons';
 import { timestamp2string } from '../../../../helpers';
-import { resolveTaskDetailPreviewUrl } from '../taskPreview';
 
 const { Text } = Typography;
 
@@ -77,7 +76,6 @@ const TaskDetailModal = ({
   openVideoModal,
   openImageModal,
   openContentModal,
-  loadTaskRaw,
 }) => {
   const detail = taskDetail || {};
   const result = detail.result || {};
@@ -111,22 +109,17 @@ const TaskDetailModal = ({
     });
   }
 
-  const previewResult = async () => {
+  const previewResult = () => {
     if (!result?.url) return;
-    let previewUrl = result.url;
-    if (result.type === 'image' && detail?.id) {
-      const rawTask = await loadTaskRaw(detail.id);
-      previewUrl = resolveTaskDetailPreviewUrl(detail, rawTask);
-    }
     if (result.type === 'image') {
-      openImageModal(previewUrl);
+      openImageModal(result.url);
       return;
     }
     if (result.type === 'video') {
-      openVideoModal(previewUrl);
+      openVideoModal(result.url);
       return;
     }
-    openContentModal(previewUrl);
+    openContentModal(result.url);
   };
 
   return (
