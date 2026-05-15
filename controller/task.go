@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -99,7 +100,7 @@ func GetTaskRawByID(c *gin.Context) {
 		return
 	}
 
-	common.ApiSuccess(c, relay.TaskModel2Dto(task))
+	common.ApiSuccess(c, sanitizedTaskRawDto(task))
 }
 
 func GetUserTaskRawByID(c *gin.Context) {
@@ -112,7 +113,7 @@ func GetUserTaskRawByID(c *gin.Context) {
 		return
 	}
 
-	common.ApiSuccess(c, relay.TaskModel2Dto(task))
+	common.ApiSuccess(c, sanitizedTaskRawDto(task))
 }
 
 func GetTaskResultByID(c *gin.Context) {
@@ -152,6 +153,106 @@ func loadTaskByIDParam(c *gin.Context) (*model.Task, bool) {
 		return nil, false
 	}
 	return task, true
+}
+
+func sanitizedTaskRawDto(task *model.Task) *dto.TaskDto {
+	taskDto := relay.TaskModel2Dto(task)
+	resultURL := task.PrivateData.ResultURL
+	if resultURL == "" {
+		resultURL = task.FailReason
+	}
+	taskDto.ResultURL = summarizeLargeInlineMediaString(resultURL)
+	taskDto.Data = sanitizeTaskRawJSON(taskDto.Data)
+	return taskDto
+}
+
+func sanitizeTaskRawJSON(raw []byte) []byte {
+	if len(raw) == 0 {
+		return raw
+	}
+	var value any
+	if err := common.Unmarshal(raw, &value); err != nil {
+		return raw
+	}
+	value = sanitizeTaskRawValue(value)
+	b, err := common.Marshal(value)
+	if err != nil {
+		return raw
+	}
+	return b
+}
+
+func sanitizeTaskRawValue(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		for key, child := range v {
+			if s, ok := child.(string); ok {
+				v[key] = summarizeTaskRawString(key, s)
+				continue
+			}
+			v[key] = sanitizeTaskRawValue(child)
+		}
+		return v
+	case []any:
+		for i, child := range v {
+			v[i] = sanitizeTaskRawValue(child)
+		}
+		return v
+	case string:
+		return summarizeTaskRawString("", v)
+	default:
+		return v
+	}
+}
+
+func summarizeTaskRawString(key string, value string) string {
+	if looksLikeHTTPURL(value) {
+		return value
+	}
+	if strings.EqualFold(key, "b64_json") || looksLikeInlineImageData(value) || looksLikeLargeBase64(value) {
+		return summarizeLargeInlineMediaString(value)
+	}
+	return value
+}
+
+func looksLikeHTTPURL(value string) bool {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://")
+}
+
+func looksLikeInlineImageData(value string) bool {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	return strings.HasPrefix(lower, "data:image/")
+}
+
+func looksLikeLargeBase64(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if len(trimmed) < 512 {
+		return false
+	}
+	base64Chars := 0
+	for _, r := range trimmed[:512] {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '+' || r == '/' || r == '=' {
+			base64Chars++
+		}
+	}
+	return base64Chars > 500
+}
+
+func summarizeLargeInlineMediaString(value string) string {
+	const prefixLen = 64
+	trimmed := strings.TrimSpace(value)
+	if len(trimmed) <= prefixLen || looksLikeHTTPURL(trimmed) {
+		return value
+	}
+	if !looksLikeInlineImageData(trimmed) && !looksLikeLargeBase64(trimmed) {
+		return value
+	}
+	prefix := trimmed
+	if len(prefix) > prefixLen {
+		prefix = prefix[:prefixLen]
+	}
+	return fmt.Sprintf("%s... [base64 omitted, original_length=%d]", prefix, len(trimmed))
 }
 
 func loadTaskResultByIDParam(c *gin.Context) (*model.Task, bool) {

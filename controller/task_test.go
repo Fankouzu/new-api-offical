@@ -186,6 +186,7 @@ func TestGetTaskRawByIDReturnsFullPayloadOnDemand(t *testing.T) {
 	db := setupTaskControllerTestDB(t)
 
 	largeDataURL := "data:image/png;base64," + strings.Repeat("c", 4096)
+	imageURL := "https://cdn.example.com/generated/image.png?signature=keep-full-url"
 	task := &model.Task{
 		TaskID:     "task_raw_media",
 		Platform:   constant.TaskPlatform("61"),
@@ -199,7 +200,7 @@ func TestGetTaskRawByIDReturnsFullPayloadOnDemand(t *testing.T) {
 		PrivateData: model.TaskPrivateData{
 			ResultURL: largeDataURL,
 		},
-		Data: json.RawMessage(`{"created":1,"data":[{"url":"` + largeDataURL + `"}]}`),
+		Data: json.RawMessage(`{"created":1,"data":[{"url":"` + largeDataURL + `"},{"url":"` + imageURL + `"}],"b64_json":"` + strings.Repeat("d", 4096) + `"}`),
 	}
 	require.NoError(t, db.Create(task).Error)
 
@@ -212,7 +213,11 @@ func TestGetTaskRawByIDReturnsFullPayloadOnDemand(t *testing.T) {
 
 	response := decodeTaskAPIResponse(t, recorder)
 	require.True(t, response.Success, response.Message)
-	require.Contains(t, string(response.Data), largeDataURL)
+	require.NotContains(t, string(response.Data), strings.Repeat("c", 512))
+	require.NotContains(t, string(response.Data), strings.Repeat("d", 512))
+	require.Contains(t, string(response.Data), "data:image/png;base64,cccccccccccccccccccccccccccccccc")
+	require.Contains(t, string(response.Data), "base64 omitted")
+	require.Contains(t, string(response.Data), imageURL)
 }
 
 func TestGetTaskResultByIDStreamsInlineMedia(t *testing.T) {
