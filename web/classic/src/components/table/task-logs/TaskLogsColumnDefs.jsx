@@ -44,6 +44,7 @@ import {
 import { CHANNEL_OPTIONS } from '../../../constants/channel.constants';
 import { stringToColor } from '../../../helpers/render';
 import { Avatar, Space } from '@douyinfe/semi-ui';
+import { resolveTaskPreviewUrl } from './taskPreview';
 
 const colors = [
   'amber',
@@ -176,77 +177,6 @@ const renderPlatform = (platform, t) => {
       );
   }
 };
-
-// Resolve preview URL: backend may expose corrected result_url; fallback to nested image URL in task data.
-// Keep in sync with web/default/src/features/usage-logs/lib/task-media-results.ts.
-// TODO: extract shared media-result heuristics if the two frontend builds converge.
-function extractImageUrlFromTaskData(data) {
-  if (data == null) return '';
-  const walk = (v) => {
-    if (v == null || typeof v !== 'object') return '';
-    if (typeof v.b64_json === 'string' && v.b64_json.trim()) {
-      return `data:image/png;base64,${v.b64_json.trim()}`;
-    }
-    if (
-      typeof v.url === 'string' &&
-      /^data:image\/[^;,]+;base64,/i.test(v.url.trim())
-    ) {
-      return v.url.trim();
-    }
-    if (
-      typeof v.url === 'string' &&
-      /^https?:\/\//.test(v.url)
-    ) {
-      const lower = v.url.toLowerCase();
-      if (
-        /\.(jpe?g|png|webp|gif)(\?|$)/i.test(v.url) ||
-        lower.includes('seedream') ||
-        (lower.includes('tos-') && lower.includes('jpeg'))
-      ) {
-        return v.url;
-      }
-    }
-    if (Array.isArray(v)) {
-      for (const item of v) {
-        const found = walk(item);
-        if (found) return found;
-      }
-      return '';
-    }
-    for (const k of Object.keys(v)) {
-      const found = walk(v[k]);
-      if (found) return found;
-    }
-    return '';
-  };
-  try {
-    const obj = typeof data === 'string' ? JSON.parse(data) : data;
-    return walk(obj);
-  } catch {
-    return '';
-  }
-}
-
-function resolveTaskPreviewUrl(record, options = {}) {
-  const { allowDataFallback = false } = options;
-  const primary = record.result_url;
-  if (
-    typeof primary !== 'string' ||
-    (!/^https?:\/\//.test(primary) &&
-      !/^data:image\/[^;,]+;base64,/i.test(primary.trim()))
-  ) {
-    return allowDataFallback ? extractImageUrlFromTaskData(record.data) || '' : '';
-  }
-  if (
-    record.upstream_kind === 'image' &&
-    primary.includes('/v1/videos/') &&
-    primary.includes('/content')
-  ) {
-    const fromData = allowDataFallback ? extractImageUrlFromTaskData(record.data) : '';
-    if (fromData) return fromData;
-  }
-  return primary;
-}
 
 function isAsyncImageTaskForPreview(record) {
   if (record.upstream_kind === 'image') return true;

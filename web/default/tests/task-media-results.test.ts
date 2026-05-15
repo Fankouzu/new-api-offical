@@ -25,6 +25,22 @@ describe('extractTaskMediaResults', () => {
     ])
   })
 
+  test('prefers base64 image data from task data over task result proxy URL', () => {
+    const results = extractTaskMediaResults({
+      action: 'generate',
+      data: JSON.stringify({
+        created: 1778776346,
+        data: [{ url: 'data:image/png;base64,abc123' }],
+      }),
+      result_url: '/api/task/642/result',
+      status: 'SUCCESS',
+      task_id: 'task_PjvoEZY3moE8gh7MXZxs6HoCUr0GUc0s',
+      upstream_kind: 'image',
+    })
+
+    expect(results).toEqual([{ type: 'image', url: 'data:image/png;base64,abc123' }])
+  })
+
   test('extracts multiple video URLs from nested task payloads', () => {
     const results = extractTaskMediaResults({
       action: 'TEXT_GENERATE',

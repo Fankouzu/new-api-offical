@@ -136,6 +136,18 @@ func TestSnapshot_Roundtrip(t *testing.T) {
 	assert.JSONEq(t, string(task.Data), string(snap.Data))
 }
 
+func TestTaskGetResultURL_ExtractsImageDataURLFromData(t *testing.T) {
+	task := &Task{
+		TaskID: "task_base64_image",
+		PrivateData: TaskPrivateData{
+			ResultURL: "/api/task/642/result",
+		},
+		Data: json.RawMessage(`{"created":1778776346,"data":[{"url":"data:image/png;base64,abc123"}]}`),
+	}
+
+	assert.Equal(t, "data:image/png;base64,abc123", task.GetResultURL())
+}
+
 // ---------------------------------------------------------------------------
 // UpdateWithStatus CAS — DB integration tests
 // ---------------------------------------------------------------------------

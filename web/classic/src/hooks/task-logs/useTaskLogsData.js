@@ -297,14 +297,21 @@ export const useTaskLogsData = () => {
     }
   };
 
-  const openTaskRawModal = async (taskId) => {
+  const loadTaskRaw = async (taskId) => {
     const url = isAdminUser ? `/api/task/${taskId}/raw` : `/api/task/self/${taskId}/raw`;
     const res = await API.get(url);
     const { success, message, data } = res.data;
     if (success) {
+      return data;
+    }
+    showError(message);
+    return null;
+  };
+
+  const openTaskRawModal = async (taskId) => {
+    const data = await loadTaskRaw(taskId);
+    if (data) {
       openContentModal(JSON.stringify(data, null, 2));
-    } else {
-      showError(message);
     }
   };
 
@@ -412,6 +419,7 @@ export const useTaskLogsData = () => {
     openContentModal,
     openTaskDetailModal,
     openTaskRawModal,
+    loadTaskRaw,
     openVideoModal,
     openImageModal,
     openAudioModal,

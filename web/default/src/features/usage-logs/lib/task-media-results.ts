@@ -9,6 +9,7 @@ export type TaskMediaResult = {
 type TaskMediaSource = Pick<
   TaskLog,
   | 'action'
+  | 'data'
   | 'fail_reason'
   | 'result_url'
   | 'status'
@@ -123,6 +124,43 @@ function addMediaResult(
   results.push({ type, url })
 }
 
+function parseTaskData(data: unknown): unknown {
+  if (typeof data !== 'string') return data
+  const trimmed = data.trim()
+  if (!trimmed) return undefined
+  try {
+    return JSON.parse(trimmed) as unknown
+  } catch {
+    return data
+  }
+}
+
+function collectMediaFromValue(
+  results: TaskMediaResult[],
+  seen: Set<string>,
+  source: TaskMediaSource,
+  value: unknown,
+  keyHint?: string
+): void {
+  if (typeof value === 'string') {
+    addMediaResult(results, seen, source, value, keyHint)
+    return
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectMediaFromValue(results, seen, source, item, keyHint)
+    }
+    return
+  }
+
+  if (!value || typeof value !== 'object') return
+
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    collectMediaFromValue(results, seen, source, child, key)
+  }
+}
+
 export function extractTaskMediaResults(source: TaskMediaSource): TaskMediaResult[] {
   if (source.status !== TASK_STATUS.SUCCESS) return []
 
@@ -131,6 +169,7 @@ export function extractTaskMediaResults(source: TaskMediaSource): TaskMediaResul
 
   addMediaResult(results, seen, source, source.result_url, 'result_url', true)
   addMediaResult(results, seen, source, source.fail_reason, 'fail_reason', true)
+  collectMediaFromValue(results, seen, source, parseTaskData(source.data), 'data')
 
   return results
 }

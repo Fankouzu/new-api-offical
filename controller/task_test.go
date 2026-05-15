@@ -248,3 +248,37 @@ func TestGetTaskResultByIDStreamsInlineMedia(t *testing.T) {
 	require.Equal(t, "image/png", recorder.Header().Get("Content-Type"))
 	require.Equal(t, imageBytes, recorder.Body.Bytes())
 }
+
+func TestGetTaskResultByIDStreamsInlineMediaFromStoredResultProxy(t *testing.T) {
+	db := setupTaskControllerTestDB(t)
+
+	imageBytes := []byte("fake-proxy-png-bytes")
+	largeDataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(imageBytes)
+	task := &model.Task{
+		TaskID:     "task_result_proxy_media",
+		Platform:   constant.TaskPlatform("61"),
+		UserId:     1,
+		ChannelId:  7,
+		Action:     "generate",
+		Status:     model.TaskStatusSuccess,
+		SubmitTime: 100,
+		FinishTime: 110,
+		Progress:   "100%",
+		PrivateData: model.TaskPrivateData{
+			ResultURL: "/api/task/642/result",
+		},
+		Data: json.RawMessage(`{"created":1,"data":[{"url":"` + largeDataURL + `"}]}`),
+	}
+	require.NoError(t, db.Create(task).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/task/%d/result", task.ID), nil)
+	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", task.ID)}}
+
+	GetTaskResultByID(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "image/png", recorder.Header().Get("Content-Type"))
+	require.Equal(t, imageBytes, recorder.Body.Bytes())
+}

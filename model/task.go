@@ -131,8 +131,8 @@ func (t *Task) GetUpstreamTaskID() string {
 
 // GetResultURL 获取任务结果 URL（视频地址等）
 // 新数据存在 PrivateData.ResultURL 中；旧数据回退到 FailReason（历史兼容）
-// Async image tasks may have been mis-stored as /v1/videos/.../content when the adaptor returned no URL;
-// in that case, recover the real image URL from task.Data (PingXingShiJie / Seedream envelope).
+// Async image tasks may have been mis-stored as proxy URLs when the adaptor returned no URL;
+// in that case, recover the real image URL from task.Data.
 func (t *Task) GetResultURL() string {
 	u := t.PrivateData.ResultURL
 	if u == "" {
@@ -141,12 +141,15 @@ func (t *Task) GetResultURL() string {
 	if u == "" {
 		return ""
 	}
-	if !isVideoProxyContentURL(u, t.TaskID) {
+	if !isVideoProxyContentURL(u, t.TaskID) && !isTaskResultProxyURL(u) {
 		return u
 	}
 	extracted := extractFirstImageLikeHTTPURLFromJSON(t.Data)
 	if extracted == "" {
 		return u
+	}
+	if isImageDataURL(extracted) {
+		return extracted
 	}
 	if t.PrivateData.UpstreamKind == "image" {
 		return extracted
