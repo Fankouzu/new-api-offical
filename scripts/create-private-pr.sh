@@ -17,14 +17,24 @@ Examples:
 USAGE
 }
 
+previous_arg=""
 for arg in "$@"; do
+  case "${previous_arg}" in
+    --head)
+      if [[ "${arg}" == QuantumNous:* ]]; then
+        echo "error: refusing to use a head branch from QuantumNous" >&2
+        exit 2
+      fi
+      ;;
+  esac
+
   case "$arg" in
     -R|--repo|--head-repo|-R=*|--repo=*|--head-repo=*)
       echo "error: repository override is not allowed; PRs must target ${PRIVATE_REPO}" >&2
       exit 2
       ;;
-    *"${FORBIDDEN_REPO}"*|*"github.com/${FORBIDDEN_REPO}"*)
-      echo "error: refusing to reference forbidden upstream repository ${FORBIDDEN_REPO}" >&2
+    --head=QuantumNous:*)
+      echo "error: refusing to use a head branch from QuantumNous" >&2
       exit 2
       ;;
     -h|--help)
@@ -32,6 +42,8 @@ for arg in "$@"; do
       exit 0
       ;;
   esac
+
+  previous_arg="${arg}"
 done
 
 exec gh pr create -R "${PRIVATE_REPO}" "$@"
