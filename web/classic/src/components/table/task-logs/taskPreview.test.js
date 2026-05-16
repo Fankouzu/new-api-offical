@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { describe, expect, test } from 'bun:test';
 import {
   extractImageUrlFromTaskData,
+  extractMediaResultFromTaskData,
   resolveTaskPreviewUrl,
 } from './taskPreview.js';
 
@@ -49,5 +50,31 @@ describe('task preview helpers', () => {
     );
 
     expect(previewUrl).toBe('data:image/png;base64,abc123');
+  });
+
+  test('extracts image URL from OpenAI-compatible nested data payloads', () => {
+    const imageURL =
+      'https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/result_0.png?X-Tos-Signature=keep';
+
+    const result = extractMediaResultFromTaskData({
+      code: 0,
+      data: {
+        data: [{ size: '1664x2496', url: imageURL }],
+        status: 'done',
+      },
+    });
+
+    expect(result).toEqual({ type: 'image', url: imageURL });
+  });
+
+  test('extracts video URL from nested task payloads', () => {
+    const videoURL = 'https://cdn.example.com/generated/output.mp4?signature=keep';
+
+    const result = extractMediaResultFromTaskData({
+      status: 'succeeded',
+      output: { video_url: videoURL },
+    });
+
+    expect(result).toEqual({ type: 'video', url: videoURL });
   });
 });

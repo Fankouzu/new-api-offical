@@ -301,24 +301,25 @@ func taskNotFound(c *gin.Context) {
 }
 
 type lightweightTaskDetailRow struct {
-	ID         int64                 `gorm:"column:id"`
-	CreatedAt  int64                 `gorm:"column:created_at"`
-	UpdatedAt  int64                 `gorm:"column:updated_at"`
-	TaskID     string                `gorm:"column:task_id"`
-	Platform   constant.TaskPlatform `gorm:"column:platform"`
-	UserId     int                   `gorm:"column:user_id"`
-	Group      string                `gorm:"column:group"`
-	ChannelId  int                   `gorm:"column:channel_id"`
-	Quota      int                   `gorm:"column:quota"`
-	Action     string                `gorm:"column:action"`
-	Status     model.TaskStatus      `gorm:"column:status"`
-	FailReason string                `gorm:"column:fail_reason"`
-	SubmitTime int64                 `gorm:"column:submit_time"`
-	StartTime  int64                 `gorm:"column:start_time"`
-	FinishTime int64                 `gorm:"column:finish_time"`
-	Progress   string                `gorm:"column:progress"`
-	Properties model.Properties      `gorm:"column:properties"`
-	Username   string                `gorm:"column:username"`
+	ID          int64                 `gorm:"column:id"`
+	CreatedAt   int64                 `gorm:"column:created_at"`
+	UpdatedAt   int64                 `gorm:"column:updated_at"`
+	TaskID      string                `gorm:"column:task_id"`
+	Platform    constant.TaskPlatform `gorm:"column:platform"`
+	UserId      int                   `gorm:"column:user_id"`
+	Group       string                `gorm:"column:group"`
+	ChannelId   int                   `gorm:"column:channel_id"`
+	Quota       int                   `gorm:"column:quota"`
+	Action      string                `gorm:"column:action"`
+	Status      model.TaskStatus      `gorm:"column:status"`
+	FailReason  string                `gorm:"column:fail_reason"`
+	SubmitTime  int64                 `gorm:"column:submit_time"`
+	StartTime   int64                 `gorm:"column:start_time"`
+	FinishTime  int64                 `gorm:"column:finish_time"`
+	Progress    string                `gorm:"column:progress"`
+	Properties  model.Properties      `gorm:"column:properties"`
+	PrivateData model.TaskPrivateData `gorm:"column:private_data"`
+	Username    string                `gorm:"column:username"`
 }
 
 func getLightweightTaskResultByID(id int64) (*model.Task, bool, error) {
@@ -390,6 +391,7 @@ func taskDetailSelectColumns() []string {
 		"finish_time",
 		"progress",
 		"properties",
+		"private_data",
 	}
 	switch {
 	case common.UsingPostgreSQL:
@@ -410,27 +412,28 @@ func taskDetailGroupColumn() string {
 }
 
 func taskDetailRow2Dto(row lightweightTaskDetailRow, self bool) *dto.TaskDetailDto {
-	result := taskResultSummaryForLightweightDetail(row.ID, row.Action, row.Status, row.FailReason, row.Properties, self)
+	result := taskResultSummaryForLightweightDetail(row.ID, row.Action, row.Status, row.FailReason, row.Properties, row.PrivateData.UpstreamKind, self)
 	return &dto.TaskDetailDto{
-		ID:         row.ID,
-		CreatedAt:  row.CreatedAt,
-		UpdatedAt:  row.UpdatedAt,
-		TaskID:     row.TaskID,
-		Platform:   string(row.Platform),
-		UserId:     row.UserId,
-		Group:      row.Group,
-		ChannelId:  row.ChannelId,
-		Quota:      row.Quota,
-		Action:     row.Action,
-		Status:     string(row.Status),
-		FailReason: row.FailReason,
-		SubmitTime: row.SubmitTime,
-		StartTime:  row.StartTime,
-		FinishTime: row.FinishTime,
-		Progress:   row.Progress,
-		Properties: row.Properties,
-		Username:   row.Username,
-		Result:     result,
+		ID:           row.ID,
+		CreatedAt:    row.CreatedAt,
+		UpdatedAt:    row.UpdatedAt,
+		TaskID:       row.TaskID,
+		Platform:     string(row.Platform),
+		UserId:       row.UserId,
+		Group:        row.Group,
+		ChannelId:    row.ChannelId,
+		Quota:        row.Quota,
+		Action:       row.Action,
+		Status:       string(row.Status),
+		FailReason:   row.FailReason,
+		UpstreamKind: row.PrivateData.UpstreamKind,
+		SubmitTime:   row.SubmitTime,
+		StartTime:    row.StartTime,
+		FinishTime:   row.FinishTime,
+		Progress:     row.Progress,
+		Properties:   row.Properties,
+		Username:     row.Username,
+		Result:       result,
 		DataSummary: dto.TaskDataSummary{
 			Omitted: true,
 		},
@@ -472,7 +475,7 @@ func taskResultSummary(task *model.Task, self bool) dto.TaskResultSummary {
 	return taskResultSummaryFromFields(task.ID, resultURL, len(resultURL), task.PrivateData.UpstreamKind, self)
 }
 
-func taskResultSummaryForLightweightDetail(id int64, action string, status model.TaskStatus, failReason string, properties model.Properties, self bool) dto.TaskResultSummary {
+func taskResultSummaryForLightweightDetail(id int64, action string, status model.TaskStatus, failReason string, properties model.Properties, upstreamKind string, self bool) dto.TaskResultSummary {
 	if status != model.TaskStatusSuccess && strings.TrimSpace(failReason) == "" {
 		return dto.TaskResultSummary{}
 	}
@@ -482,7 +485,7 @@ func taskResultSummaryForLightweightDetail(id int64, action string, status model
 	}
 	return dto.TaskResultSummary{
 		Available: true,
-		Type:      inferTaskResultTypeFromTaskFields(action, failReason, properties),
+		Type:      inferTaskResultTypeFromTaskFields(action, failReason, properties, upstreamKind),
 		URL:       path,
 	}
 }
@@ -505,7 +508,10 @@ func taskResultSummaryFromFields(id int64, resultPrefix string, resultSize int, 
 	}
 }
 
-func inferTaskResultTypeFromTaskFields(action string, failReason string, properties model.Properties) string {
+func inferTaskResultTypeFromTaskFields(action string, failReason string, properties model.Properties, upstreamKind string) string {
+	if upstreamKind != "" {
+		return upstreamKind
+	}
 	lowerFailReason := strings.ToLower(failReason)
 	if strings.HasPrefix(lowerFailReason, "data:image/") ||
 		strings.Contains(lowerFailReason, ".png") ||

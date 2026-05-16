@@ -139,7 +139,7 @@ func (t *Task) GetResultURL() string {
 		u = t.FailReason
 	}
 	if u == "" {
-		return ""
+		return extractFirstMediaLikeURLFromJSON(t.Data)
 	}
 	if !isVideoProxyContentURL(u, t.TaskID) && !isTaskResultProxyURL(u) {
 		return u

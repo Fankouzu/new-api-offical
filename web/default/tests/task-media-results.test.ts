@@ -41,6 +41,28 @@ describe('extractTaskMediaResults', () => {
     expect(results).toEqual([{ type: 'image', url: 'data:image/png;base64,abc123' }])
   })
 
+  test('extracts URL image results from nested OpenAI-compatible payloads', () => {
+    const imageURL =
+      'https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/result_0.png?X-Tos-Signature=keep'
+
+    const results = extractTaskMediaResults({
+      action: 'GENERATE',
+      data: JSON.stringify({
+        code: 0,
+        data: {
+          created: 1778945484,
+          data: [{ size: '1664x2496', url: imageURL }],
+          status: 'done',
+        },
+      }),
+      status: 'SUCCESS',
+      task_id: 'task_srmdUtR5VRQCnppU2Ttl4vAyBDSFqwo9',
+      upstream_kind: 'image',
+    })
+
+    expect(results).toEqual([{ type: 'image', url: imageURL }])
+  })
+
   test('extracts multiple video URLs from nested task payloads', () => {
     const results = extractTaskMediaResults({
       action: 'TEXT_GENERATE',
