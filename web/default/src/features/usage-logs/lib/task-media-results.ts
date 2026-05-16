@@ -28,26 +28,9 @@ const VIDEO_ACTIONS = new Set<string>([
   TASK_ACTIONS.REFERENCE_GENERATE,
   TASK_ACTIONS.REMIX_GENERATE,
 ])
-const RESULT_KEY_PATTERN = /(result|output|generated|media|asset|content)/i
 const IMAGE_KEY_PATTERN = /image|img|thumbnail|cover|first_frame|last_frame/i
 const VIDEO_KEY_PATTERN = /video/i
 const INPUT_KEY_PATTERN = /(request|input|prompt|source|reference|mask)/i
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function parseTaskData(data: unknown): unknown {
-  if (typeof data !== 'string') return data
-  const trimmed = data.trim()
-  if (!trimmed) return undefined
-
-  try {
-    return JSON.parse(trimmed) as unknown
-  } catch {
-    return undefined
-  }
-}
 
 function isHttpUrl(value: unknown): value is string {
   return typeof value === 'string' && HTTP_URL_PATTERN.test(value.trim())
@@ -55,13 +38,6 @@ function isHttpUrl(value: unknown): value is string {
 
 function isDataImageUrl(value: unknown): value is string {
   return typeof value === 'string' && DATA_IMAGE_URL_PATTERN.test(value.trim())
-}
-
-function b64JsonToDataImage(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const b64 = value.trim()
-  if (!b64) return undefined
-  return `data:image/png;base64,${b64}`
 }
 
 function looksLikeImageUrl(url: string): boolean {
@@ -148,59 +124,40 @@ function addMediaResult(
   results.push({ type, url })
 }
 
-function walkTaskData(
-  value: unknown,
-  source: TaskMediaSource,
+function parseTaskData(data: unknown): unknown {
+  if (typeof data !== 'string') return data
+  const trimmed = data.trim()
+  if (!trimmed) return undefined
+  try {
+    return JSON.parse(trimmed) as unknown
+  } catch {
+    return data
+  }
+}
+
+function collectMediaFromValue(
   results: TaskMediaResult[],
   seen: Set<string>,
+  source: TaskMediaSource,
+  value: unknown,
   keyHint?: string
 ): void {
+  if (typeof value === 'string') {
+    addMediaResult(results, seen, source, value, keyHint)
+    return
+  }
+
   if (Array.isArray(value)) {
     for (const item of value) {
-      walkTaskData(item, source, results, seen, keyHint)
+      collectMediaFromValue(results, seen, source, item, keyHint)
     }
     return
   }
 
-  if (!isRecord(value)) {
-    addMediaResult(
-      results,
-      seen,
-      source,
-      value,
-      keyHint,
-      RESULT_KEY_PATTERN.test(keyHint ?? '')
-    )
-    return
-  }
+  if (!value || typeof value !== 'object') return
 
-  for (const [key, nestedValue] of Object.entries(value)) {
-    const nestedKeyHint = keyHint ? `${keyHint}.${key}` : key
-    const allowTaskFallback = RESULT_KEY_PATTERN.test(nestedKeyHint)
-    if (key === 'b64_json') {
-      addMediaResult(
-        results,
-        seen,
-        source,
-        b64JsonToDataImage(nestedValue),
-        nestedKeyHint,
-        true
-      )
-      continue
-    }
-    if (isHttpUrl(nestedValue) || isDataImageUrl(nestedValue)) {
-      addMediaResult(
-        results,
-        seen,
-        source,
-        nestedValue,
-        nestedKeyHint,
-        allowTaskFallback
-      )
-      continue
-    }
-
-    walkTaskData(nestedValue, source, results, seen, nestedKeyHint)
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    collectMediaFromValue(results, seen, source, child, key)
   }
 }
 
@@ -212,7 +169,7 @@ export function extractTaskMediaResults(source: TaskMediaSource): TaskMediaResul
 
   addMediaResult(results, seen, source, source.result_url, 'result_url', true)
   addMediaResult(results, seen, source, source.fail_reason, 'fail_reason', true)
-  walkTaskData(parseTaskData(source.data), source, results, seen)
+  collectMediaFromValue(results, seen, source, parseTaskData(source.data), 'data')
 
   return results
 }

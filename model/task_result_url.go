@@ -16,6 +16,11 @@ func isVideoProxyContentURL(u, taskID string) bool {
 	return strings.Contains(u, "/v1/videos/") && strings.Contains(u, taskID) && strings.Contains(u, "/content")
 }
 
+func isTaskResultProxyURL(u string) bool {
+	u = strings.TrimSpace(u)
+	return strings.Contains(u, "/api/task/") && strings.Contains(u, "/result")
+}
+
 // looksLikeImageAssetURL is a light heuristic for HTTP URLs that point to raster images (TOS, CDN, etc.).
 func looksLikeImageAssetURL(u string) bool {
 	lower := strings.ToLower(strings.TrimSpace(u))
@@ -34,16 +39,29 @@ func looksLikeImageAssetURL(u string) bool {
 	return false
 }
 
+func isImageDataURL(u string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(u)), "data:image/")
+}
+
 func walkFirstImageLikeURL(v any) string {
 	switch x := v.(type) {
 	case map[string]any:
-		if u, ok := x["url"].(string); ok && strings.HasPrefix(u, "http") && looksLikeImageAssetURL(u) {
-			return u
+		if u, ok := x["url"].(string); ok {
+			switch {
+			case strings.HasPrefix(u, "http") && looksLikeImageAssetURL(u):
+				return u
+			case isImageDataURL(u):
+				return u
+			}
 		}
 		for _, vv := range x {
 			if s := walkFirstImageLikeURL(vv); s != "" {
 				return s
 			}
+		}
+	case string:
+		if isImageDataURL(x) {
+			return x
 		}
 	case []any:
 		for _, item := range x {

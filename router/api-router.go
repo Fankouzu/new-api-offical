@@ -333,6 +333,12 @@ func SetApiRouter(router *gin.Engine) {
 		taskRoute := apiRouter.Group("/task")
 		{
 			taskRoute.GET("/self", middleware.UserAuth(), controller.GetUserTask)
+			taskRoute.GET("/self/:id/raw", middleware.UserAuth(), controller.GetUserTaskRawByID)
+			taskRoute.GET("/self/:id/result", middleware.UserAuth(), controller.GetUserTaskResultByID)
+			taskRoute.GET("/self/:id", middleware.UserAuth(), controller.GetUserTaskByID)
+			taskRoute.GET("/:id/raw", middleware.AdminAuth(), controller.GetTaskRawByID)
+			taskRoute.GET("/:id/result", middleware.AdminAuth(), controller.GetTaskResultByID)
+			taskRoute.GET("/:id", middleware.AdminAuth(), controller.GetTaskByID)
 			taskRoute.GET("/", middleware.AdminAuth(), controller.GetAllTask)
 		}
 
