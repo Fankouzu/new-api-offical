@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type VideoHTMLAttributes } from 'react'
 import { Copy, ExternalLink, ImageIcon, Video } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -40,6 +40,9 @@ function TaskMediaCard({ result }: { result: TaskMediaResult }) {
   const displayUrl = result.url.startsWith('data:')
     ? `${result.url.slice(0, 64)}...`
     : result.url
+  const videoReferrerPolicyProps = {
+    referrerPolicy: 'no-referrer',
+  } as VideoHTMLAttributes<HTMLVideoElement>
 
   return (
     <div className='bg-card overflow-hidden rounded-lg border'>
@@ -61,7 +64,7 @@ function TaskMediaCard({ result }: { result: TaskMediaResult }) {
         ) : (
           <video
             src={normalizedUrl}
-            referrerPolicy='no-referrer'
+            {...videoReferrerPolicyProps}
             controls
             preload='metadata'
             className='max-h-[420px] w-full object-contain'

@@ -70,7 +70,7 @@ Transitive dependencies should be audited before a final external release.
 | web/default | production  | npm       | `@hookform/resolvers`                                 | `5.2.2`                              | MIT                                                |
 | web/default | production  | npm       | `@hugeicons/core-free-icons`                          | `4.1.1`                              | MIT                                                |
 | web/default | production  | npm       | `@hugeicons/react`                                    | `1.1.6`                              | MIT                                                |
-| web/default | production  | npm       | `@lobehub/icons`                                      | `4.12.0`                             | MIT                                                |
+| web/default | production  | npm       | `@lobehub/icons`                                      | `5.8.0`                              | MIT                                                |
 | web/default | production  | npm       | `@tailwindcss/postcss`                                | `4.2.2`                              | MIT                                                |
 | web/default | production  | npm       | `@tanstack/react-query`                               | `5.97.0`                             | MIT                                                |
 | web/default | production  | npm       | `@tanstack/react-router`                              | `1.168.23`                           | MIT                                                |
@@ -143,7 +143,7 @@ Transitive dependencies should be audited before a final external release.
 | web/default | development | npm       | `typescript-eslint`                                   | `8.58.1`                             | MIT                                                |
 | web/classic | production  | npm       | `@douyinfe/semi-icons`                                | `2.72.2`                             | MIT                                                |
 | web/classic | production  | npm       | `@douyinfe/semi-ui`                                   | `2.72.2`                             | MIT                                                |
-| web/classic | production  | npm       | `@lobehub/icons`                                      | `2.1.0`                              | MIT                                                |
+| web/classic | production  | npm       | `@lobehub/icons`                                      | `5.8.0`                              | MIT                                                |
 | web/classic | production  | npm       | `@visactor/react-vchart`                              | `1.8.11`                             | MIT                                                |
 | web/classic | production  | npm       | `@visactor/vchart`                                    | `1.8.11`                             | MIT                                                |
 | web/classic | production  | npm       | `@visactor/vchart-semi-theme`                         | `1.8.8`                              | MIT                                                |
