@@ -187,6 +187,7 @@ const ContentModal = ({
         )}
         <video
           src={mediaSrc}
+          referrerPolicy='no-referrer'
           controls
           style={{
             width: '100%',
@@ -263,6 +264,7 @@ const ContentModal = ({
           <img
             src={mediaSrc}
             alt=''
+            referrerPolicy='no-referrer'
             style={{
               maxWidth: '100%',
               maxHeight: '65vh',

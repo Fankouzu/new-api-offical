@@ -1,12 +1,15 @@
 package controller
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/QuantumNous/new-api/common"
@@ -15,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -585,7 +589,62 @@ func writeTaskResult(c *gin.Context, task *model.Task) {
 		c.Data(http.StatusOK, contentType, data)
 		return
 	}
+	if inferTaskResultType(resultURL, task.PrivateData.UpstreamKind) == "image" && strings.HasPrefix(strings.ToLower(resultURL), "http") {
+		proxyImageTaskResult(c, resultURL)
+		return
+	}
 	c.Redirect(http.StatusFound, resultURL)
+}
+
+func proxyImageTaskResult(c *gin.Context, resultURL string) {
+	fetchSetting := system_setting.GetFetchSetting()
+	if err := common.ValidateURLWithFetchSetting(resultURL, fetchSetting.EnableSSRFProtection, fetchSetting.AllowPrivateIp, fetchSetting.DomainFilterMode, fetchSetting.IpFilterMode, fetchSetting.DomainList, fetchSetting.IpList, fetchSetting.AllowedPorts, fetchSetting.ApplyIPFilterForDomain); err != nil {
+		common.ApiErrorMsg(c, fmt.Sprintf("request blocked: %v", err))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, resultURL, nil)
+	if err != nil {
+		common.ApiErrorMsg(c, "failed to create image request")
+		return
+	}
+	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		common.ApiErrorMsg(c, "failed to fetch image result")
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		common.ApiErrorMsg(c, fmt.Sprintf("upstream image returned status %d", resp.StatusCode))
+		return
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "image/png"
+	}
+	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil {
+		contentType = mediaType
+	}
+	if !strings.HasPrefix(strings.ToLower(contentType), "image/") {
+		contentType = "application/octet-stream"
+	}
+
+	for _, header := range []string{"Content-Length", "ETag", "Last-Modified"} {
+		if value := resp.Header.Get(header); value != "" {
+			c.Writer.Header().Set(header, value)
+		}
+	}
+	c.Writer.Header().Set("Content-Type", contentType)
+	c.Writer.Header().Set("Cache-Control", "public, max-age=86400")
+	c.Writer.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(c.Writer, resp.Body)
 }
 
 func decodeDataURL(raw string) (string, []byte, bool) {

@@ -44,7 +44,7 @@ import {
 import { CHANNEL_OPTIONS } from '../../../constants/channel.constants';
 import { stringToColor } from '../../../helpers/render';
 import { Avatar, Space } from '@douyinfe/semi-ui';
-import { resolveTaskPreviewUrl } from './taskPreview';
+import { resolveTaskPreviewMedia, resolveTaskPreviewUrl } from './taskPreview';
 
 const colors = [
   'amber',
@@ -432,14 +432,16 @@ export const getTaskLogsColumns = ({
         }
 
         const isSuccess = record.status === 'SUCCESS';
-        const previewUrl = resolveTaskPreviewUrl(record);
+        const previewMedia = resolveTaskPreviewMedia(record);
+        const previewUrl = previewMedia.url;
         const hasPreviewUrl =
           typeof previewUrl === 'string' &&
           (/^https?:\/\//.test(previewUrl) ||
+            /^\/api\/task\/\d+\/result$/i.test(previewUrl) ||
             /^data:image\/[^;,]+;base64,/i.test(previewUrl));
 
         // Async image (e.g. PingXingShiJie OpenAI-compatible image generations)
-        if (isSuccess && isAsyncImageTaskForPreview(record) && hasPreviewUrl) {
+        if (isSuccess && previewMedia.type === 'image' && hasPreviewUrl) {
           return (
             <a
               href='#'
@@ -461,7 +463,7 @@ export const getTaskLogsColumns = ({
             record.action === TASK_ACTION_REFERENCE_GENERATE ||
             record.action === TASK_ACTION_REMIX_GENERATE) &&
           record.upstream_kind !== 'image';
-        if (isSuccess && isVideoTask && hasPreviewUrl) {
+        if (isSuccess && previewMedia.type === 'video' && isVideoTask && hasPreviewUrl) {
           return (
             <a
               href='#'

@@ -21,6 +21,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   extractImageUrlFromTaskData,
   extractMediaResultFromTaskData,
+  resolveTaskPreviewMedia,
   resolveTaskPreviewUrl,
 } from './taskPreview.js';
 
@@ -76,5 +77,16 @@ describe('task preview helpers', () => {
     });
 
     expect(result).toEqual({ type: 'video', url: videoURL });
+  });
+
+  test('uses same-origin task result endpoint for URL image previews', () => {
+    const media = resolveTaskPreviewMedia({
+      id: 779,
+      result_url:
+        'https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/result_0.png?X-Tos-Signature=keep',
+      upstream_kind: 'image',
+    });
+
+    expect(media).toEqual({ type: 'image', url: '/api/task/779/result' });
   });
 });

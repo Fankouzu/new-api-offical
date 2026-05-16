@@ -52,6 +52,7 @@ function TaskMediaCard({ result }: { result: TaskMediaResult }) {
           <img
             src={normalizedUrl}
             alt={title}
+            referrerPolicy='no-referrer'
             loading='lazy'
             className='max-h-[420px] w-full object-contain'
             onError={() => setLoadFailed(true)}
@@ -60,6 +61,7 @@ function TaskMediaCard({ result }: { result: TaskMediaResult }) {
         ) : (
           <video
             src={normalizedUrl}
+            referrerPolicy='no-referrer'
             controls
             preload='metadata'
             className='max-h-[420px] w-full object-contain'

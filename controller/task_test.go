@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
@@ -289,6 +290,52 @@ func TestGetTaskResultByIDRedirectsVideoURLFromPayloadWhenStoredResultMissing(t 
 
 	require.Equal(t, http.StatusFound, recorder.Code)
 	require.Equal(t, videoURL, recorder.Header().Get("Location"))
+}
+
+func TestGetTaskResultByIDProxiesImageURLResult(t *testing.T) {
+	db := setupTaskControllerTestDB(t)
+
+	imageBytes := []byte("proxied-image-bytes")
+	imageServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Empty(t, r.Referer())
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(imageBytes)
+	}))
+	defer imageServer.Close()
+	fetchSetting := system_setting.GetFetchSetting()
+	originalSSRF := fetchSetting.EnableSSRFProtection
+	originalPrivateIP := fetchSetting.AllowPrivateIp
+	fetchSetting.EnableSSRFProtection = false
+	fetchSetting.AllowPrivateIp = true
+	t.Cleanup(func() {
+		fetchSetting.EnableSSRFProtection = originalSSRF
+		fetchSetting.AllowPrivateIp = originalPrivateIP
+	})
+
+	task := &model.Task{
+		TaskID:    "task_result_url_image",
+		Platform:  constant.TaskPlatform("58"),
+		UserId:    1,
+		ChannelId: 7,
+		Action:    "generate",
+		Status:    model.TaskStatusSuccess,
+		PrivateData: model.TaskPrivateData{
+			UpstreamKind: "image",
+			ResultURL:    imageServer.URL + "/result.png",
+		},
+	}
+	require.NoError(t, db.Create(task).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/task/%d/result", task.ID), nil)
+	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", task.ID)}}
+
+	GetTaskResultByID(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "image/png", recorder.Header().Get("Content-Type"))
+	require.Equal(t, imageBytes, recorder.Body.Bytes())
 }
 
 func TestGetTaskRawByIDReturnsFullPayloadOnDemand(t *testing.T) {

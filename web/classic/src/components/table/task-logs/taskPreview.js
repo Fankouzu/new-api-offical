@@ -123,3 +123,21 @@ export function resolveTaskPreviewUrl(record, options = {}) {
   }
   return primary;
 }
+
+export function resolveTaskPreviewMedia(record, options = {}) {
+  const url = resolveTaskPreviewUrl(record, options);
+  if (!url) return { type: '', url: '' };
+  const sameOriginResultURL =
+    record?.id && /^https?:\/\//i.test(url)
+      ? `/api/task/${record.id}/result`
+      : url;
+  if (record?.upstream_kind === 'image') {
+    return { type: 'image', url: sameOriginResultURL };
+  }
+  if (record?.upstream_kind === 'video') {
+    return { type: 'video', url: sameOriginResultURL };
+  }
+  const media = classifyMediaUrl(url);
+  if (!media) return { type: '', url: sameOriginResultURL };
+  return { type: media.type, url: sameOriginResultURL };
+}

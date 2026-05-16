@@ -8,6 +8,7 @@ export type TaskMediaResult = {
 
 type TaskMediaSource = Pick<
   TaskLog,
+  | 'id'
   | 'action'
   | 'data'
   | 'fail_reason'
@@ -121,7 +122,11 @@ function addMediaResult(
   if (!type) return
 
   seen.add(url)
-  results.push({ type, url })
+  const previewUrl =
+    source.id && isHttpUrl(url)
+      ? `/api/task/${source.id}/result`
+      : url
+  results.push({ type, url: previewUrl })
 }
 
 function parseTaskData(data: unknown): unknown {
