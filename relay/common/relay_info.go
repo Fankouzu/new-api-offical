@@ -700,6 +700,59 @@ type TaskSubmitReq struct {
 	Metadata       map[string]interface{} `json:"metadata,omitempty"`
 }
 
+func parseTaskImageURLValue(raw json.RawMessage) (string, bool, error) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", false, nil
+	}
+	switch raw[0] {
+	case '"':
+		var value string
+		if err := common.Unmarshal(raw, &value); err != nil {
+			return "", false, err
+		}
+		value = strings.TrimSpace(value)
+		return value, value != "", nil
+	case '{':
+		var obj map[string]json.RawMessage
+		if err := common.Unmarshal(raw, &obj); err != nil {
+			return "", false, err
+		}
+		imageURLRaw, ok := obj["image_url"]
+		if !ok {
+			imageURLRaw, ok = obj["url"]
+		}
+		if !ok {
+			return "", false, nil
+		}
+		return parseTaskImageURLValue(imageURLRaw)
+	default:
+		return "", false, fmt.Errorf("json: image URL item must be a string or object with image_url")
+	}
+}
+
+func parseTaskImageURLArray(raw json.RawMessage) ([]string, error) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var items []json.RawMessage
+	if err := common.Unmarshal(raw, &items); err != nil {
+		return nil, err
+	}
+	imageURLs := make([]string, 0, len(items))
+	for _, item := range items {
+		imageURL, ok, err := parseTaskImageURLValue(item)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			imageURLs = append(imageURLs, imageURL)
+		}
+	}
+	return imageURLs, nil
+}
+
 func (t *TaskSubmitReq) GetPrompt() string {
 	return t.Prompt
 }
@@ -721,8 +774,10 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 		if len(imgRaw) > 0 && string(imgRaw) != "null" {
 			switch imgRaw[0] {
 			case '[':
-				if err := common.Unmarshal(imgRaw, &imageURLs); err != nil {
+				if parsed, err := parseTaskImageURLArray(imgRaw); err != nil {
 					return err
+				} else {
+					imageURLs = parsed
 				}
 			case '"':
 				if err := common.Unmarshal(imgRaw, &imageStr); err != nil {
@@ -733,6 +788,17 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 			}
 		}
 		delete(raw, "image")
+	}
+	if imagesRaw, ok := raw["images"]; ok {
+		imagesRaw = bytes.TrimSpace(imagesRaw)
+		if len(imagesRaw) > 0 && string(imagesRaw) != "null" {
+			if parsed, err := parseTaskImageURLArray(imagesRaw); err != nil {
+				return err
+			} else if len(parsed) > 0 {
+				imageURLs = append(imageURLs, parsed...)
+			}
+		}
+		delete(raw, "images")
 	}
 	stitched, err := common.Marshal(raw)
 	if err != nil {
