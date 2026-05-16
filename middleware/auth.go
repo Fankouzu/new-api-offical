@@ -156,6 +156,79 @@ func authHelper(c *gin.Context, minRole int) {
 	c.Next()
 }
 
+func browserSessionAuthHelper(c *gin.Context, minRole int) {
+	session := sessions.Default(c)
+	username := session.Get("username")
+	role := session.Get("role")
+	id := session.Get("id")
+	status := session.Get("status")
+
+	if username == nil || role == nil || id == nil || status == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthNotLoggedIn),
+		})
+		c.Abort()
+		return
+	}
+
+	statusInt, ok := status.(int)
+	if !ok {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthUserInfoInvalid),
+		})
+		c.Abort()
+		return
+	}
+	if statusInt == common.UserStatusDisabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthUserBanned),
+		})
+		c.Abort()
+		return
+	}
+
+	roleInt, ok := role.(int)
+	if !ok {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthUserInfoInvalid),
+		})
+		c.Abort()
+		return
+	}
+	if roleInt < minRole {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthInsufficientPrivilege),
+		})
+		c.Abort()
+		return
+	}
+
+	usernameStr, ok := username.(string)
+	if !ok || !validUserInfo(usernameStr, roleInt) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthUserInfoInvalid),
+		})
+		c.Abort()
+		return
+	}
+
+	c.Header("Auth-Version", "864b7076dbcd0a3c01b5520316720ebf")
+	c.Set("username", username)
+	c.Set("role", role)
+	c.Set("id", id)
+	c.Set("group", session.Get("group"))
+	c.Set("user_group", session.Get("group"))
+	c.Set("use_access_token", false)
+
+	c.Next()
+}
+
 func TryUserAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		session := sessions.Default(c)
@@ -176,6 +249,18 @@ func UserAuth() func(c *gin.Context) {
 func AdminAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		authHelper(c, common.RoleAdminUser)
+	}
+}
+
+func BrowserSessionUserAuth() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		browserSessionAuthHelper(c, common.RoleCommonUser)
+	}
+}
+
+func BrowserSessionAdminAuth() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		browserSessionAuthHelper(c, common.RoleAdminUser)
 	}
 }
 
