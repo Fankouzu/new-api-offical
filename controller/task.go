@@ -1,12 +1,15 @@
 package controller
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/QuantumNous/new-api/common"
@@ -15,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -255,6 +259,14 @@ func summarizeLargeInlineMediaString(value string) string {
 	return fmt.Sprintf("%s... [base64 omitted, original_length=%d]", prefix, len(trimmed))
 }
 
+func listTaskResultURL(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if looksLikeHTTPURL(trimmed) {
+		return trimmed
+	}
+	return ""
+}
+
 func loadTaskResultByIDParam(c *gin.Context) (*model.Task, bool) {
 	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || taskID <= 0 {
@@ -301,24 +313,25 @@ func taskNotFound(c *gin.Context) {
 }
 
 type lightweightTaskDetailRow struct {
-	ID         int64                 `gorm:"column:id"`
-	CreatedAt  int64                 `gorm:"column:created_at"`
-	UpdatedAt  int64                 `gorm:"column:updated_at"`
-	TaskID     string                `gorm:"column:task_id"`
-	Platform   constant.TaskPlatform `gorm:"column:platform"`
-	UserId     int                   `gorm:"column:user_id"`
-	Group      string                `gorm:"column:group"`
-	ChannelId  int                   `gorm:"column:channel_id"`
-	Quota      int                   `gorm:"column:quota"`
-	Action     string                `gorm:"column:action"`
-	Status     model.TaskStatus      `gorm:"column:status"`
-	FailReason string                `gorm:"column:fail_reason"`
-	SubmitTime int64                 `gorm:"column:submit_time"`
-	StartTime  int64                 `gorm:"column:start_time"`
-	FinishTime int64                 `gorm:"column:finish_time"`
-	Progress   string                `gorm:"column:progress"`
-	Properties model.Properties      `gorm:"column:properties"`
-	Username   string                `gorm:"column:username"`
+	ID          int64                 `gorm:"column:id"`
+	CreatedAt   int64                 `gorm:"column:created_at"`
+	UpdatedAt   int64                 `gorm:"column:updated_at"`
+	TaskID      string                `gorm:"column:task_id"`
+	Platform    constant.TaskPlatform `gorm:"column:platform"`
+	UserId      int                   `gorm:"column:user_id"`
+	Group       string                `gorm:"column:group"`
+	ChannelId   int                   `gorm:"column:channel_id"`
+	Quota       int                   `gorm:"column:quota"`
+	Action      string                `gorm:"column:action"`
+	Status      model.TaskStatus      `gorm:"column:status"`
+	FailReason  string                `gorm:"column:fail_reason"`
+	SubmitTime  int64                 `gorm:"column:submit_time"`
+	StartTime   int64                 `gorm:"column:start_time"`
+	FinishTime  int64                 `gorm:"column:finish_time"`
+	Progress    string                `gorm:"column:progress"`
+	Properties  model.Properties      `gorm:"column:properties"`
+	PrivateData model.TaskPrivateData `gorm:"column:private_data"`
+	Username    string                `gorm:"column:username"`
 }
 
 func getLightweightTaskResultByID(id int64) (*model.Task, bool, error) {
@@ -390,6 +403,7 @@ func taskDetailSelectColumns() []string {
 		"finish_time",
 		"progress",
 		"properties",
+		"private_data",
 	}
 	switch {
 	case common.UsingPostgreSQL:
@@ -410,27 +424,28 @@ func taskDetailGroupColumn() string {
 }
 
 func taskDetailRow2Dto(row lightweightTaskDetailRow, self bool) *dto.TaskDetailDto {
-	result := taskResultSummaryForLightweightDetail(row.ID, row.Action, row.Status, row.FailReason, row.Properties, self)
+	result := taskResultSummaryForLightweightDetail(row.ID, row.Action, row.Status, row.FailReason, row.Properties, row.PrivateData.UpstreamKind, self)
 	return &dto.TaskDetailDto{
-		ID:         row.ID,
-		CreatedAt:  row.CreatedAt,
-		UpdatedAt:  row.UpdatedAt,
-		TaskID:     row.TaskID,
-		Platform:   string(row.Platform),
-		UserId:     row.UserId,
-		Group:      row.Group,
-		ChannelId:  row.ChannelId,
-		Quota:      row.Quota,
-		Action:     row.Action,
-		Status:     string(row.Status),
-		FailReason: row.FailReason,
-		SubmitTime: row.SubmitTime,
-		StartTime:  row.StartTime,
-		FinishTime: row.FinishTime,
-		Progress:   row.Progress,
-		Properties: row.Properties,
-		Username:   row.Username,
-		Result:     result,
+		ID:           row.ID,
+		CreatedAt:    row.CreatedAt,
+		UpdatedAt:    row.UpdatedAt,
+		TaskID:       row.TaskID,
+		Platform:     string(row.Platform),
+		UserId:       row.UserId,
+		Group:        row.Group,
+		ChannelId:    row.ChannelId,
+		Quota:        row.Quota,
+		Action:       row.Action,
+		Status:       string(row.Status),
+		FailReason:   row.FailReason,
+		UpstreamKind: row.PrivateData.UpstreamKind,
+		SubmitTime:   row.SubmitTime,
+		StartTime:    row.StartTime,
+		FinishTime:   row.FinishTime,
+		Progress:     row.Progress,
+		Properties:   row.Properties,
+		Username:     row.Username,
+		Result:       result,
 		DataSummary: dto.TaskDataSummary{
 			Omitted: true,
 		},
@@ -472,7 +487,7 @@ func taskResultSummary(task *model.Task, self bool) dto.TaskResultSummary {
 	return taskResultSummaryFromFields(task.ID, resultURL, len(resultURL), task.PrivateData.UpstreamKind, self)
 }
 
-func taskResultSummaryForLightweightDetail(id int64, action string, status model.TaskStatus, failReason string, properties model.Properties, self bool) dto.TaskResultSummary {
+func taskResultSummaryForLightweightDetail(id int64, action string, status model.TaskStatus, failReason string, properties model.Properties, upstreamKind string, self bool) dto.TaskResultSummary {
 	if status != model.TaskStatusSuccess && strings.TrimSpace(failReason) == "" {
 		return dto.TaskResultSummary{}
 	}
@@ -482,7 +497,7 @@ func taskResultSummaryForLightweightDetail(id int64, action string, status model
 	}
 	return dto.TaskResultSummary{
 		Available: true,
-		Type:      inferTaskResultTypeFromTaskFields(action, failReason, properties),
+		Type:      inferTaskResultTypeFromTaskFields(action, failReason, properties, upstreamKind),
 		URL:       path,
 	}
 }
@@ -505,7 +520,10 @@ func taskResultSummaryFromFields(id int64, resultPrefix string, resultSize int, 
 	}
 }
 
-func inferTaskResultTypeFromTaskFields(action string, failReason string, properties model.Properties) string {
+func inferTaskResultTypeFromTaskFields(action string, failReason string, properties model.Properties, upstreamKind string) string {
+	if upstreamKind != "" {
+		return upstreamKind
+	}
 	lowerFailReason := strings.ToLower(failReason)
 	if strings.HasPrefix(lowerFailReason, "data:image/") ||
 		strings.Contains(lowerFailReason, ".png") ||
@@ -571,7 +589,62 @@ func writeTaskResult(c *gin.Context, task *model.Task) {
 		c.Data(http.StatusOK, contentType, data)
 		return
 	}
+	if inferTaskResultType(resultURL, task.PrivateData.UpstreamKind) == "image" && strings.HasPrefix(strings.ToLower(resultURL), "http") {
+		proxyImageTaskResult(c, resultURL)
+		return
+	}
 	c.Redirect(http.StatusFound, resultURL)
+}
+
+func proxyImageTaskResult(c *gin.Context, resultURL string) {
+	fetchSetting := system_setting.GetFetchSetting()
+	if err := common.ValidateURLWithFetchSetting(resultURL, fetchSetting.EnableSSRFProtection, fetchSetting.AllowPrivateIp, fetchSetting.DomainFilterMode, fetchSetting.IpFilterMode, fetchSetting.DomainList, fetchSetting.IpList, fetchSetting.AllowedPorts, fetchSetting.ApplyIPFilterForDomain); err != nil {
+		common.ApiErrorMsg(c, fmt.Sprintf("request blocked: %v", err))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, resultURL, nil)
+	if err != nil {
+		common.ApiErrorMsg(c, "failed to create image request")
+		return
+	}
+	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		common.ApiErrorMsg(c, "failed to fetch image result")
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		common.ApiErrorMsg(c, fmt.Sprintf("upstream image returned status %d", resp.StatusCode))
+		return
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "image/png"
+	}
+	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil {
+		contentType = mediaType
+	}
+	if !strings.HasPrefix(strings.ToLower(contentType), "image/") {
+		contentType = "application/octet-stream"
+	}
+
+	for _, header := range []string{"Content-Length", "ETag", "Last-Modified"} {
+		if value := resp.Header.Get(header); value != "" {
+			c.Writer.Header().Set(header, value)
+		}
+	}
+	c.Writer.Header().Set("Content-Type", contentType)
+	c.Writer.Header().Set("Cache-Control", "public, max-age=86400")
+	c.Writer.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(c.Writer, resp.Body)
 }
 
 func decodeDataURL(raw string) (string, []byte, bool) {
@@ -615,7 +688,9 @@ func tasksToDto(tasks []*model.Task, fillUser bool) []*dto.TaskDto {
 				task.Username = user.Username
 			}
 		}
-		result[i] = relay.TaskModel2Dto(task)
+		taskDto := relay.TaskModel2Dto(task)
+		taskDto.ResultURL = listTaskResultURL(taskDto.ResultURL)
+		result[i] = taskDto
 	}
 	return result
 }

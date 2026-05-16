@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
@@ -29,9 +30,10 @@ type taskPageResponse struct {
 }
 
 type taskListItem struct {
-	TaskID    string          `json:"task_id"`
-	ResultURL string          `json:"result_url"`
-	Data      json.RawMessage `json:"data"`
+	TaskID       string          `json:"task_id"`
+	ResultURL    string          `json:"result_url"`
+	UpstreamKind string          `json:"upstream_kind"`
+	Data         json.RawMessage `json:"data"`
 }
 
 type taskDetailResponse struct {
@@ -133,6 +135,50 @@ func TestGetAllTaskOmitsHeavyMediaPayloadFromList(t *testing.T) {
 	require.NotContains(t, recorder.Body.String(), largeDataURL)
 }
 
+func TestGetAllTaskKeepsURLMediaResultInListWithoutDataPayload(t *testing.T) {
+	db := setupTaskControllerTestDB(t)
+
+	require.NoError(t, db.Create(&model.User{
+		Id:       1,
+		Username: "alice",
+		Group:    "default",
+	}).Error)
+
+	imageURL := "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/result_0.png?X-Tos-Signature=keep"
+	require.NoError(t, db.Create(&model.Task{
+		TaskID:     "task_url_media",
+		Platform:   constant.TaskPlatform("58"),
+		UserId:     1,
+		ChannelId:  10,
+		Action:     "generate",
+		Status:     model.TaskStatusSuccess,
+		SubmitTime: 100,
+		FinishTime: 110,
+		Progress:   "100%",
+		PrivateData: model.TaskPrivateData{
+			UpstreamKind: "image",
+			ResultURL:    imageURL,
+		},
+		Data: json.RawMessage(`{"code":0,"data":{"data":[{"url":"` + imageURL + `"}]}}`),
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/task/?p=1&page_size=10", nil)
+
+	GetAllTask(ctx)
+
+	response := decodeTaskAPIResponse(t, recorder)
+	require.True(t, response.Success, response.Message)
+
+	var page taskPageResponse
+	require.NoError(t, common.Unmarshal(response.Data, &page))
+	require.Len(t, page.Items, 1)
+	require.Empty(t, page.Items[0].Data)
+	require.Equal(t, imageURL, page.Items[0].ResultURL)
+	require.Equal(t, "image", page.Items[0].UpstreamKind)
+}
+
 func TestGetTaskByIDReturnsLightweightDetails(t *testing.T) {
 	db := setupTaskControllerTestDB(t)
 
@@ -180,6 +226,116 @@ func TestGetTaskByIDReturnsLightweightDetails(t *testing.T) {
 	require.Zero(t, detail.DataSummary.Bytes)
 	require.Empty(t, detail.Data)
 	require.Empty(t, detail.ResultURL)
+}
+
+func TestGetTaskByIDInfersImageResultFromPayloadWhenStoredResultMissing(t *testing.T) {
+	db := setupTaskControllerTestDB(t)
+
+	imageURL := "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/result_0.png?X-Tos-Signature=keep"
+	task := &model.Task{
+		TaskID:    "task_detail_url_image",
+		Platform:  constant.TaskPlatform("61"),
+		UserId:    1,
+		ChannelId: 7,
+		Action:    "generate",
+		Status:    model.TaskStatusSuccess,
+		PrivateData: model.TaskPrivateData{
+			UpstreamKind: "image",
+		},
+		Data: json.RawMessage(`{"code":0,"data":{"data":[{"url":"` + imageURL + `"}],"status":"done"},"msg":"ok"}`),
+	}
+	require.NoError(t, db.Create(task).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/task/%d", task.ID), nil)
+	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", task.ID)}}
+
+	GetTaskByID(ctx)
+
+	response := decodeTaskAPIResponse(t, recorder)
+	require.True(t, response.Success, response.Message)
+
+	var detail taskDetailResponse
+	require.NoError(t, common.Unmarshal(response.Data, &detail))
+	require.True(t, detail.Result.Available)
+	require.Equal(t, "image", detail.Result.Type)
+	require.Equal(t, fmt.Sprintf("/api/task/%d/result", task.ID), detail.Result.URL)
+}
+
+func TestGetTaskResultByIDRedirectsVideoURLFromPayloadWhenStoredResultMissing(t *testing.T) {
+	db := setupTaskControllerTestDB(t)
+
+	videoURL := "https://cdn.example.com/generated/output.mp4?signature=keep"
+	task := &model.Task{
+		TaskID:    "task_result_url_video",
+		Platform:  constant.TaskPlatform("61"),
+		UserId:    1,
+		ChannelId: 7,
+		Action:    "generate",
+		Status:    model.TaskStatusSuccess,
+		PrivateData: model.TaskPrivateData{
+			UpstreamKind: "video",
+		},
+		Data: json.RawMessage(`{"status":"succeeded","output":{"video_url":"` + videoURL + `"}}`),
+	}
+	require.NoError(t, db.Create(task).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/task/%d/result", task.ID), nil)
+	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", task.ID)}}
+
+	GetTaskResultByID(ctx)
+
+	require.Equal(t, http.StatusFound, recorder.Code)
+	require.Equal(t, videoURL, recorder.Header().Get("Location"))
+}
+
+func TestGetTaskResultByIDProxiesImageURLResult(t *testing.T) {
+	db := setupTaskControllerTestDB(t)
+
+	imageBytes := []byte("proxied-image-bytes")
+	imageServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Empty(t, r.Referer())
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(imageBytes)
+	}))
+	defer imageServer.Close()
+	fetchSetting := system_setting.GetFetchSetting()
+	originalSSRF := fetchSetting.EnableSSRFProtection
+	originalPrivateIP := fetchSetting.AllowPrivateIp
+	fetchSetting.EnableSSRFProtection = false
+	fetchSetting.AllowPrivateIp = true
+	t.Cleanup(func() {
+		fetchSetting.EnableSSRFProtection = originalSSRF
+		fetchSetting.AllowPrivateIp = originalPrivateIP
+	})
+
+	task := &model.Task{
+		TaskID:    "task_result_url_image",
+		Platform:  constant.TaskPlatform("58"),
+		UserId:    1,
+		ChannelId: 7,
+		Action:    "generate",
+		Status:    model.TaskStatusSuccess,
+		PrivateData: model.TaskPrivateData{
+			UpstreamKind: "image",
+			ResultURL:    imageServer.URL + "/result.png",
+		},
+	}
+	require.NoError(t, db.Create(task).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/task/%d/result", task.ID), nil)
+	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", task.ID)}}
+
+	GetTaskResultByID(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "image/png", recorder.Header().Get("Content-Type"))
+	require.Equal(t, imageBytes, recorder.Body.Bytes())
 }
 
 func TestGetTaskRawByIDReturnsFullPayloadOnDemand(t *testing.T) {

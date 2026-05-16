@@ -27,8 +27,8 @@ import {
   BILLING_VAR_REGEX,
 } from '../constants';
 import { visit } from 'unist-util-visit';
-import * as LobeIcons from '@lobehub/icons';
 import {
+  LobeIcons,
   OpenAI,
   Claude,
   Gemini,
@@ -61,8 +61,8 @@ import {
   Jimeng,
   Perplexity,
   Replicate,
-} from '@lobehub/icons';
-import Fal from '@lobehub/icons/es/Fal';
+  Fal,
+} from './lobeIcons';
 
 import {
   LayoutDashboard,

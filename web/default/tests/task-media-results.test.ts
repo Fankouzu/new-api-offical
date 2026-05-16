@@ -5,6 +5,7 @@ import { extractTaskMediaResults } from '../src/features/usage-logs/lib/task-med
 describe('extractTaskMediaResults', () => {
   test('extracts multiple image URLs from task data and result URL', () => {
     const results = extractTaskMediaResults({
+      id: 100,
       action: 'GENERATE',
       data: JSON.stringify({
         data: [
@@ -19,14 +20,15 @@ describe('extractTaskMediaResults', () => {
     })
 
     expect(results).toEqual([
-      { type: 'image', url: 'https://example.com/cover.jpg' },
-      { type: 'image', url: 'https://example.com/first.png' },
-      { type: 'image', url: 'https://example.com/second.webp' },
+      { type: 'image', url: '/api/task/100/result' },
+      { type: 'image', url: '/api/task/100/result' },
+      { type: 'image', url: '/api/task/100/result' },
     ])
   })
 
   test('prefers base64 image data from task data over task result proxy URL', () => {
     const results = extractTaskMediaResults({
+      id: 642,
       action: 'generate',
       data: JSON.stringify({
         created: 1778776346,
@@ -41,8 +43,32 @@ describe('extractTaskMediaResults', () => {
     expect(results).toEqual([{ type: 'image', url: 'data:image/png;base64,abc123' }])
   })
 
+  test('extracts URL image results from nested OpenAI-compatible payloads', () => {
+    const imageURL =
+      'https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/result_0.png?X-Tos-Signature=keep'
+
+    const results = extractTaskMediaResults({
+      id: 779,
+      action: 'GENERATE',
+      data: JSON.stringify({
+        code: 0,
+        data: {
+          created: 1778945484,
+          data: [{ size: '1664x2496', url: imageURL }],
+          status: 'done',
+        },
+      }),
+      status: 'SUCCESS',
+      task_id: 'task_srmdUtR5VRQCnppU2Ttl4vAyBDSFqwo9',
+      upstream_kind: 'image',
+    })
+
+    expect(results).toEqual([{ type: 'image', url: '/api/task/779/result' }])
+  })
+
   test('extracts multiple video URLs from nested task payloads', () => {
     const results = extractTaskMediaResults({
+      id: 200,
       action: 'TEXT_GENERATE',
       data: {
         content: { video_url: 'https://example.com/generated.mp4' },
@@ -55,13 +81,14 @@ describe('extractTaskMediaResults', () => {
     })
 
     expect(results).toEqual([
-      { type: 'video', url: 'https://example.com/generated.mp4' },
-      { type: 'video', url: 'https://cdn.example.com/alt.webm' },
+      { type: 'video', url: '/api/task/200/result' },
+      { type: 'video', url: '/api/task/200/result' },
     ])
   })
 
   test('uses legacy fail reason URL when result URL is absent', () => {
     const results = extractTaskMediaResults({
+      id: 300,
       action: 'GENERATE',
       fail_reason: 'https://legacy.example.com/result.mp4',
       status: 'SUCCESS',
@@ -69,12 +96,13 @@ describe('extractTaskMediaResults', () => {
     })
 
     expect(results).toEqual([
-      { type: 'video', url: 'https://legacy.example.com/result.mp4' },
+      { type: 'video', url: '/api/task/300/result' },
     ])
   })
 
   test('ignores stale video proxy URL for image tasks and avoids input-only URLs', () => {
     const results = extractTaskMediaResults({
+      id: 400,
       action: 'GENERATE',
       data: {
         request: {
@@ -89,12 +117,13 @@ describe('extractTaskMediaResults', () => {
     })
 
     expect(results).toEqual([
-      { type: 'image', url: 'https://example.com/generated-seedream.jpeg' },
+      { type: 'image', url: '/api/task/400/result' },
     ])
   })
 
   test('ignores legacy video proxy fail reason when image result already exists', () => {
     const results = extractTaskMediaResults({
+      id: 500,
       action: 'GENERATE',
       fail_reason: 'https://api.example.com/v1/videos/task-legacy-image/content',
       result_url: 'https://example.com/generated-image.png',
@@ -103,7 +132,7 @@ describe('extractTaskMediaResults', () => {
     })
 
     expect(results).toEqual([
-      { type: 'image', url: 'https://example.com/generated-image.png' },
+      { type: 'image', url: '/api/task/500/result' },
     ])
   })
 })

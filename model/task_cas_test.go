@@ -148,6 +148,45 @@ func TestTaskGetResultURL_ExtractsImageDataURLFromData(t *testing.T) {
 	assert.Equal(t, "data:image/png;base64,abc123", task.GetResultURL())
 }
 
+func TestTaskGetResultURL_ExtractsImageHTTPURLFromDataWhenStoredResultMissing(t *testing.T) {
+	imageURL := "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/result_0.png?X-Tos-Signature=keep"
+	task := &Task{
+		TaskID: "task_url_image",
+		PrivateData: TaskPrivateData{
+			UpstreamKind: "image",
+		},
+		Data: json.RawMessage(`{"code":0,"data":{"created":1778945484,"data":[{"size":"1664x2496","url":"` + imageURL + `"}],"status":"done"},"msg":"ok"}`),
+	}
+
+	assert.Equal(t, imageURL, task.GetResultURL())
+}
+
+func TestTaskGetResultURL_ExtractsVideoHTTPURLFromDataWhenStoredResultMissing(t *testing.T) {
+	videoURL := "https://cdn.example.com/generated/output?signature=keep"
+	task := &Task{
+		TaskID: "task_url_video",
+		PrivateData: TaskPrivateData{
+			UpstreamKind: "video",
+		},
+		Data: json.RawMessage(`{"status":"succeeded","output":{"video_url":"` + videoURL + `"}}`),
+	}
+
+	assert.Equal(t, videoURL, task.GetResultURL())
+}
+
+func TestTaskGetResultURL_IgnoresInputMediaWhenExtractingResultFromData(t *testing.T) {
+	imageURL := "https://cdn.example.com/generated/result.png"
+	task := &Task{
+		TaskID: "task_url_image_with_input",
+		PrivateData: TaskPrivateData{
+			UpstreamKind: "image",
+		},
+		Data: json.RawMessage(`{"request":{"input_image":"https://uploads.example.com/user-input.png"},"data":[{"url":"` + imageURL + `"}]}`),
+	}
+
+	assert.Equal(t, imageURL, task.GetResultURL())
+}
+
 // ---------------------------------------------------------------------------
 // UpdateWithStatus CAS — DB integration tests
 // ---------------------------------------------------------------------------
