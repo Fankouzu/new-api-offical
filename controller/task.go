@@ -255,6 +255,14 @@ func summarizeLargeInlineMediaString(value string) string {
 	return fmt.Sprintf("%s... [base64 omitted, original_length=%d]", prefix, len(trimmed))
 }
 
+func listTaskResultURL(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if looksLikeHTTPURL(trimmed) {
+		return trimmed
+	}
+	return ""
+}
+
 func loadTaskResultByIDParam(c *gin.Context) (*model.Task, bool) {
 	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || taskID <= 0 {
@@ -621,7 +629,9 @@ func tasksToDto(tasks []*model.Task, fillUser bool) []*dto.TaskDto {
 				task.Username = user.Username
 			}
 		}
-		result[i] = relay.TaskModel2Dto(task)
+		taskDto := relay.TaskModel2Dto(task)
+		taskDto.ResultURL = listTaskResultURL(taskDto.ResultURL)
+		result[i] = taskDto
 	}
 	return result
 }

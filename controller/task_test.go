@@ -29,9 +29,10 @@ type taskPageResponse struct {
 }
 
 type taskListItem struct {
-	TaskID    string          `json:"task_id"`
-	ResultURL string          `json:"result_url"`
-	Data      json.RawMessage `json:"data"`
+	TaskID       string          `json:"task_id"`
+	ResultURL    string          `json:"result_url"`
+	UpstreamKind string          `json:"upstream_kind"`
+	Data         json.RawMessage `json:"data"`
 }
 
 type taskDetailResponse struct {
@@ -131,6 +132,50 @@ func TestGetAllTaskOmitsHeavyMediaPayloadFromList(t *testing.T) {
 	require.Empty(t, page.Items[0].Data)
 	require.Empty(t, page.Items[0].ResultURL)
 	require.NotContains(t, recorder.Body.String(), largeDataURL)
+}
+
+func TestGetAllTaskKeepsURLMediaResultInListWithoutDataPayload(t *testing.T) {
+	db := setupTaskControllerTestDB(t)
+
+	require.NoError(t, db.Create(&model.User{
+		Id:       1,
+		Username: "alice",
+		Group:    "default",
+	}).Error)
+
+	imageURL := "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-5-0/result_0.png?X-Tos-Signature=keep"
+	require.NoError(t, db.Create(&model.Task{
+		TaskID:     "task_url_media",
+		Platform:   constant.TaskPlatform("58"),
+		UserId:     1,
+		ChannelId:  10,
+		Action:     "generate",
+		Status:     model.TaskStatusSuccess,
+		SubmitTime: 100,
+		FinishTime: 110,
+		Progress:   "100%",
+		PrivateData: model.TaskPrivateData{
+			UpstreamKind: "image",
+			ResultURL:    imageURL,
+		},
+		Data: json.RawMessage(`{"code":0,"data":{"data":[{"url":"` + imageURL + `"}]}}`),
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/task/?p=1&page_size=10", nil)
+
+	GetAllTask(ctx)
+
+	response := decodeTaskAPIResponse(t, recorder)
+	require.True(t, response.Success, response.Message)
+
+	var page taskPageResponse
+	require.NoError(t, common.Unmarshal(response.Data, &page))
+	require.Len(t, page.Items, 1)
+	require.Empty(t, page.Items[0].Data)
+	require.Equal(t, imageURL, page.Items[0].ResultURL)
+	require.Equal(t, "image", page.Items[0].UpstreamKind)
 }
 
 func TestGetTaskByIDReturnsLightweightDetails(t *testing.T) {
