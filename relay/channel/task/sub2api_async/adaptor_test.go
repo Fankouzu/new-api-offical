@@ -224,6 +224,39 @@ func TestConvertGPTImageImageToImageConvertsImageArrayToSub2APIImageURLs(t *test
 	}
 }
 
+func TestConvertGPTImageImageToImageDoesNotLeakImageBracketMetadata(t *testing.T) {
+	a := &TaskAdaptor{}
+	const imageURL = "https://example.com/reference.png"
+	req := relaycommon.TaskSubmitReq{
+		Model:  ModelGPTImage2ImageToImage,
+		Prompt: "use the reference",
+		Images: []string{imageURL},
+		Size:   "1440x2560",
+		Metadata: map[string]any{
+			"image[]": []any{imageURL},
+		},
+	}
+
+	body, err := a.convertToRequestPayload(&req, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: ModelGPTImage2ImageToImage}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok := body["images"].([]map[string]string)
+	if !ok {
+		t.Fatalf("images should be Sub2API image_url objects, got %T: %#v", body["images"], body["images"])
+	}
+	if len(got) != 1 || got[0]["image_url"] != imageURL {
+		t.Fatalf("images = %#v want image_url %q", got, imageURL)
+	}
+	if _, hasBracketImage := body["image[]"]; hasBracketImage {
+		t.Fatalf("input should not leak image[] metadata: %#v", body)
+	}
+	if _, hasImage := body["image"]; hasImage {
+		t.Fatalf("input should not include image key: %#v", body)
+	}
+}
+
 func TestDoResponseReturnsPublicTaskAndSchedulesBackgroundWorker(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	a := &TaskAdaptor{}
