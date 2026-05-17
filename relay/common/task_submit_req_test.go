@@ -27,6 +27,58 @@ func TestTaskSubmitReq_UnmarshalJSON_ImageArray(t *testing.T) {
 	}
 }
 
+func TestTaskSubmitReq_UnmarshalJSON_ImageBracketArray(t *testing.T) {
+	const payload = `{
+		"model": "gpt-image-2-image-to-image",
+		"prompt": "test",
+		"image[]": ["https://example.com/a.jpg", "https://example.com/b.jpg"]
+	}`
+	var req TaskSubmitReq
+	if err := common.UnmarshalJsonStr(payload, &req); err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Images) != 2 {
+		t.Fatalf("Images: got %d want 2", len(req.Images))
+	}
+	if req.Images[0] != "https://example.com/a.jpg" || req.Images[1] != "https://example.com/b.jpg" {
+		t.Fatalf("Images = %#v", req.Images)
+	}
+	if _, ok := req.Metadata["image[]"]; ok {
+		t.Fatalf("image[] should not be preserved as metadata: %#v", req.Metadata)
+	}
+	if !req.HasImage() {
+		t.Fatal("HasImage() should be true")
+	}
+}
+
+func TestTaskSubmitReq_UnmarshalJSON_ImageURLObjectArray(t *testing.T) {
+	const payload = `{
+		"model": "gpt-image-2-image-to-image",
+		"prompt": "test",
+		"images": [
+			{"image_url": "https://example.com/a.jpg"},
+			{"image_url": {"url": "https://example.com/b.jpg"}},
+			"https://example.com/c.jpg"
+		]
+	}`
+	var req TaskSubmitReq
+	if err := common.UnmarshalJsonStr(payload, &req); err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Images) != 3 {
+		t.Fatalf("Images: got %d want 3", len(req.Images))
+	}
+	if req.Images[0] != "https://example.com/a.jpg" || req.Images[1] != "https://example.com/b.jpg" || req.Images[2] != "https://example.com/c.jpg" {
+		t.Fatalf("Images = %#v", req.Images)
+	}
+	if _, ok := req.Metadata["images"]; ok {
+		t.Fatalf("images should not be preserved as metadata: %#v", req.Metadata)
+	}
+	if !req.HasImage() {
+		t.Fatal("HasImage() should be true")
+	}
+}
+
 func TestTaskSubmitReq_UnmarshalJSON_ImageString(t *testing.T) {
 	const payload = `{"prompt":"x","image":"https://example.com/one.png"}`
 	var req TaskSubmitReq

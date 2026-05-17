@@ -685,9 +685,9 @@ func resolveBillingResolution(req relaycommon.TaskSubmitReq) string {
 
 // stripAuthoritativeMetadataFields returns a copy of metadata with keys that
 // duplicate authoritative request fields removed. `model`, `prompt`, `size`,
-// and `resolution` are owned by the typed TaskSubmitReq; allowing metadata to
-// shadow them would let a caller silently override the request shape after
-// the typed fields have already been read.
+// `resolution`, and image reference aliases are owned by the typed
+// TaskSubmitReq; allowing metadata to shadow them would let a caller silently
+// override the request shape after the typed fields have already been read.
 func stripAuthoritativeMetadataFields(metadata map[string]any) map[string]any {
 	if metadata == nil {
 		return nil
@@ -695,7 +695,7 @@ func stripAuthoritativeMetadataFields(metadata map[string]any) map[string]any {
 	sanitized := make(map[string]any, len(metadata))
 	for k, v := range metadata {
 		switch k {
-		case "model", "prompt", "size", "resolution":
+		case "model", "prompt", "size", "resolution", "image", "images", "image[]":
 			continue
 		}
 		sanitized[k] = v
