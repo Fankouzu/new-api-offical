@@ -1,3 +1,4 @@
+import { useState, type VideoHTMLAttributes } from 'react'
 import { Copy, ExternalLink, ImageIcon, Video } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -32,25 +33,43 @@ function openExternalUrl(url: string): void {
 
 function TaskMediaCard({ result }: { result: TaskMediaResult }) {
   const { t } = useTranslation()
+  const [loadFailed, setLoadFailed] = useState(false)
   const isImage = result.type === 'image'
   const title = isImage ? t('Generated image') : t('Generated video')
+  const normalizedUrl = result.url.trim()
+  const displayUrl = result.url.startsWith('data:')
+    ? `${result.url.slice(0, 64)}...`
+    : result.url
+  const videoReferrerPolicyProps = {
+    referrerPolicy: 'no-referrer',
+  } as VideoHTMLAttributes<HTMLVideoElement>
 
   return (
     <div className='bg-card overflow-hidden rounded-lg border'>
       <div className='bg-muted/40 flex min-h-[220px] items-center justify-center'>
-        {isImage ? (
+        {loadFailed ? (
+          <div className='text-muted-foreground px-4 text-center text-sm'>
+            {t('Media failed to load')}
+          </div>
+        ) : isImage ? (
           <img
-            src={result.url}
+            src={normalizedUrl}
             alt={title}
+            referrerPolicy='no-referrer'
             loading='lazy'
             className='max-h-[420px] w-full object-contain'
+            onError={() => setLoadFailed(true)}
+            onLoad={() => setLoadFailed(false)}
           />
         ) : (
           <video
-            src={result.url}
+            src={normalizedUrl}
+            {...videoReferrerPolicyProps}
             controls
             preload='metadata'
             className='max-h-[420px] w-full object-contain'
+            onError={() => setLoadFailed(true)}
+            onLoadedMetadata={() => setLoadFailed(false)}
           />
         )}
       </div>
@@ -84,7 +103,7 @@ function TaskMediaCard({ result }: { result: TaskMediaResult }) {
           </div>
         </div>
         <p className='text-muted-foreground font-mono text-xs break-all'>
-          {result.url}
+          {displayUrl}
         </p>
       </div>
     </div>

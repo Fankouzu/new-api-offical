@@ -199,6 +199,16 @@ export const CHANNEL_OPTIONS = [
     color: 'purple',
     label: 'Kie.ai',
   },
+  {
+    value: 60,
+    color: 'blue',
+    label: 'Fal.ai',
+  },
+  {
+    value: 61,
+    color: 'green',
+    label: 'Sub2API-async',
+  },
 ];
 
 // Channel types that support upstream model list fetching in UI.

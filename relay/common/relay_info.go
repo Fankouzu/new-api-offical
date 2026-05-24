@@ -674,6 +674,10 @@ type TaskRelayInfo struct {
 	// 供 DoResponse 在返回给客户端时使用（避免暴露上游真实 ID）。
 	PublicTaskID string
 
+	// AfterTaskInserted is used by task adaptors that return immediately and
+	// complete work in the background after the local task row exists.
+	AfterTaskInserted func(taskID int64)
+
 	ConsumeQuota bool
 
 	// LockedChannel holds the full channel object when the request is bound to
@@ -696,6 +700,59 @@ type TaskSubmitReq struct {
 	Metadata       map[string]interface{} `json:"metadata,omitempty"`
 }
 
+func parseTaskImageURLValue(raw json.RawMessage) (string, bool, error) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", false, nil
+	}
+	switch raw[0] {
+	case '"':
+		var value string
+		if err := common.Unmarshal(raw, &value); err != nil {
+			return "", false, err
+		}
+		value = strings.TrimSpace(value)
+		return value, value != "", nil
+	case '{':
+		var obj map[string]json.RawMessage
+		if err := common.Unmarshal(raw, &obj); err != nil {
+			return "", false, err
+		}
+		imageURLRaw, ok := obj["image_url"]
+		if !ok {
+			imageURLRaw, ok = obj["url"]
+		}
+		if !ok {
+			return "", false, nil
+		}
+		return parseTaskImageURLValue(imageURLRaw)
+	default:
+		return "", false, fmt.Errorf("json: image URL item must be a string or object with image_url")
+	}
+}
+
+func parseTaskImageURLArray(raw json.RawMessage) ([]string, error) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var items []json.RawMessage
+	if err := common.Unmarshal(raw, &items); err != nil {
+		return nil, err
+	}
+	imageURLs := make([]string, 0, len(items))
+	for _, item := range items {
+		imageURL, ok, err := parseTaskImageURLValue(item)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			imageURLs = append(imageURLs, imageURL)
+		}
+	}
+	return imageURLs, nil
+}
+
 func (t *TaskSubmitReq) GetPrompt() string {
 	return t.Prompt
 }
@@ -706,6 +763,7 @@ func (t *TaskSubmitReq) HasImage() bool {
 
 func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 	// "image" may be a single URL string (OpenAI-style) or a list of reference URLs (Seedream / client convention).
+	// "images" / "image[]" are also accepted as provider-neutral reference URL arrays.
 	var raw map[string]json.RawMessage
 	if err := common.Unmarshal(data, &raw); err != nil {
 		return err
@@ -717,8 +775,10 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 		if len(imgRaw) > 0 && string(imgRaw) != "null" {
 			switch imgRaw[0] {
 			case '[':
-				if err := common.Unmarshal(imgRaw, &imageURLs); err != nil {
+				if parsed, err := parseTaskImageURLArray(imgRaw); err != nil {
 					return err
+				} else {
+					imageURLs = append(imageURLs, parsed...)
 				}
 			case '"':
 				if err := common.Unmarshal(imgRaw, &imageStr); err != nil {
@@ -729,6 +789,19 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 			}
 		}
 		delete(raw, "image")
+	}
+	for _, imageArrayKey := range []string{"images", "image[]"} {
+		if imagesRaw, ok := raw[imageArrayKey]; ok {
+			imagesRaw = bytes.TrimSpace(imagesRaw)
+			if len(imagesRaw) > 0 && string(imagesRaw) != "null" {
+				if parsed, err := parseTaskImageURLArray(imagesRaw); err != nil {
+					return err
+				} else {
+					imageURLs = append(imageURLs, parsed...)
+				}
+			}
+			delete(raw, imageArrayKey)
+		}
 	}
 	stitched, err := common.Marshal(raw)
 	if err != nil {
@@ -815,7 +888,7 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 
 func isTaskSubmitReqKnownJSONField(field string) bool {
 	switch field {
-	case "prompt", "model", "mode", "image", "images", "size", "resolution", "duration", "seconds", "input_reference", "metadata":
+	case "prompt", "model", "mode", "image", "images", "image[]", "size", "resolution", "duration", "seconds", "input_reference", "metadata":
 		return true
 	default:
 		return false

@@ -45,6 +45,7 @@ import {
 import { CHANNEL_OPTIONS } from '../../../constants/channel.constants';
 import { stringToColor } from '../../../helpers/render';
 import { Avatar, Space } from '@douyinfe/semi-ui';
+import { resolveTaskPreviewMedia, resolveTaskPreviewUrl } from './taskPreview';
 
 const colors = [
   'amber',
@@ -191,62 +192,12 @@ const renderPlatform = (platform, t) => {
   }
 };
 
-// Resolve preview URL: backend may expose corrected result_url; fallback to nested image URL in task data.
-function extractImageUrlFromTaskData(data) {
-  if (data == null) return '';
-  const walk = (v) => {
-    if (v == null || typeof v !== 'object') return '';
-    if (typeof v.url === 'string' && /^https?:\/\//.test(v.url)) {
-      const lower = v.url.toLowerCase();
-      if (
-        /\.(jpe?g|png|webp|gif)(\?|$)/i.test(v.url) ||
-        lower.includes('seedream') ||
-        (lower.includes('tos-') && lower.includes('jpeg'))
-      ) {
-        return v.url;
-      }
-    }
-    if (Array.isArray(v)) {
-      for (const item of v) {
-        const found = walk(item);
-        if (found) return found;
-      }
-      return '';
-    }
-    for (const k of Object.keys(v)) {
-      const found = walk(v[k]);
-      if (found) return found;
-    }
-    return '';
-  };
-  try {
-    const obj = typeof data === 'string' ? JSON.parse(data) : data;
-    return walk(obj);
-  } catch {
-    return '';
-  }
-}
-
-function resolveTaskPreviewUrl(record) {
-  const primary = record.result_url;
-  if (typeof primary !== 'string' || !/^https?:\/\//.test(primary)) {
-    return extractImageUrlFromTaskData(record.data) || '';
-  }
-  if (
-    record.upstream_kind === 'image' &&
-    primary.includes('/v1/videos/') &&
-    primary.includes('/content')
-  ) {
-    const fromData = extractImageUrlFromTaskData(record.data);
-    if (fromData) return fromData;
-  }
-  return primary;
-}
-
 function isAsyncImageTaskForPreview(record) {
   if (record.upstream_kind === 'image') return true;
   const u = resolveTaskPreviewUrl(record);
-  if (!u || !/^https?:\/\//.test(u)) return false;
+  if (!u) return false;
+  if (/^data:image\/[^;,]+;base64,/i.test(u)) return true;
+  if (!/^https?:\/\//.test(u)) return false;
   const lower = u.toLowerCase();
   return (
     /\.(jpe?g|png|webp|gif)(\?|$)/i.test(u) ||
@@ -323,6 +274,7 @@ export const getTaskLogsColumns = ({
   COLUMN_KEYS,
   copyText,
   openContentModal,
+  openTaskDetailModal,
   isAdminUser,
   openVideoModal,
   openImageModal,
@@ -420,7 +372,7 @@ export const getTaskLogsColumns = ({
           <Typography.Text
             ellipsis={{ showTooltip: true }}
             onClick={() => {
-              openContentModal(JSON.stringify(record, null, 2));
+              openTaskDetailModal(record);
             }}
           >
             <div>{text}</div>
@@ -489,12 +441,16 @@ export const getTaskLogsColumns = ({
         }
 
         const isSuccess = record.status === 'SUCCESS';
-        const previewUrl = resolveTaskPreviewUrl(record);
+        const previewMedia = resolveTaskPreviewMedia(record);
+        const previewUrl = previewMedia.url;
         const hasPreviewUrl =
-          typeof previewUrl === 'string' && /^https?:\/\//.test(previewUrl);
+          typeof previewUrl === 'string' &&
+          (/^https?:\/\//.test(previewUrl) ||
+            /^\/api\/task\/\d+\/result$/i.test(previewUrl) ||
+            /^data:image\/[^;,]+;base64,/i.test(previewUrl));
 
         // Async image (e.g. PingXingShiJie OpenAI-compatible image generations)
-        if (isSuccess && isAsyncImageTaskForPreview(record) && hasPreviewUrl) {
+        if (isSuccess && previewMedia.type === 'image' && hasPreviewUrl) {
           return (
             <a
               href='#'
@@ -517,7 +473,7 @@ export const getTaskLogsColumns = ({
             record.action === TASK_ACTION_REMIX_GENERATE) &&
           record.upstream_kind !== 'image' &&
           record.upstream_kind !== 'asset';
-        if (isSuccess && isVideoTask && hasPreviewUrl) {
+        if (isSuccess && previewMedia.type === 'video' && isVideoTask && hasPreviewUrl) {
           return (
             <a
               href='#'

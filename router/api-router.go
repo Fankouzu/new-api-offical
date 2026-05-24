@@ -31,6 +31,13 @@ func SetApiRouter(router *gin.Engine) {
 		//apiRouter.GET("/midjourney", controller.GetMidjourney)
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
 		apiRouter.GET("/pricing", middleware.TryUserAuth(), controller.GetPricing)
+		perfMetricsRoute := apiRouter.Group("/perf-metrics")
+		perfMetricsRoute.Use(middleware.TryUserAuth())
+		{
+			perfMetricsRoute.GET("/summary", controller.GetPerfMetricsSummary)
+			perfMetricsRoute.GET("", controller.GetPerfMetrics)
+		}
+		apiRouter.GET("/rankings", controller.GetRankings)
 		apiRouter.GET("/verification", middleware.EmailVerificationRateLimit(), middleware.TurnstileCheck(), controller.SendEmailVerification)
 		apiRouter.GET("/reset_password", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendPasswordResetEmail)
 		apiRouter.POST("/user/reset", middleware.CriticalRateLimit(), controller.ResetPassword)
@@ -326,6 +333,12 @@ func SetApiRouter(router *gin.Engine) {
 		taskRoute := apiRouter.Group("/task")
 		{
 			taskRoute.GET("/self", middleware.UserAuth(), controller.GetUserTask)
+			taskRoute.GET("/self/:id/raw", middleware.UserAuth(), controller.GetUserTaskRawByID)
+			taskRoute.GET("/self/:id/result", middleware.BrowserSessionUserAuth(), controller.GetUserTaskResultByID)
+			taskRoute.GET("/self/:id", middleware.UserAuth(), controller.GetUserTaskByID)
+			taskRoute.GET("/:id/raw", middleware.AdminAuth(), controller.GetTaskRawByID)
+			taskRoute.GET("/:id/result", middleware.BrowserSessionAdminAuth(), controller.GetTaskResultByID)
+			taskRoute.GET("/:id", middleware.AdminAuth(), controller.GetTaskByID)
 			taskRoute.GET("/", middleware.AdminAuth(), controller.GetAllTask)
 		}
 

@@ -26,6 +26,7 @@ import TaskLogsFilters from './TaskLogsFilters';
 import ColumnSelectorModal from './modals/ColumnSelectorModal';
 import ContentModal from './modals/ContentModal';
 import AudioPreviewModal from './modals/AudioPreviewModal';
+import TaskDetailModal from './modals/TaskDetailModal';
 import { useTaskLogsData } from '../../../hooks/task-logs/useTaskLogsData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
@@ -38,6 +39,7 @@ const TaskLogsPage = () => {
     <>
       {/* Modals */}
       <ColumnSelectorModal {...taskLogsData} />
+      <TaskDetailModal {...taskLogsData} />
       <ContentModal {...taskLogsData} isVideo={false} isImage={false} />
       {/* 新增：视频预览弹窗 */}
       <ContentModal

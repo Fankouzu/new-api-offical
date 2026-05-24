@@ -35,6 +35,42 @@ const ContentModal = ({
   const [videoError, setVideoError] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [mediaSrc, setMediaSrc] = useState('');
+
+  useEffect(() => {
+    if (!isModalOpen || (!isVideo && !isImage)) {
+      setMediaSrc('');
+      return;
+    }
+
+    let cancelled = false;
+    const normalizedContent =
+      typeof modalContent === 'string' ? modalContent.trim() : '';
+
+    setVideoError(false);
+    setImageError(false);
+    setIsLoading(true);
+    setMediaSrc('');
+
+    const setDirectMedia = () => {
+      if (cancelled) return;
+      setMediaSrc(normalizedContent);
+      setIsLoading(false);
+    };
+
+    if (!normalizedContent || normalizedContent.startsWith('data:')) {
+      setDirectMedia();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setDirectMedia();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isModalOpen, isVideo, isImage, modalContent]);
 
   useEffect(() => {
     if (isModalOpen && isVideo) {
@@ -150,7 +186,8 @@ const ContentModal = ({
           </div>
         )}
         <video
-          src={modalContent}
+          src={mediaSrc}
+          referrerPolicy='no-referrer'
           controls
           style={{
             width: '100%',
@@ -223,18 +260,20 @@ const ContentModal = ({
             <Spin size='large' />
           </div>
         )}
-        <img
-          src={modalContent}
-          alt=''
-          style={{
-            maxWidth: '100%',
-            maxHeight: '65vh',
-            objectFit: 'contain',
-          }}
-          onError={handleImageError}
-          onLoad={handleImageLoaded}
-          onLoadStart={() => setIsLoading(true)}
-        />
+        {mediaSrc ? (
+          <img
+            src={mediaSrc}
+            alt=''
+            referrerPolicy='no-referrer'
+            style={{
+              maxWidth: '100%',
+              maxHeight: '65vh',
+              objectFit: 'contain',
+            }}
+            onError={handleImageError}
+            onLoad={handleImageLoaded}
+          />
+        ) : null}
       </div>
     );
   };

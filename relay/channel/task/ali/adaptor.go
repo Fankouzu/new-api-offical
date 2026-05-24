@@ -35,19 +35,19 @@ type AliVideoRequest struct {
 
 // AliVideoInput 视频输入参数
 type AliVideoInput struct {
-	Prompt         string      `json:"prompt,omitempty"`          // 文本提示词
-	ImgURL         string      `json:"img_url,omitempty"`         // 首帧图像URL或Base64（图生视频）
-	FirstFrameURL  string      `json:"first_frame_url,omitempty"` // 首帧图片URL（首尾帧生视频）
-	LastFrameURL   string      `json:"last_frame_url,omitempty"`  // 尾帧图片URL（首尾帧生视频）
-	AudioURL       string      `json:"audio_url,omitempty"`       // 音频URL（wan2.5支持）
-	NegativePrompt string      `json:"negative_prompt,omitempty"` // 反向提示词
-	Template       string      `json:"template,omitempty"`        // 视频特效模板
-	Media          []AliMedia  `json:"media,omitempty"`           // PixVerse 媒体素材
+	Prompt         string     `json:"prompt,omitempty"`          // 文本提示词
+	ImgURL         string     `json:"img_url,omitempty"`         // 首帧图像URL或Base64（图生视频）
+	FirstFrameURL  string     `json:"first_frame_url,omitempty"` // 首帧图片URL（首尾帧生视频）
+	LastFrameURL   string     `json:"last_frame_url,omitempty"`  // 尾帧图片URL（首尾帧生视频）
+	AudioURL       string     `json:"audio_url,omitempty"`       // 音频URL（wan2.5支持）
+	NegativePrompt string     `json:"negative_prompt,omitempty"` // 反向提示词
+	Template       string     `json:"template,omitempty"`        // 视频特效模板
+	Media          []AliMedia `json:"media,omitempty"`           // PixVerse 媒体素材
 }
 
 // AliMedia PixVerse 媒体素材
 type AliMedia struct {
-	Type    string `json:"type"`                // image_url / first_frame / last_frame
+	Type    string `json:"type"` // image_url / first_frame / last_frame
 	URL     string `json:"url"`
 	RefName string `json:"ref_name,omitempty"` // 参考生视频引用名
 }
@@ -290,7 +290,7 @@ func ProcessAliOtherRatios(aliReq *AliVideoRequest) (map[string]float64, error) 
 		ratioKey := fmt.Sprintf("%s-%s", resolution, audioKey)
 
 		if strings.Contains(aliReq.Model, "v6") {
-				// PixVerse v6 基准：360P 无声 = 1.0 (0.15元/秒)
+			// PixVerse v6 基准：360P 无声 = 1.0 (0.15元/秒)
 			pixverseV6Ratios := map[string]float64{
 				"360P-no-audio":  1.0,
 				"360P-audio":     0.21 / 0.15,
@@ -306,7 +306,7 @@ func ProcessAliOtherRatios(aliReq *AliVideoRequest) (map[string]float64, error) 
 				otherRatios[fmt.Sprintf("resolution-%s", resolution)] = ratio
 			}
 		} else {
-				// PixVerse v5.6 基准：360P/540P 无声 = 1.0 (0.21元/秒)
+			// PixVerse v5.6 基准：360P/540P 无声 = 1.0 (0.21元/秒)
 			pixverseV56Ratios := map[string]float64{
 				"360P-no-audio":  1.0,
 				"360P-audio":     0.47 / 0.21,
@@ -445,6 +445,8 @@ func (a *TaskAdaptor) buildPixverseRequest(aliReq *AliVideoRequest, req relaycom
 			aliReq.Input.Media = []AliMedia{{Type: "image_url", URL: req.InputReference}}
 		} else if len(req.Images) > 0 {
 			aliReq.Input.Media = []AliMedia{{Type: "image_url", URL: req.Images[0]}}
+		} else {
+			return fmt.Errorf("pixverse it2v requires an input image")
 		}
 	case "-kf2v":
 		// 首尾帧生视频：使用 resolution（档位），media[{type:"first_frame"}, {type:"last_frame"}]
@@ -454,6 +456,8 @@ func (a *TaskAdaptor) buildPixverseRequest(aliReq *AliVideoRequest, req relaycom
 				{Type: "first_frame", URL: req.Images[0]},
 				{Type: "last_frame", URL: req.Images[1]},
 			}
+		} else {
+			return fmt.Errorf("pixverse kf2v requires first and last frame images")
 		}
 	case "-r2v":
 		// 参考生视频：使用 size（像素值），media[{type:"image_url", url:img, ref_name:...}]
@@ -464,7 +468,11 @@ func (a *TaskAdaptor) buildPixverseRequest(aliReq *AliVideoRequest, req relaycom
 				media = append(media, AliMedia{Type: "image_url", URL: imgURL})
 			}
 			aliReq.Input.Media = media
+		} else {
+			return fmt.Errorf("pixverse r2v requires at least one reference image")
 		}
+	default:
+		return fmt.Errorf("unsupported pixverse model suffix in %q", aliReq.Model)
 	}
 
 	return nil

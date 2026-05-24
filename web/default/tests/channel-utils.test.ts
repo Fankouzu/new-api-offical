@@ -17,4 +17,11 @@ describe('channel type mappings', () => {
     expect(getChannelTypeLabel(59)).toBe('KieAI')
     expect(getChannelTypeIcon(59)).toBe('https://kie.ai/logo.png')
   })
+
+  test('maps FalAI channel type to its label and logo URL', () => {
+    expect(getChannelTypeLabel(60)).toBe('FalAI')
+    expect(getChannelTypeIcon(60)).toBe(
+      'https://icons.lobehub.com/components/fal'
+    )
+  })
 })

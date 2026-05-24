@@ -61,7 +61,7 @@ import {
   AzureAI,
   Hunyuan,
   Xinference,
-} from '@lobehub/icons';
+} from '../../helpers/lobeIcons';
 
 const { Text } = Typography;
 

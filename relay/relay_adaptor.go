@@ -32,6 +32,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/submodel"
 	taskali "github.com/QuantumNous/new-api/relay/channel/task/ali"
 	taskdoubao "github.com/QuantumNous/new-api/relay/channel/task/doubao"
+	taskfal "github.com/QuantumNous/new-api/relay/channel/task/fal"
 	taskGemini "github.com/QuantumNous/new-api/relay/channel/task/gemini"
 	"github.com/QuantumNous/new-api/relay/channel/task/hailuo"
 	taskjimeng "github.com/QuantumNous/new-api/relay/channel/task/jimeng"
@@ -39,6 +40,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/task/kling"
 	taskpxsj "github.com/QuantumNous/new-api/relay/channel/task/pingxingshijie"
 	tasksora "github.com/QuantumNous/new-api/relay/channel/task/sora"
+	tasksub2apiasync "github.com/QuantumNous/new-api/relay/channel/task/sub2api_async"
 	"github.com/QuantumNous/new-api/relay/channel/task/suno"
 	taskvertex "github.com/QuantumNous/new-api/relay/channel/task/vertex"
 	taskVidu "github.com/QuantumNous/new-api/relay/channel/task/vidu"
@@ -159,6 +161,10 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &taskpxsj.TaskAdaptor{}
 		case constant.ChannelTypeKieAI:
 			return &taskkie.TaskAdaptor{}
+		case constant.ChannelTypeFalAI:
+			return &taskfal.TaskAdaptor{}
+		case constant.ChannelTypeSub2APIAsync:
+			return &tasksub2apiasync.TaskAdaptor{}
 		case constant.ChannelTypeSora, constant.ChannelTypeOpenAI:
 			return &tasksora.TaskAdaptor{}
 		case constant.ChannelTypeGemini:

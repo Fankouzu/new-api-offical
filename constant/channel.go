@@ -57,6 +57,8 @@ const (
 	ChannelTypeCodex          = 57
 	ChannelTypePingXingShiJie = 58
 	ChannelTypeKieAI          = 59
+	ChannelTypeFalAI          = 60
+	ChannelTypeSub2APIAsync   = 61
 	ChannelTypeDummy          // this one is only for count, do not add any channel after this
 
 )
@@ -122,6 +124,8 @@ var ChannelBaseURLs = []string{
 	"https://chatgpt.com",                       //57
 	"https://api.pingxingshijie.cn",             //58 PingXingShiJie
 	"https://api.kie.ai",                        //59 KieAI
+	"https://queue.fal.run",                     //60 FalAI
+	"https://api.sub2api.com",                   //61 Sub2API-async
 }
 
 var ChannelTypeNames = map[int]string{
@@ -181,6 +185,8 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeCodex:          "Codex",
 	ChannelTypePingXingShiJie: "PingXingShiJie",
 	ChannelTypeKieAI:          "KieAI",
+	ChannelTypeFalAI:          "FalAI",
+	ChannelTypeSub2APIAsync:   "Sub2API-async",
 }
 
 func GetChannelTypeName(channelType int) string {

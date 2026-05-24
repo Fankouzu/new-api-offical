@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/moonshot"
 	taskkie "github.com/QuantumNous/new-api/relay/channel/task/kie"
 	taskpxsj "github.com/QuantumNous/new-api/relay/channel/task/pingxingshijie"
+	tasksub2apiasync "github.com/QuantumNous/new-api/relay/channel/task/sub2api_async"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
@@ -109,6 +110,10 @@ func init() {
 		}
 		if i == constant.ChannelTypeKieAI {
 			channelId2Models[i] = append([]string(nil), taskkie.ModelList...)
+			continue
+		}
+		if i == constant.ChannelTypeSub2APIAsync {
+			channelId2Models[i] = append([]string(nil), tasksub2apiasync.ModelList...)
 			continue
 		}
 		apiType, success := common.ChannelType2APIType(i)

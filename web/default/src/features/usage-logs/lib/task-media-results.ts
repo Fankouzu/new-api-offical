@@ -8,6 +8,7 @@ export type TaskMediaResult = {
 
 type TaskMediaSource = Pick<
   TaskLog,
+  | 'id'
   | 'action'
   | 'data'
   | 'fail_reason'
@@ -18,6 +19,7 @@ type TaskMediaSource = Pick<
 >
 
 const HTTP_URL_PATTERN = /^https?:\/\//i
+const DATA_IMAGE_URL_PATTERN = /^data:image\/[^;,]+;base64,/i
 const IMAGE_URL_PATTERN = /\.(jpe?g|png|webp|gif|bmp|avif)(\?|#|$)/i
 const VIDEO_URL_PATTERN = /\.(mp4|webm|mov|m4v|avi|mkv|m3u8)(\?|#|$)/i
 const VIDEO_ACTIONS = new Set<string>([
@@ -27,29 +29,16 @@ const VIDEO_ACTIONS = new Set<string>([
   TASK_ACTIONS.REFERENCE_GENERATE,
   TASK_ACTIONS.REMIX_GENERATE,
 ])
-const RESULT_KEY_PATTERN = /(result|output|generated|media|asset|content)/i
 const IMAGE_KEY_PATTERN = /image|img|thumbnail|cover|first_frame|last_frame/i
 const VIDEO_KEY_PATTERN = /video/i
 const INPUT_KEY_PATTERN = /(request|input|prompt|source|reference|mask)/i
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function parseTaskData(data: unknown): unknown {
-  if (typeof data !== 'string') return data
-  const trimmed = data.trim()
-  if (!trimmed) return undefined
-
-  try {
-    return JSON.parse(trimmed) as unknown
-  } catch {
-    return undefined
-  }
-}
-
 function isHttpUrl(value: unknown): value is string {
   return typeof value === 'string' && HTTP_URL_PATTERN.test(value.trim())
+}
+
+function isDataImageUrl(value: unknown): value is string {
+  return typeof value === 'string' && DATA_IMAGE_URL_PATTERN.test(value.trim())
 }
 
 function looksLikeImageUrl(url: string): boolean {
@@ -110,9 +99,16 @@ function addMediaResult(
   keyHint?: string,
   allowTaskFallback: boolean = false
 ): void {
-  if (!isHttpUrl(urlValue)) return
+  if (!isHttpUrl(urlValue) && !isDataImageUrl(urlValue)) return
 
   const url = urlValue.trim()
+  if (isDataImageUrl(url)) {
+    if (seen.has(url)) return
+    seen.add(url)
+    results.push({ type: 'image', url })
+    return
+  }
+
   if (isStaleImageProxyUrl(url, source)) return
   if (
     isTaskVideoProxyUrl(url, source) &&
@@ -126,51 +122,47 @@ function addMediaResult(
   if (!type) return
 
   seen.add(url)
-  results.push({ type, url })
+  const previewUrl =
+    source.id && isHttpUrl(url)
+      ? `/api/task/${source.id}/result`
+      : url
+  results.push({ type, url: previewUrl })
 }
 
-function walkTaskData(
-  value: unknown,
-  source: TaskMediaSource,
+function parseTaskData(data: unknown): unknown {
+  if (typeof data !== 'string') return data
+  const trimmed = data.trim()
+  if (!trimmed) return undefined
+  try {
+    return JSON.parse(trimmed) as unknown
+  } catch {
+    return data
+  }
+}
+
+function collectMediaFromValue(
   results: TaskMediaResult[],
   seen: Set<string>,
+  source: TaskMediaSource,
+  value: unknown,
   keyHint?: string
 ): void {
+  if (typeof value === 'string') {
+    addMediaResult(results, seen, source, value, keyHint)
+    return
+  }
+
   if (Array.isArray(value)) {
     for (const item of value) {
-      walkTaskData(item, source, results, seen, keyHint)
+      collectMediaFromValue(results, seen, source, item, keyHint)
     }
     return
   }
 
-  if (!isRecord(value)) {
-    addMediaResult(
-      results,
-      seen,
-      source,
-      value,
-      keyHint,
-      RESULT_KEY_PATTERN.test(keyHint ?? '')
-    )
-    return
-  }
+  if (!value || typeof value !== 'object') return
 
-  for (const [key, nestedValue] of Object.entries(value)) {
-    const nestedKeyHint = keyHint ? `${keyHint}.${key}` : key
-    const allowTaskFallback = RESULT_KEY_PATTERN.test(nestedKeyHint)
-    if (isHttpUrl(nestedValue)) {
-      addMediaResult(
-        results,
-        seen,
-        source,
-        nestedValue,
-        nestedKeyHint,
-        allowTaskFallback
-      )
-      continue
-    }
-
-    walkTaskData(nestedValue, source, results, seen, nestedKeyHint)
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    collectMediaFromValue(results, seen, source, child, key)
   }
 }
 
@@ -182,7 +174,7 @@ export function extractTaskMediaResults(source: TaskMediaSource): TaskMediaResul
 
   addMediaResult(results, seen, source, source.result_url, 'result_url', true)
   addMediaResult(results, seen, source, source.fail_reason, 'fail_reason', true)
-  walkTaskData(parseTaskData(source.data), source, results, seen)
+  collectMediaFromValue(results, seen, source, parseTaskData(source.data), 'data')
 
   return results
 }
