@@ -179,13 +179,13 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 		if err := common.UnmarshalBodyReusable(c, &req); err != nil {
 			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 		}
-		if strings.TrimSpace(req.Model) == "" {
-			req.Model = AssetPlaceholderModel
+		if err := ValidateAssetUploadModel(req.Model); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 		}
 		if strings.TrimSpace(req.Prompt) == "" {
 			req.Prompt = "asset-upload"
 		}
-		info.Action = constant.TaskActionGenerate
+		info.Action = constant.TaskActionAssetUpload
 		c.Set("task_request", req)
 		return nil
 	case UpstreamKindImage:
@@ -295,6 +295,17 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		raw, err := storage.Bytes()
 		if err != nil {
 			return nil, err
+		}
+		if kind == UpstreamKindAsset {
+			var m map[string]any
+			if err := common.Unmarshal(raw, &m); err != nil {
+				return nil, errors.Wrap(err, "unmarshal asset request")
+			}
+			delete(m, "model")
+			raw, err = common.Marshal(m)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if kind == UpstreamKindImage {
 			var m map[string]any
