@@ -51,9 +51,20 @@ var gptImage2ResolutionWeights = map[string]float64{
 	"4K": 8,
 }
 
+// geminiFlashImageResolutionWeights matches gpt-image-2 tiers and adds a
+// cheap "512" tier (flash-image-only feature). The base unit is 1K=3 so
+// relative weights are consistent across all models in this channel.
+var geminiFlashImageResolutionWeights = map[string]float64{
+	"512": 1,
+	"1K":  3,
+	"2K":  5,
+	"4K":  8,
+}
+
 var imageResolutionRatioWeights = map[string]map[string]float64{
 	ModelGPTImage2TextToImage:  gptImage2ResolutionWeights,
 	ModelGPTImage2ImageToImage: gptImage2ResolutionWeights,
+	ModelGeminiFlashImage:      geminiFlashImageResolutionWeights,
 }
 
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
@@ -82,9 +93,14 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	if err != nil {
 		return nil
 	}
-	resolution := normalizeImageResolution(resolveBillingResolution(req))
-	if resolution == "" {
-		resolution = "1K"
+	var resolution string
+	if info.OriginModelName == ModelGeminiFlashImage {
+		resolution = resolveGeminiImageSize(req)
+	} else {
+		resolution = normalizeImageResolution(resolveBillingResolution(req))
+		if resolution == "" {
+			resolution = "1K"
+		}
 	}
 	weight, ok := weights[resolution]
 	if !ok {
@@ -97,14 +113,22 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	return map[string]float64{"resolution": weight / baseWeight}
 }
 
-func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
+func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
+	if info != nil && info.OriginModelName == ModelGeminiFlashImage {
+		// Gemini authenticates via query param rather than Bearer header.
+		return a.baseURL + UpstreamPathGeminiFlashImage + "?key=" + a.apiKey, nil
+	}
 	return a.baseURL + UpstreamPathImagesGenerations, nil
 }
 
-func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *relaycommon.RelayInfo) error {
+func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, info *relaycommon.RelayInfo) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+a.apiKey)
+	// Gemini authenticates via ?key= query param (injected in BuildRequestURL);
+	// Bearer is only used for OpenAI-compatible endpoints.
+	if info == nil || info.OriginModelName != ModelGeminiFlashImage {
+		req.Header.Set("Authorization", "Bearer "+a.apiKey)
+	}
 	return nil
 }
 
@@ -113,13 +137,25 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if err != nil {
 		return nil, err
 	}
-	body, err := a.convertToRequestPayload(&req, info)
-	if err != nil {
-		return nil, err
-	}
-	data, err := common.Marshal(body)
-	if err != nil {
-		return nil, err
+	var data []byte
+	if info != nil && info.OriginModelName == ModelGeminiFlashImage {
+		geminiReq, err := buildGeminiImageRequest(&req, info)
+		if err != nil {
+			return nil, err
+		}
+		data, err = common.Marshal(geminiReq)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		body, err := a.convertToRequestPayload(&req, info)
+		if err != nil {
+			return nil, err
+		}
+		data, err = common.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return bytes.NewReader(data), nil
 }
@@ -164,12 +200,17 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 				requestID = v
 			}
 		}
+		// Capture modelName now — info may be mutated or GC'd after this
+		// handler returns, but the goroutine needs it to route the upstream
+		// call (Gemini vs OpenAI path). This is method B: pass model as an
+		// explicit parameter rather than encoding it in the request body.
+		modelName := info.OriginModelName
 		info.AfterTaskInserted = func(localTaskID int64) {
 			bgCtx := context.Background()
 			if requestID != "" {
 				bgCtx = context.WithValue(bgCtx, common.RequestIdKey, requestID)
 			}
-			a.scheduleSyncImageGeneration(bgCtx, localTaskID, requestBody)
+			a.scheduleSyncImageGeneration(bgCtx, localTaskID, modelName, requestBody)
 		}
 	}
 
@@ -205,15 +246,15 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	return parseOpenAIAsyncImageTaskResult(respBody)
 }
 
-func (a *TaskAdaptor) scheduleSyncImageGeneration(ctx context.Context, localTaskID int64, requestBody []byte) {
+func (a *TaskAdaptor) scheduleSyncImageGeneration(ctx context.Context, localTaskID int64, modelName string, requestBody []byte) {
 	baseURL := a.baseURL
 	apiKey := a.apiKey
 	gopool.Go(func() {
-		runSub2APIAsyncImageGeneration(ctx, localTaskID, baseURL, apiKey, requestBody)
+		runSub2APIAsyncImageGeneration(ctx, localTaskID, baseURL, apiKey, modelName, requestBody)
 	})
 }
 
-func runSub2APIAsyncImageGeneration(ctx context.Context, localTaskID int64, baseURL, apiKey string, requestBody []byte) {
+func runSub2APIAsyncImageGeneration(ctx context.Context, localTaskID int64, baseURL, apiKey, modelName string, requestBody []byte) {
 	task, exists, err := model.GetTaskByID(localTaskID)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("sub2api async get task failed: %v", err))
@@ -240,13 +281,13 @@ func runSub2APIAsyncImageGeneration(ctx context.Context, localTaskID int64, base
 		return
 	}
 
-	respBody, err := doSyncImageGeneration(ctx, baseURL, apiKey, requestBody)
+	respBody, err := doSyncImageGeneration(ctx, baseURL, apiKey, modelName, requestBody)
 	if err != nil {
 		markSub2APIAsyncTaskFailed(ctx, task, err.Error())
 		return
 	}
 
-	resultURL, err := parseSyncImageGenerationResult(respBody)
+	resultURL, err := parseSyncImageGenerationResult(modelName, respBody)
 	if err != nil {
 		markSub2APIAsyncTaskFailed(ctx, task, err.Error())
 		return
@@ -264,24 +305,35 @@ func runSub2APIAsyncImageGeneration(ctx context.Context, localTaskID int64, base
 	}
 }
 
-func doSyncImageGeneration(ctx context.Context, baseURL, apiKey string, requestBody []byte) ([]byte, error) {
+func doSyncImageGeneration(ctx context.Context, baseURL, apiKey, modelName string, requestBody []byte) ([]byte, error) {
 	baseURL = strings.TrimRight(baseURL, "/")
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
-	requestPath, err := syncImageGenerationRequestPath(requestBody)
-	if err != nil {
-		return nil, err
+
+	var fullURL string
+	if modelName == ModelGeminiFlashImage {
+		// Gemini authenticates via ?key= query param; no Bearer header needed.
+		fullURL = baseURL + UpstreamPathGeminiFlashImage + "?key=" + apiKey
+	} else {
+		requestPath, err := syncImageGenerationRequestPath(requestBody)
+		if err != nil {
+			return nil, err
+		}
+		fullURL = baseURL + requestPath
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, syncImageGenerationTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+requestPath, bytes.NewReader(requestBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(requestBody))
 	if err != nil {
 		return nil, fmt.Errorf("new upstream request failed: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	if modelName != ModelGeminiFlashImage {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
 
 	client := &http.Client{Timeout: syncImageGenerationTimeout}
 	resp, err := client.Do(req)
@@ -341,7 +393,10 @@ func syncImageGenerationRequestPath(requestBody []byte) (string, error) {
 	}
 }
 
-func parseSyncImageGenerationResult(respBody []byte) (string, error) {
+func parseSyncImageGenerationResult(modelName string, respBody []byte) (string, error) {
+	if modelName == ModelGeminiFlashImage {
+		return parseGeminiImageResult(respBody)
+	}
 	var res openAIImageGenerationResponse
 	if err := common.Unmarshal(respBody, &res); err != nil {
 		return "", errors.Wrap(err, "unmarshal upstream image response failed")

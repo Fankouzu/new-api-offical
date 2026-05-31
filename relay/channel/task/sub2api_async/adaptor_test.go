@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -343,7 +344,7 @@ func TestDoSyncImageGenerationRoutesByGPTImage2Mode(t *testing.T) {
 			defer server.Close()
 
 			body := []byte(`{"model":"` + tc.model + `","prompt":"make an image"}`)
-			_, err := doSyncImageGeneration(t.Context(), server.URL, "test-key", body)
+			_, err := doSyncImageGeneration(t.Context(), server.URL, "test-key", tc.model, body)
 			if err != nil {
 				t.Fatalf("doSyncImageGeneration error = %v, seen path %q", err, seenPath)
 			}
@@ -392,7 +393,7 @@ func TestParseTaskResultMapsStatesAndResultURL(t *testing.T) {
 }
 
 func TestParseSyncImageGenerationResult(t *testing.T) {
-	urlResult, err := parseSyncImageGenerationResult([]byte(`{"created":1,"data":[{"url":"https://example.com/out.png"}]}`))
+	urlResult, err := parseSyncImageGenerationResult(ModelGPTImage2TextToImage, []byte(`{"created":1,"data":[{"url":"https://example.com/out.png"}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -400,7 +401,7 @@ func TestParseSyncImageGenerationResult(t *testing.T) {
 		t.Fatalf("url result = %q", urlResult)
 	}
 
-	b64Result, err := parseSyncImageGenerationResult([]byte(`{"created":1,"data":[{"b64_json":"abc123"}]}`))
+	b64Result, err := parseSyncImageGenerationResult(ModelGPTImage2TextToImage, []byte(`{"created":1,"data":[{"b64_json":"abc123"}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -571,5 +572,391 @@ func assertInput(t *testing.T, input map[string]any, key string, want any) {
 	}
 	if got != want {
 		t.Fatalf("input[%q] = %#v, want %#v", key, got, want)
+	}
+}
+
+// ─── Gemini image tests ───────────────────────────────────────────────────────
+
+func TestBuildGeminiImageRequestTextOnly(t *testing.T) {
+	req := relaycommon.TaskSubmitReq{
+		Model:  ModelGeminiFlashImage,
+		Prompt: "a shiba inu in a spacesuit",
+	}
+	got, err := buildGeminiImageRequest(&req, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Contents) != 1 {
+		t.Fatalf("contents len = %d", len(got.Contents))
+	}
+	if got.Contents[0].Role != "user" {
+		t.Fatalf("role = %q", got.Contents[0].Role)
+	}
+	parts := got.Contents[0].Parts
+	if len(parts) != 1 {
+		t.Fatalf("parts len = %d, want 1 (text only)", len(parts))
+	}
+	if parts[0].Text != req.Prompt {
+		t.Fatalf("text = %q", parts[0].Text)
+	}
+	if parts[0].FileData != nil {
+		t.Fatalf("expected no fileData for text-only request")
+	}
+	modalities := got.GenerationConfig.ResponseModalities
+	if len(modalities) != 2 || modalities[0] != "TEXT" || modalities[1] != "IMAGE" {
+		t.Fatalf("responseModalities = %v", modalities)
+	}
+}
+
+func TestBuildGeminiImageRequestWithSingleInputURL(t *testing.T) {
+	req := relaycommon.TaskSubmitReq{
+		Model:  ModelGeminiFlashImage,
+		Prompt: "convert to van gogh style",
+		Image:  "https://example.com/photo.jpg",
+	}
+	got, err := buildGeminiImageRequest(&req, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := got.Contents[0].Parts
+	if len(parts) != 2 {
+		t.Fatalf("parts len = %d, want 2 (text + 1 image)", len(parts))
+	}
+	if parts[0].Text != req.Prompt {
+		t.Fatalf("text part = %q", parts[0].Text)
+	}
+	fd := parts[1].FileData
+	if fd == nil {
+		t.Fatal("expected fileData in second part")
+	}
+	if fd.FileURI != req.Image {
+		t.Fatalf("fileUri = %q, want %q", fd.FileURI, req.Image)
+	}
+	if fd.MimeType != "image/jpeg" {
+		t.Fatalf("mimeType = %q", fd.MimeType)
+	}
+}
+
+func TestBuildGeminiImageRequestWithMultipleInputURLs(t *testing.T) {
+	urls := []string{
+		"https://example.com/img1.png",
+		"https://example.com/img2.jpg",
+		"https://example.com/img3.webp",
+	}
+	req := relaycommon.TaskSubmitReq{
+		Model:  ModelGeminiFlashImage,
+		Prompt: "merge these styles",
+		Images: urls,
+	}
+	got, err := buildGeminiImageRequest(&req, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := got.Contents[0].Parts
+	if len(parts) != 4 {
+		t.Fatalf("parts len = %d, want 4 (text + 3 images)", len(parts))
+	}
+	for i, u := range urls {
+		fd := parts[i+1].FileData
+		if fd == nil {
+			t.Fatalf("parts[%d].fileData is nil", i+1)
+		}
+		if fd.FileURI != u {
+			t.Fatalf("parts[%d].fileUri = %q, want %q", i+1, fd.FileURI, u)
+		}
+	}
+}
+
+func TestBuildGeminiImageRequestWithInputURLsFromMetadata(t *testing.T) {
+	req := relaycommon.TaskSubmitReq{
+		Model:  ModelGeminiFlashImage,
+		Prompt: "style transfer",
+		Metadata: map[string]any{
+			"input_urls": []any{"https://example.com/ref.png"},
+		},
+	}
+	got, err := buildGeminiImageRequest(&req, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := got.Contents[0].Parts
+	if len(parts) != 2 {
+		t.Fatalf("parts len = %d, want 2 (text + 1 from input_urls)", len(parts))
+	}
+	if parts[1].FileData == nil || parts[1].FileData.FileURI != "https://example.com/ref.png" {
+		t.Fatalf("unexpected fileData: %+v", parts[1].FileData)
+	}
+}
+
+func TestBuildGeminiImageRequestDeduplicatesURLs(t *testing.T) {
+	const dupURL = "https://example.com/same.png"
+	req := relaycommon.TaskSubmitReq{
+		Model:  ModelGeminiFlashImage,
+		Prompt: "test dedup",
+		Image:  dupURL,
+		Images: []string{dupURL, "https://example.com/other.jpg"},
+	}
+	got, err := buildGeminiImageRequest(&req, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// text + dupURL (once) + other = 3 parts total
+	parts := got.Contents[0].Parts
+	if len(parts) != 3 {
+		t.Fatalf("parts len = %d, want 3 after dedup", len(parts))
+	}
+}
+
+func TestBuildGeminiImageRequestWithAspectRatioAndImageSize(t *testing.T) {
+	req := relaycommon.TaskSubmitReq{
+		Model:  ModelGeminiFlashImage,
+		Prompt: "wide banner",
+		Metadata: map[string]any{
+			"aspect_ratio": "16:9",
+			"image_size":   "2K",
+		},
+	}
+	got, err := buildGeminiImageRequest(&req, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := got.GenerationConfig.ImageConfig
+	if cfg == nil {
+		t.Fatal("expected imageConfig to be set")
+	}
+	if cfg.AspectRatio != "16:9" {
+		t.Fatalf("aspectRatio = %q", cfg.AspectRatio)
+	}
+	if cfg.ImageSize != "2K" {
+		t.Fatalf("imageSize = %q", cfg.ImageSize)
+	}
+}
+
+func TestBuildGeminiImageRequestInvalidAspectRatioDropped(t *testing.T) {
+	req := relaycommon.TaskSubmitReq{
+		Model:  ModelGeminiFlashImage,
+		Prompt: "test",
+		Metadata: map[string]any{
+			"aspect_ratio": "3:7", // not in the valid set
+		},
+	}
+	got, err := buildGeminiImageRequest(&req, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Invalid aspect_ratio should be silently dropped → no imageConfig block.
+	if got.GenerationConfig.ImageConfig != nil {
+		t.Fatalf("expected imageConfig to be nil for invalid aspect_ratio, got %+v", got.GenerationConfig.ImageConfig)
+	}
+}
+
+func TestBuildGeminiImageRequestRequiresPrompt(t *testing.T) {
+	req := relaycommon.TaskSubmitReq{
+		Model: ModelGeminiFlashImage,
+	}
+	_, err := buildGeminiImageRequest(&req, nil)
+	if err == nil {
+		t.Fatal("expected error for missing prompt")
+	}
+}
+
+func TestBuildGeminiImageRequestCapsAt14Images(t *testing.T) {
+	urls := make([]string, 20)
+	for i := range urls {
+		urls[i] = "https://example.com/" + string(rune('a'+i)) + ".jpg"
+	}
+	req := relaycommon.TaskSubmitReq{
+		Model:  ModelGeminiFlashImage,
+		Prompt: "merge all",
+		Images: urls,
+	}
+	got, err := buildGeminiImageRequest(&req, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 1 text + 14 images = 15 parts
+	if len(got.Contents[0].Parts) != 15 {
+		t.Fatalf("parts len = %d, want 15 (capped at 14 images)", len(got.Contents[0].Parts))
+	}
+}
+
+func TestParseGeminiImageResultExtractsBase64(t *testing.T) {
+	respJSON := `{
+		"candidates": [{
+			"content": {
+				"parts": [
+					{"text": ""},
+					{"inlineData": {"data": "abc123xyz", "mimeType": "image/jpeg"}}
+				],
+				"role": "model"
+			},
+			"finishReason": "STOP"
+		}],
+		"modelVersion": "gemini-3.1-flash-image"
+	}`
+	result, err := parseGeminiImageResult([]byte(respJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "data:image/jpeg;base64,abc123xyz" {
+		t.Fatalf("result = %q", result)
+	}
+}
+
+func TestParseGeminiImageResultErrorResponse(t *testing.T) {
+	respJSON := `{
+		"error": {
+			"code": 400,
+			"message": "invalid request: prompt too long",
+			"status": "INVALID_ARGUMENT"
+		}
+	}`
+	_, err := parseGeminiImageResult([]byte(respJSON))
+	if err == nil {
+		t.Fatal("expected error for upstream error response")
+	}
+	if !strings.Contains(err.Error(), "invalid request") {
+		t.Fatalf("error = %q, want to contain upstream message", err.Error())
+	}
+}
+
+func TestParseGeminiImageResultNoImageData(t *testing.T) {
+	respJSON := `{
+		"candidates": [{
+			"content": {
+				"parts": [{"text": "I cannot generate that image."}],
+				"role": "model"
+			},
+			"finishReason": "SAFETY"
+		}]
+	}`
+	_, err := parseGeminiImageResult([]byte(respJSON))
+	if err == nil {
+		t.Fatal("expected error when no inlineData present")
+	}
+}
+
+func TestResolveGeminiImageSizeDefaults(t *testing.T) {
+	cases := []struct {
+		name     string
+		metadata map[string]any
+		want     string
+	}{
+		{name: "no metadata → 1K default", metadata: nil, want: "1K"},
+		{name: "explicit 2K", metadata: map[string]any{"image_size": "2K"}, want: "2K"},
+		{name: "explicit 4K", metadata: map[string]any{"image_size": "4K"}, want: "4K"},
+		{name: "explicit 512", metadata: map[string]any{"image_size": "512"}, want: "512"},
+		{name: "camelCase alias imageSize", metadata: map[string]any{"imageSize": "4K"}, want: "4K"},
+		{name: "invalid value → 1K", metadata: map[string]any{"image_size": "8K"}, want: "1K"},
+		{name: "lowercase 2k normalised", metadata: map[string]any{"image_size": "2k"}, want: "2K"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := relaycommon.TaskSubmitReq{Metadata: tc.metadata}
+			got := resolveGeminiImageSize(req)
+			if got != tc.want {
+				t.Fatalf("resolveGeminiImageSize = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEstimateBillingGeminiFlashImageResolutionRatios(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cases := []struct {
+		name      string
+		imageSize string
+		wantRatio float64
+	}{
+		{name: "512 is cheapest", imageSize: "512", wantRatio: 1.0 / 3.0},
+		{name: "1K is base", imageSize: "1K", wantRatio: 1.0},
+		{name: "2K scales correctly", imageSize: "2K", wantRatio: 5.0 / 3.0},
+		{name: "4K scales correctly", imageSize: "4K", wantRatio: 8.0 / 3.0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &TaskAdaptor{}
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Set("task_request", relaycommon.TaskSubmitReq{
+				Metadata: map[string]any{"image_size": tc.imageSize},
+			})
+			ratios := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: ModelGeminiFlashImage})
+			got, ok := ratios["resolution"]
+			if !ok {
+				t.Fatalf("missing resolution ratio in %#v", ratios)
+			}
+			if got != tc.wantRatio {
+				t.Fatalf("resolution ratio = %v, want %v", got, tc.wantRatio)
+			}
+		})
+	}
+}
+
+func TestBuildRequestURLGeminiUsesKeyQueryParam(t *testing.T) {
+	a := &TaskAdaptor{}
+	a.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+		ChannelBaseUrl: "https://api.sub2api.com/",
+		ApiKey:         "my-secret-key",
+	}})
+	got, err := a.BuildRequestURL(&relaycommon.RelayInfo{OriginModelName: ModelGeminiFlashImage})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "https://api.sub2api.com" + UpstreamPathGeminiFlashImage + "?key=my-secret-key"
+	if got != want {
+		t.Fatalf("BuildRequestURL = %q, want %q", got, want)
+	}
+}
+
+func TestDoSyncImageGenerationGeminiUsesKeyQueryParam(t *testing.T) {
+	var seenQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenQuery = r.URL.RawQuery
+		if r.Header.Get("Authorization") != "" {
+			http.Error(w, "unexpected Authorization header", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"candidates": [{
+				"content": {
+					"parts": [{"text":""}, {"inlineData":{"data":"abc","mimeType":"image/jpeg"}}],
+					"role": "model"
+				},
+				"finishReason": "STOP"
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	body := []byte(`{"contents":[{"role":"user","parts":[{"text":"test"}]}],"generationConfig":{"responseModalities":["TEXT","IMAGE"]}}`)
+	_, err := doSyncImageGeneration(t.Context(), server.URL, "my-api-key", ModelGeminiFlashImage, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seenQuery != "key=my-api-key" {
+		t.Fatalf("query = %q, want key=my-api-key", seenQuery)
+	}
+}
+
+func TestGuessImageMIMEFromURL(t *testing.T) {
+	cases := []struct {
+		url  string
+		want string
+	}{
+		{"https://example.com/photo.jpg", "image/jpeg"},
+		{"https://example.com/photo.jpeg", "image/jpeg"},
+		{"https://example.com/photo.PNG", "image/png"},
+		{"https://example.com/anim.gif", "image/gif"},
+		{"https://example.com/modern.webp", "image/webp"},
+		{"https://example.com/image?format=jpg&w=100", "image/jpeg"},
+		{"https://example.com/noext", "image/jpeg"},
+	}
+	for _, tc := range cases {
+		got := guessImageMIMEFromURL(tc.url)
+		if got != tc.want {
+			t.Fatalf("guessImageMIMEFromURL(%q) = %q, want %q", tc.url, got, tc.want)
+		}
 	}
 }
