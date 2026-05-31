@@ -6,18 +6,37 @@ const (
 
 	ModelGPTImage2TextToImage  = "gpt-image-2-text-to-image"
 	ModelGPTImage2ImageToImage = "gpt-image-2-image-to-image"
+	ModelGeminiFlashImage      = "gemini-3.1-flash-image"
 
-	// Upstream URL paths. Centralized here so the async submit endpoint
-	// (BuildRequestURL) and the deferred sync call (syncImageGenerationRequestPath)
-	// reference one source. Sub2API uses the OpenAI Images API shape; if the
-	// upstream renames or versions these paths, update them here only.
+	// Upstream URL paths for OpenAI-compatible image endpoints.
 	UpstreamPathImagesGenerations = "/v1/images/generations"
 	UpstreamPathImagesEdits       = "/v1/images/edits"
+
+	// Upstream path for Gemini image generation. The model name is embedded in
+	// the path; the API key is appended as a query param at call time.
+	UpstreamPathGeminiFlashImage = "/v1beta/models/gemini-3.1-flash-image:generateContent"
 )
+
+// validGeminiAspectRatios is the set of aspect ratios supported by
+// gemini-3.1-flash-image (14 values per the API docs).
+var validGeminiAspectRatios = map[string]bool{
+	"1:1": true, "1:4": true, "1:8": true,
+	"2:3": true, "3:2": true, "3:4": true,
+	"4:1": true, "4:3": true, "4:5": true,
+	"5:4": true, "8:1": true, "9:16": true,
+	"16:9": true, "21:9": true,
+}
+
+// validGeminiImageSizes is the set of imageSize values accepted by Gemini.
+// "512" is only available on gemini-3.1-flash-image (not Pro).
+var validGeminiImageSizes = map[string]bool{
+	"512": true, "1K": true, "2K": true, "4K": true,
+}
 
 var ModelList = []string{
 	ModelGPTImage2TextToImage,
 	ModelGPTImage2ImageToImage,
+	ModelGeminiFlashImage,
 }
 
 type modelConfig struct {
