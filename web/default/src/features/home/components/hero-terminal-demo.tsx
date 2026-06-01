@@ -112,8 +112,8 @@ const API_DEMOS: ApiDemoConfig[] = [
     accent: 'amber',
   },
   {
-    id: 'claude',
-    label: 'Claude',
+    id: 'messages',
+    label: 'Messages',
     method: 'POST',
     endpoint: '/v1/messages',
     headers: ['"x-api-key: sk-••••"', '"anthropic-version: 2023-06-01"'],
@@ -136,8 +136,8 @@ const API_DEMOS: ApiDemoConfig[] = [
     accent: 'blue',
   },
   {
-    id: 'gemini',
-    label: 'Gemini',
+    id: 'multimodal',
+    label: 'Multimodal',
     method: 'POST',
     endpoint: '/v1beta/models/{model}:generateContent',
     headers: ['"x-goog-api-key: sk-••••"'],
@@ -445,8 +445,8 @@ function truncateResponse(demo: ApiDemoConfig): string {
   const map: Record<string, string> = {
     'gpt-chat': 'Chat request routed.',
     responses: 'Response workflow ready.',
-    claude: 'Claude message routed.',
-    gemini: 'Gemini request served.',
+    messages: 'Message request routed.',
+    multimodal: 'Multimodal request served.',
   }
   return map[demo.id] ?? '...'
 }

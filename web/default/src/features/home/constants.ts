@@ -38,9 +38,9 @@ export const AI_MODELS = [
   'Qwen.Color',
   'DeepSeek.Color',
   'Doubao.Color',
-  'OpenAI',
-  'Claude.Color',
-  'Gemini.Color',
+  'Moonshot',
+  'Zhipu.Color',
+  'Hunyuan.Color',
 ] as const
 
 // Hero section - Gateway Features
