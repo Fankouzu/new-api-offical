@@ -289,7 +289,7 @@ Body **原样转发**为上游 `POST /v2/image/generations` 的 JSON，仅将 **
 
 **`POST /v1/assets/upload`**
 
-Body 转发至上游 `POST /v2/asset/upload`。分发器要求 JSON 中必须显式传入 **`model`**，且素材上传只允许专用模型名 **`pingxingshijie-asset`**，用于网关选路与计费；转发上游时会移除该网关专用字段。
+Body 转发至上游 `POST /v2/asset/upload`。分发器要求 JSON 中必须显式传入 **`model`**，且素材上传只允许专用模型名 **`seedance-2.0-asset-upload`**，用于网关选路与计费；转发上游时会移除该网关专用字段。
 
 #### 4.1.1 Body 字段（与上游一致 — 摘要）
 
@@ -297,14 +297,14 @@ Body 转发至上游 `POST /v2/asset/upload`。分发器要求 JSON 中必须显
 
 | 参数名 | 类型 | 必填 | 默认值 | 含义 / 范围（摘要） |
 |--------|------|------|--------|---------------------|
-| `model` | string | 是 | 无 | 必须为 `pingxingshijie-asset`；其它模型会被拒绝，避免素材上传错误使用生图/视频模型计费或归类 |
+| `model` | string | 是 | 无 | 必须为 `seedance-2.0-asset-upload`；其它模型会被拒绝，避免素材上传错误使用生图/视频模型计费或归类 |
 | `image_url` | string | **是**（上游） | — | 素材来源 URL（或其它上游允许的形式） |
 | `asset_type` | string | **是**（上游） | — | `Image` \| `Video` \| `Audio` |
 
 **网关行为摘要**
 
 - 转发给上游的 JSON 会保留 `image_url`、`asset_type` 等素材字段，但会移除网关专用的 `model` 字段。
-- 分发器需要 `model` 选渠道和计费；素材上传必须显式使用 **`pingxingshijie-asset`**。
+- 分发器需要 `model` 选渠道和计费；素材上传必须显式使用 **`seedance-2.0-asset-upload`**。
 - 适配器在校验阶段可能为内部 `TaskSubmitReq` 填入占位 `prompt`（如 `asset-upload`），**仅用于本网关任务校验/计费上下文**，**不要求**客户端在 Body 中携带 `prompt`。
 
 #### 4.1.2 成功响应 HTTP 200
@@ -385,7 +385,7 @@ curl -sS -X POST "${GATEWAY}/v1/images/generations/async" \
 curl -sS -X POST "${GATEWAY}/v1/assets/upload" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
--d '{"model":"pingxingshijie-asset","image_url":"https://example.com/a.jpg","asset_type":"Image"}'
+-d '{"model":"seedance-2.0-asset-upload","image_url":"https://example.com/a.jpg","asset_type":"Image"}'
 ```
 
 ---

@@ -31,7 +31,7 @@ func TestValidateRequestAndSetActionRejectsNonAssetUploadModel(t *testing.T) {
 }
 
 func TestValidateRequestAndSetActionAllowsAssetPlaceholderModel(t *testing.T) {
-	c := newAssetUploadContext(`{"model":"pingxingshijie-asset","image_url":"https://example.com/a.jpg","asset_type":"Image"}`)
+	c := newAssetUploadContext(`{"model":"seedance-2.0-asset-upload","image_url":"https://example.com/a.jpg","asset_type":"Image"}`)
 	info := &relaycommon.RelayInfo{RequestURLPath: "/v1/assets/upload", TaskRelayInfo: &relaycommon.TaskRelayInfo{}}
 
 	taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info)

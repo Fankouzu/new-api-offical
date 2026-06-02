@@ -40,7 +40,7 @@ func TestGetModelRequestAssetUploadRejectsBlankModel(t *testing.T) {
 }
 
 func TestGetModelRequestAssetUploadAllowsAssetModel(t *testing.T) {
-	c := newJSONContext(http.MethodPost, "/v1/assets/upload", `{"model":"pingxingshijie-asset","image_url":"https://example.com/a.jpg","asset_type":"Image"}`)
+	c := newJSONContext(http.MethodPost, "/v1/assets/upload", `{"model":"seedance-2.0-asset-upload","image_url":"https://example.com/a.jpg","asset_type":"Image"}`)
 
 	req, shouldSelectChannel, err := getModelRequest(c)
 

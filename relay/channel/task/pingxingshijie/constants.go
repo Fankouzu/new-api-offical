@@ -6,7 +6,7 @@ import (
 )
 
 // AssetPlaceholderModel is the only model allowed for /v1/assets/upload routing and billing.
-const AssetPlaceholderModel = "pingxingshijie-asset"
+const AssetPlaceholderModel = "seedance-2.0-asset-upload"
 
 func ValidateAssetUploadModel(modelName string) error {
 	modelName = strings.TrimSpace(modelName)
