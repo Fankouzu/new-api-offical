@@ -18,12 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
+import { useParams } from 'react-router-dom';
 import ModelPricingPage from '../../components/table/model-pricing/layout/PricingPage';
 
-const Pricing = () => (
-  <>
-    <ModelPricingPage />
-  </>
-);
+const Pricing = () => {
+  const { modelId } = useParams();
+  return <ModelPricingPage initialModelId={modelId} />;
+};
 
 export default Pricing;

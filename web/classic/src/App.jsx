@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { lazy, Suspense, useContext, useMemo } from 'react';
+import React, { lazy, Suspense, useContext, useEffect, useMemo } from 'react';
 import { Route, Routes, useLocation, useParams } from 'react-router-dom';
 import Loading from './components/common/ui/Loading';
 import User from './pages/User';
@@ -49,6 +49,7 @@ import OAuth2Callback from './components/auth/OAuth2Callback';
 import PersonalSetting from './components/settings/PersonalSetting';
 import Setup from './pages/Setup';
 import SetupCheck from './components/layout/SetupCheck';
+import { syncRouteSEO } from './helpers/seo';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -64,6 +65,10 @@ function DynamicOAuth2Callback() {
 function App() {
   const location = useLocation();
   const [statusState] = useContext(StatusContext);
+
+  useEffect(() => {
+    syncRouteSEO(location.pathname);
+  }, [location.pathname]);
 
   // 获取模型广场权限配置
   const pricingRequireAuth = useMemo(() => {
@@ -317,6 +322,25 @@ function App() {
         />
         <Route
           path='/pricing'
+          element={
+            pricingRequireAuth ? (
+              <PrivateRoute>
+                <Suspense
+                  fallback={<Loading></Loading>}
+                  key={location.pathname}
+                >
+                  <Pricing />
+                </Suspense>
+              </PrivateRoute>
+            ) : (
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <Pricing />
+              </Suspense>
+            )
+          }
+        />
+        <Route
+          path='/pricing/:modelId'
           element={
             pricingRequireAuth ? (
               <PrivateRoute>

@@ -26,18 +26,16 @@ import {
 } from '@tanstack/react-router'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
+import { initConfiguredGoogleAnalytics, trackPageView } from '@/lib/analytics'
+import { syncRouteSEO } from '@/lib/seo'
 import { ThemeCustomizationProvider } from '@/context/theme-customization-provider'
 import { useSystemConfig } from '@/hooks/use-system-config'
-import {
-  initConfiguredGoogleAnalytics,
-  trackPageView,
-} from '@/lib/analytics'
 import { Toaster } from '@/components/ui/sonner'
 import { NavigationProgress } from '@/components/navigation-progress'
+import { saveAffiliateCode } from '@/features/auth/lib/storage'
 import { GeneralError } from '@/features/errors/general-error'
 import { NotFoundError } from '@/features/errors/not-found-error'
 import { getSetupStatus } from '@/features/setup/api'
-import { saveAffiliateCode } from '@/features/auth/lib/storage'
 
 function RootComponent() {
   // Load system configuration (logo, system name, etc.) from backend
@@ -51,6 +49,7 @@ function RootComponent() {
   }, [])
 
   useEffect(() => {
+    syncRouteSEO(currentHref)
     trackPageView(currentHref)
   }, [currentHref])
 

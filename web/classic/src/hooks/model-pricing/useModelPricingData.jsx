@@ -24,7 +24,7 @@ import { Modal } from '@douyinfe/semi-ui';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 
-export const useModelPricingData = () => {
+export const useModelPricingData = (initialModelId) => {
   const { t } = useTranslation();
   const [searchValue, setSearchValue] = useState('');
   const compositionRef = useRef({ isComposition: false });
@@ -319,6 +319,16 @@ export const useModelPricingData = () => {
     refresh().then();
   }, []);
 
+  useEffect(() => {
+    if (!initialModelId || models.length === 0) return;
+    const targetModelId = safeDecodeURIComponent(initialModelId);
+    const target = models.find((model) => model.model_name === targetModelId);
+    if (target) {
+      setSelectedModel(target);
+      setShowModelDetail(true);
+    }
+  }, [initialModelId, models]);
+
   // 当筛选条件变化时重置到第一页
   useEffect(() => {
     setCurrentPage(1);
@@ -406,3 +416,11 @@ export const useModelPricingData = () => {
     t,
   };
 };
+
+function safeDecodeURIComponent(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
