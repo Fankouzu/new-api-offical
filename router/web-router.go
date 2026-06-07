@@ -8,6 +8,9 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service/webseo"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
@@ -29,6 +32,16 @@ func SetWebRouter(router *gin.Engine, assets ThemeAssets) {
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.GlobalWebRateLimit())
 	router.Use(middleware.Cache())
+	router.GET("/robots.txt", func(c *gin.Context) {
+		c.Set(middleware.RouteTagKey, "web")
+		c.Header("Cache-Control", "public, max-age=3600")
+		c.String(http.StatusOK, webseo.BuildRobotsTxt(system_setting.ServerAddress))
+	})
+	router.GET("/sitemap.xml", func(c *gin.Context) {
+		c.Set(middleware.RouteTagKey, "web")
+		c.Header("Cache-Control", "public, max-age=3600")
+		c.Data(http.StatusOK, "application/xml; charset=utf-8", []byte(webseo.BuildSitemapXMLForTheme(system_setting.ServerAddress, model.GetPricing(), common.GetTheme())))
+	})
 	router.Use(static.Serve("/", themeFS))
 	router.NoRoute(func(c *gin.Context) {
 		c.Set(middleware.RouteTagKey, "web")
@@ -37,10 +50,12 @@ func SetWebRouter(router *gin.Engine, assets ThemeAssets) {
 			return
 		}
 		c.Header("Cache-Control", "no-cache")
-		if common.GetTheme() == "classic" {
-			c.Data(http.StatusOK, "text/html; charset=utf-8", assets.ClassicIndexPage)
+		theme := common.GetTheme()
+		meta := webseo.ResolveMetaForTheme(c.Request.RequestURI, system_setting.ServerAddress, model.GetPricing(), theme)
+		if theme == "classic" {
+			c.Data(http.StatusOK, "text/html; charset=utf-8", webseo.RenderIndexHTML(assets.ClassicIndexPage, meta))
 		} else {
-			c.Data(http.StatusOK, "text/html; charset=utf-8", assets.DefaultIndexPage)
+			c.Data(http.StatusOK, "text/html; charset=utf-8", webseo.RenderIndexHTML(assets.DefaultIndexPage, meta))
 		}
 	})
 }
