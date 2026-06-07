@@ -261,6 +261,12 @@ func ListModels(c *gin.Context, modelType int) {
 	}
 }
 
+func ListOpenRouterProviderModels(c *gin.Context) {
+	c.JSON(http.StatusOK, dto.OpenRouterProviderModelsResponse{
+		Data: service.BuildOpenRouterProviderModels(model.GetPricing()),
+	})
+}
+
 func ChannelListModels(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"success": true,
