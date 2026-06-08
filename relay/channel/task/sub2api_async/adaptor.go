@@ -323,7 +323,8 @@ func doSyncImageGeneration(ctx context.Context, baseURL, apiKey, modelName strin
 		fullURL = baseURL + requestPath
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, syncImageGenerationTimeout)
+	timeout := resolveSyncImageGenerationTimeout()
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(requestBody))
 	if err != nil {
@@ -335,7 +336,7 @@ func doSyncImageGeneration(ctx context.Context, baseURL, apiKey, modelName strin
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 
-	client := &http.Client{Timeout: syncImageGenerationTimeout}
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("upstream sync image request failed: %w", err)
@@ -356,12 +357,16 @@ func doSyncImageGeneration(ctx context.Context, baseURL, apiKey, modelName strin
 	return respBody, nil
 }
 
-// syncImageGenerationTimeout caps how long the deferred sync upstream call may
-// run. Sub2API's t2i / edits endpoints typically respond in < 90s; the 5-minute
-// ceiling is the worst-case allowance and is applied to BOTH the request
-// context deadline and the underlying http.Client timeout so a single source
-// of truth governs the bound.
-const syncImageGenerationTimeout = 5 * time.Minute
+// syncImageGenerationTimeoutEnv caps how long the deferred sync upstream call
+// may run. The value is in seconds and is applied to BOTH the request context
+// deadline and the underlying http.Client timeout.
+const syncImageGenerationTimeoutEnv = "SUB2API_SYNC_IMAGE_GENERATION_TIMEOUT_SECONDS"
+
+const defaultSyncImageGenerationTimeoutSeconds = 900
+
+func resolveSyncImageGenerationTimeout() time.Duration {
+	return time.Duration(common.GetEnvOrDefault(syncImageGenerationTimeoutEnv, defaultSyncImageGenerationTimeoutSeconds)) * time.Second
+}
 
 // truncateUpstreamErrorBody keeps the leading 1KB of an upstream error
 // response and appends a marker indicating the original size, so admins can

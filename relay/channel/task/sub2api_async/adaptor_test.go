@@ -7,12 +7,29 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 )
+
+func TestResolveSyncImageGenerationTimeoutDefaultsTo900Seconds(t *testing.T) {
+	t.Setenv(syncImageGenerationTimeoutEnv, "")
+
+	if got := resolveSyncImageGenerationTimeout(); got != 900*time.Second {
+		t.Fatalf("resolveSyncImageGenerationTimeout() = %s, want 900s", got)
+	}
+}
+
+func TestResolveSyncImageGenerationTimeoutUsesEnvOverride(t *testing.T) {
+	t.Setenv(syncImageGenerationTimeoutEnv, "1200")
+
+	if got := resolveSyncImageGenerationTimeout(); got != 1200*time.Second {
+		t.Fatalf("resolveSyncImageGenerationTimeout() = %s, want 1200s", got)
+	}
+}
 
 func TestBuildRequestURLUsesConfiguredBaseURL(t *testing.T) {
 	a := &TaskAdaptor{}
