@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/analytics"
 	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/QuantumNous/new-api/constant"
@@ -1103,6 +1104,7 @@ func TopUp(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	analytics.TrackVoucherRedeemSuccess(c, id, req.Key, quota, analytics.RedemptionAttribution{})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

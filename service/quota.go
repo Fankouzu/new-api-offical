@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service/analytics"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -448,7 +449,19 @@ func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQu
 		}
 	}
 
+	trackFirstAPICallIfNeeded(relayInfo, quota)
+
 	return nil
+}
+
+func trackFirstAPICallIfNeeded(relayInfo *relaycommon.RelayInfo, quota int) {
+	if relayInfo == nil || relayInfo.IsPlayground || quota <= 0 || relayInfo.TokenId <= 0 {
+		return
+	}
+	if !model.TryMarkAnalyticsEvent("token", relayInfo.TokenId, "first_api_call") {
+		return
+	}
+	analytics.TrackFirstAPICall(nil, relayInfo.UserId, relayInfo.TokenId, relayInfo.TokenKey, relayInfo.OriginModelName, quota)
 }
 
 func checkAndSendQuotaNotify(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQuota int) {
