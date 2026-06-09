@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import {
+  getGoogleAnalyticsMeasurementId,
   initGoogleAnalytics,
   resetAnalyticsForTests,
   trackAnalyticsEvent,
@@ -88,6 +89,10 @@ afterEach(() => {
 })
 
 describe('google analytics runtime', () => {
+  test('uses the repository default measurement id when env is not set', () => {
+    expect(getGoogleAnalyticsMeasurementId()).toBe('G-9693VBP1VM')
+  })
+
   test('does not initialize without a measurement id', () => {
     initGoogleAnalytics('')
 

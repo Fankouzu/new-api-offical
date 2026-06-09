@@ -19,6 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 
 type GtagCommand = [command: string, ...args: unknown[]]
 
+const DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID = 'G-9693VBP1VM'
+
 declare global {
   interface Window {
     dataLayer?: GtagCommand[]
@@ -30,7 +32,10 @@ let activeMeasurementId = ''
 let initialized = false
 
 export function getGoogleAnalyticsMeasurementId(): string {
-  return (import.meta.env.VITE_GOOGLE_ANALYTICS_ID || '').trim()
+  return (
+    import.meta.env.VITE_GOOGLE_ANALYTICS_ID ||
+    DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID
+  ).trim()
 }
 
 export function initConfiguredGoogleAnalytics(): void {
