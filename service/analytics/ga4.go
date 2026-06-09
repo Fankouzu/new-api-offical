@@ -238,8 +238,15 @@ func TrackAPIKeyCreated(c *gin.Context, userID int, tokenID int, tokenKey string
 }
 
 func TrackFirstAPICall(c *gin.Context, userID int, tokenID int, tokenKey string, modelID string, quotaSpent int) {
+	TrackFirstAPICallWithResult(c, userID, tokenID, tokenKey, modelID, quotaSpent, nil)
+}
+
+func TrackFirstAPICallWithResult(c *gin.Context, userID int, tokenID int, tokenKey string, modelID string, quotaSpent int, onResult func(error)) {
 	cfg := currentConfig()
 	if !trackingEnabled(cfg) {
+		if onResult != nil {
+			onResult(nil)
+		}
 		return
 	}
 	hashSource := strconv.Itoa(tokenID)
@@ -252,7 +259,7 @@ func TrackFirstAPICall(c *gin.Context, userID int, tokenID int, tokenKey string,
 		"quota_spent":     quotaSpent,
 		"voucher_source":  defaultVoucherSource,
 	}
-	track(c, cfg, userID, tokenID, eventFirstAPICall, params)
+	trackWithResult(c, cfg, userID, tokenID, eventFirstAPICall, params, onResult)
 }
 
 func addStringParam(params EventParams, key string, value string) {
@@ -263,10 +270,21 @@ func addStringParam(params EventParams, key string, value string) {
 }
 
 func track(c *gin.Context, cfg Config, userID int, tokenID int, eventName string, params EventParams) {
+	trackWithResult(c, cfg, userID, tokenID, eventName, params, nil)
+}
+
+func trackWithResult(c *gin.Context, cfg Config, userID int, tokenID int, eventName string, params EventParams, onResult func(error)) {
 	payload := buildPayload(c, userID, tokenID, eventName, params)
 	gopool.Go(func() {
 		if err := sendPayload(context.Background(), cfg, payload); err != nil {
 			common.SysLog(fmt.Sprintf("GA4 event send failed: event=%s error=%s", eventName, sanitizeError(err).Error()))
+			if onResult != nil {
+				onResult(err)
+			}
+			return
+		}
+		if onResult != nil {
+			onResult(nil)
 		}
 	})
 }

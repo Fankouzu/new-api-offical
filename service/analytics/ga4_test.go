@@ -19,9 +19,15 @@ type captureSender struct {
 	bodies   []string
 	status   int
 	err      error
+	done     chan struct{}
 }
 
 func (s *captureSender) Do(req *http.Request) (*http.Response, error) {
+	defer func() {
+		if s.done != nil {
+			s.done <- struct{}{}
+		}
+	}()
 	s.requests = append(s.requests, req)
 	body, _ := io.ReadAll(req.Body)
 	s.bodies = append(s.bodies, string(body))
