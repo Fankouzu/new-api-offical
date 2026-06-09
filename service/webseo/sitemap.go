@@ -52,6 +52,14 @@ func BuildSitemapXMLForTheme(baseURL string, pricings []model.Pricing, theme str
 			Priority:   priority(path),
 		})
 	}
+	for _, topic := range topicPages() {
+		urlset.URLs = append(urlset.URLs, sitemapURL{
+			Loc:        canonicalURL(base, topic.Path),
+			LastMod:    now,
+			ChangeFreq: "monthly",
+			Priority:   "0.7",
+		})
+	}
 	for _, item := range BuildCatalog(pricings) {
 		urlset.URLs = append(urlset.URLs, sitemapURL{
 			Loc:        base + modelURLPath(item.ID),

@@ -58,7 +58,7 @@ func TestResolveMetaForIndexablePublicRoutes(t *testing.T) {
 	if pricing.CanonicalURL != "https://lizh.ai/pricing" {
 		t.Fatalf("pricing canonical should drop query strings, got %q", pricing.CanonicalURL)
 	}
-	if !strings.Contains(pricing.Title, "AI 大模型 API 价格广场") {
+	if !strings.Contains(pricing.Title, "AI Model API Pricing Marketplace") {
 		t.Fatalf("unexpected pricing title: %q", pricing.Title)
 	}
 	if len(pricing.JSONLD) == 0 {
@@ -71,7 +71,7 @@ func TestResolveMetaForModelDetail(t *testing.T) {
 	if meta.Robots != "index,follow" {
 		t.Fatalf("expected known model page to be indexable, got %q", meta.Robots)
 	}
-	if !strings.Contains(meta.Title, "DeepSeek V4 Flash API 价格") {
+	if !strings.Contains(meta.Title, "DeepSeek V4 Flash API Pricing") {
 		t.Fatalf("unexpected model title: %q", meta.Title)
 	}
 	if !strings.Contains(meta.Description, "$1.0000 / 1M tokens") {
@@ -90,7 +90,7 @@ func TestResolveMetaForEscapedModelDetail(t *testing.T) {
 	if meta.Robots != "index,follow" {
 		t.Fatalf("expected escaped model page to be indexable, got %q", meta.Robots)
 	}
-	if !strings.Contains(meta.Title, "Openai GPT 4o Mini API 价格") {
+	if !strings.Contains(meta.Title, "Openai GPT 4o Mini API Pricing") {
 		t.Fatalf("unexpected model title: %q", meta.Title)
 	}
 	if meta.CanonicalURL != "https://lizh.ai/pricing/openai%2Fgpt-4o-mini" {
@@ -108,6 +108,22 @@ func TestResolveMetaNoindexesUtilityAndUnknownRoutes(t *testing.T) {
 	}
 }
 
+func TestResolveMetaForTopicPages(t *testing.T) {
+	meta := ResolveMeta("/use-cases/openai-compatible-api", "https://lizh.ai", testCatalog)
+	if meta.Robots != "index,follow" {
+		t.Fatalf("expected topic page to be indexable, got %q", meta.Robots)
+	}
+	if !strings.Contains(meta.Title, "OpenAI-Compatible API") {
+		t.Fatalf("unexpected topic title: %q", meta.Title)
+	}
+	if meta.CanonicalURL != "https://lizh.ai/use-cases/openai-compatible-api" {
+		t.Fatalf("unexpected topic canonical URL: %q", meta.CanonicalURL)
+	}
+	if len(meta.JSONLD) == 0 {
+		t.Fatalf("topic page should include JSON-LD")
+	}
+}
+
 func TestRenderIndexHTMLInjectsRouteSpecificTags(t *testing.T) {
 	html := `<!doctype html><html><head><title>New API</title><meta name="description" content="old"></head><body><div id="root"></div></body></html>`
 	meta := ResolveMeta("/pricing/deepseek-v4-flash", "https://lizh.ai", testCatalog)
@@ -115,11 +131,11 @@ func TestRenderIndexHTMLInjectsRouteSpecificTags(t *testing.T) {
 	rendered := RenderIndexHTML([]byte(html), meta)
 	text := string(rendered)
 	required := []string{
-		"<title>DeepSeek V4 Flash API 价格 | Lizh AI</title>",
+		"<title>DeepSeek V4 Flash API Pricing | Lizh AI</title>",
 		`<meta name="description" content="DeepSeek V4 Flash API`,
 		`<meta name="robots" content="index,follow">`,
 		`<link rel="canonical" href="https://lizh.ai/pricing/deepseek-v4-flash">`,
-		`<meta property="og:title" content="DeepSeek V4 Flash API 价格 | Lizh AI">`,
+		`<meta property="og:title" content="DeepSeek V4 Flash API Pricing | Lizh AI">`,
 		`<script type="application/ld+json">`,
 	}
 	for _, needle := range required {
@@ -129,6 +145,120 @@ func TestRenderIndexHTMLInjectsRouteSpecificTags(t *testing.T) {
 	}
 	if strings.Contains(text, `content="old"`) {
 		t.Fatalf("old generic description should be removed:\n%s", text)
+	}
+}
+
+func TestBuildBodyContentForCorePublicPages(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		theme    string
+		required []string
+	}{
+		{
+			name:  "homepage",
+			path:  "/",
+			theme: "default",
+			required: []string{
+				`<h1>Lizh AI AI Model Marketplace</h1>`,
+				`<h2>Supported AI models</h2>`,
+				`href="/pricing"`,
+				`href="/pricing/deepseek-v4-flash"`,
+			},
+		},
+		{
+			name:  "pricing",
+			path:  "/pricing",
+			theme: "default",
+			required: []string{
+				`<h1>AI Model API Pricing Marketplace</h1>`,
+				`<h2>All available model prices</h2>`,
+				`href="/pricing/openai%2Fgpt-4o-mini"`,
+				`Actual prices depend on account groups and settlement configuration.`,
+			},
+		},
+		{
+			name:  "model detail",
+			path:  "/pricing/deepseek-v4-flash",
+			theme: "default",
+			required: []string{
+				`<h1>DeepSeek V4 Flash API Pricing</h1>`,
+				`<th>Model ID</th><td>deepseek-v4-flash</td>`,
+				`<h2>FAQ</h2>`,
+				`Is DeepSeek V4 Flash compatible with the OpenAI SDK?`,
+			},
+		},
+		{
+			name:  "rankings default",
+			path:  "/rankings",
+			theme: "default",
+			required: []string{
+				`<h1>Popular AI Model Rankings</h1>`,
+				`<h2>Model directory fallback</h2>`,
+				`href="/pricing/gpt-5.4"`,
+			},
+		},
+		{
+			name:  "about",
+			path:  "/about",
+			theme: "classic",
+			required: []string{
+				`<h1>About Lizh AI</h1>`,
+				`service@lizh.ai`,
+				`AI model marketplace`,
+			},
+		},
+		{
+			name:  "topic page",
+			path:  "/use-cases/openai-compatible-api",
+			theme: "default",
+			required: []string{
+				`<h1>OpenAI-Compatible API for Multiple AI Models</h1>`,
+				`<h2>Why developers use Lizh AI</h2>`,
+				`href="/guides/openai-sdk-compatible"`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			meta := ResolveMetaForTheme(tt.path, "https://lizh.ai", testCatalog, tt.theme)
+			body := BuildBodyContent(meta, tt.path, "https://lizh.ai", testCatalog, tt.theme)
+			if count := strings.Count(body, "<h1>"); count != 1 {
+				t.Fatalf("expected exactly one h1, got %d:\n%s", count, body)
+			}
+			for _, needle := range tt.required {
+				if !strings.Contains(body, needle) {
+					t.Fatalf("body missing %q:\n%s", needle, body)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildBodyContentSkipsNoindexRoutes(t *testing.T) {
+	meta := ResolveMeta("/login", "https://lizh.ai", testCatalog)
+	body := BuildBodyContent(meta, "/login", "https://lizh.ai", testCatalog, "default")
+	if body != "" {
+		t.Fatalf("noindex routes should not receive SEO body content:\n%s", body)
+	}
+}
+
+func TestRenderIndexHTMLInjectsBodyContent(t *testing.T) {
+	html := `<!doctype html><html><head><title>New API</title></head><body><div id="root"></div></body></html>`
+	meta := ResolveMeta("/", "https://lizh.ai", testCatalog)
+	body := BuildBodyContent(meta, "/", "https://lizh.ai", testCatalog, "default")
+
+	rendered := RenderIndexHTML([]byte(html), meta, body)
+	text := string(rendered)
+	if !strings.Contains(text, "<!--seo:body:start-->") {
+		t.Fatalf("rendered HTML should contain SEO body marker:\n%s", text)
+	}
+	if !strings.Contains(text, "<h1>Lizh AI AI Model Marketplace</h1>") {
+		t.Fatalf("rendered HTML should contain homepage H1:\n%s", text)
+	}
+	if strings.Index(text, "<!--seo:body:start-->") > strings.Index(text, `<div id="root"></div>`) {
+		t.Fatalf("SEO body content should be inserted before the SPA root:\n%s", text)
 	}
 }
 
@@ -145,6 +275,12 @@ func TestBuildRobotsAndSitemap(t *testing.T) {
 	required := []string{
 		"<loc>https://lizh.ai/</loc>",
 		"<loc>https://lizh.ai/pricing</loc>",
+		"<loc>https://lizh.ai/use-cases/openai-compatible-api</loc>",
+		"<loc>https://lizh.ai/compare/ai-api-pricing</loc>",
+		"<loc>https://lizh.ai/providers/gemini-api</loc>",
+		"<loc>https://lizh.ai/providers/deepseek-api</loc>",
+		"<loc>https://lizh.ai/providers/qwen-api</loc>",
+		"<loc>https://lizh.ai/guides/openai-sdk-compatible</loc>",
 		"<loc>https://lizh.ai/pricing/deepseek-v4-flash</loc>",
 		"<loc>https://lizh.ai/pricing/gpt-5.4</loc>",
 		"<loc>https://lizh.ai/pricing/openai%2Fgpt-4o-mini</loc>",

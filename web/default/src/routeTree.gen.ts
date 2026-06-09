@@ -18,9 +18,15 @@ import { Route as SetupIndexRouteImport } from './routes/setup/index'
 import { Route as RankingsIndexRouteImport } from './routes/rankings/index'
 import { Route as PricingIndexRouteImport } from './routes/pricing/index'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
+import { Route as UseCasesOpenaiCompatibleApiRouteImport } from './routes/use-cases/openai-compatible-api'
+import { Route as ProvidersQwenApiRouteImport } from './routes/providers/qwen-api'
+import { Route as ProvidersGeminiApiRouteImport } from './routes/providers/gemini-api'
+import { Route as ProvidersDeepseekApiRouteImport } from './routes/providers/deepseek-api'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
+import { Route as GuidesOpenaiSdkCompatibleRouteImport } from './routes/guides/openai-sdk-compatible'
 import { Route as ConsoleTopupRouteImport } from './routes/console/topup'
 import { Route as ConsoleLogRouteImport } from './routes/console/log'
+import { Route as CompareAiApiPricingRouteImport } from './routes/compare/ai-api-pricing'
 import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authenticated/chat2link'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
@@ -111,11 +117,38 @@ const AboutIndexRoute = AboutIndexRouteImport.update({
   path: '/about/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UseCasesOpenaiCompatibleApiRoute =
+  UseCasesOpenaiCompatibleApiRouteImport.update({
+    id: '/use-cases/openai-compatible-api',
+    path: '/use-cases/openai-compatible-api',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ProvidersQwenApiRoute = ProvidersQwenApiRouteImport.update({
+  id: '/providers/qwen-api',
+  path: '/providers/qwen-api',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProvidersGeminiApiRoute = ProvidersGeminiApiRouteImport.update({
+  id: '/providers/gemini-api',
+  path: '/providers/gemini-api',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProvidersDeepseekApiRoute = ProvidersDeepseekApiRouteImport.update({
+  id: '/providers/deepseek-api',
+  path: '/providers/deepseek-api',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OauthProviderRoute = OauthProviderRouteImport.update({
   id: '/oauth/$provider',
   path: '/oauth/$provider',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GuidesOpenaiSdkCompatibleRoute =
+  GuidesOpenaiSdkCompatibleRouteImport.update({
+    id: '/guides/openai-sdk-compatible',
+    path: '/guides/openai-sdk-compatible',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ConsoleTopupRoute = ConsoleTopupRouteImport.update({
   id: '/console/topup',
   path: '/console/topup',
@@ -124,6 +157,11 @@ const ConsoleTopupRoute = ConsoleTopupRouteImport.update({
 const ConsoleLogRoute = ConsoleLogRouteImport.update({
   id: '/console/log',
   path: '/console/log',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompareAiApiPricingRoute = CompareAiApiPricingRouteImport.update({
+  id: '/compare/ai-api-pricing',
+  path: '/compare/ai-api-pricing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedChat2linkRoute = AuthenticatedChat2linkRouteImport.update({
@@ -403,9 +441,15 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
+  '/compare/ai-api-pricing': typeof CompareAiApiPricingRoute
   '/console/log': typeof ConsoleLogRoute
   '/console/topup': typeof ConsoleTopupRoute
+  '/guides/openai-sdk-compatible': typeof GuidesOpenaiSdkCompatibleRoute
   '/oauth/$provider': typeof OauthProviderRoute
+  '/providers/deepseek-api': typeof ProvidersDeepseekApiRoute
+  '/providers/gemini-api': typeof ProvidersGeminiApiRoute
+  '/providers/qwen-api': typeof ProvidersQwenApiRoute
+  '/use-cases/openai-compatible-api': typeof UseCasesOpenaiCompatibleApiRoute
   '/about/': typeof AboutIndexRoute
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
@@ -460,9 +504,15 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
+  '/compare/ai-api-pricing': typeof CompareAiApiPricingRoute
   '/console/log': typeof ConsoleLogRoute
   '/console/topup': typeof ConsoleTopupRoute
+  '/guides/openai-sdk-compatible': typeof GuidesOpenaiSdkCompatibleRoute
   '/oauth/$provider': typeof OauthProviderRoute
+  '/providers/deepseek-api': typeof ProvidersDeepseekApiRoute
+  '/providers/gemini-api': typeof ProvidersGeminiApiRoute
+  '/providers/qwen-api': typeof ProvidersQwenApiRoute
+  '/use-cases/openai-compatible-api': typeof UseCasesOpenaiCompatibleApiRoute
   '/about': typeof AboutIndexRoute
   '/pricing': typeof PricingIndexRoute
   '/rankings': typeof RankingsIndexRoute
@@ -521,9 +571,15 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/_authenticated/chat2link': typeof AuthenticatedChat2linkRoute
+  '/compare/ai-api-pricing': typeof CompareAiApiPricingRoute
   '/console/log': typeof ConsoleLogRoute
   '/console/topup': typeof ConsoleTopupRoute
+  '/guides/openai-sdk-compatible': typeof GuidesOpenaiSdkCompatibleRoute
   '/oauth/$provider': typeof OauthProviderRoute
+  '/providers/deepseek-api': typeof ProvidersDeepseekApiRoute
+  '/providers/gemini-api': typeof ProvidersGeminiApiRoute
+  '/providers/qwen-api': typeof ProvidersQwenApiRoute
+  '/use-cases/openai-compatible-api': typeof UseCasesOpenaiCompatibleApiRoute
   '/about/': typeof AboutIndexRoute
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
@@ -581,9 +637,15 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/chat2link'
+    | '/compare/ai-api-pricing'
     | '/console/log'
     | '/console/topup'
+    | '/guides/openai-sdk-compatible'
     | '/oauth/$provider'
+    | '/providers/deepseek-api'
+    | '/providers/gemini-api'
+    | '/providers/qwen-api'
+    | '/use-cases/openai-compatible-api'
     | '/about/'
     | '/pricing/'
     | '/rankings/'
@@ -638,9 +700,15 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/chat2link'
+    | '/compare/ai-api-pricing'
     | '/console/log'
     | '/console/topup'
+    | '/guides/openai-sdk-compatible'
     | '/oauth/$provider'
+    | '/providers/deepseek-api'
+    | '/providers/gemini-api'
+    | '/providers/qwen-api'
+    | '/use-cases/openai-compatible-api'
     | '/about'
     | '/pricing'
     | '/rankings'
@@ -698,9 +766,15 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/_authenticated/chat2link'
+    | '/compare/ai-api-pricing'
     | '/console/log'
     | '/console/topup'
+    | '/guides/openai-sdk-compatible'
     | '/oauth/$provider'
+    | '/providers/deepseek-api'
+    | '/providers/gemini-api'
+    | '/providers/qwen-api'
+    | '/use-cases/openai-compatible-api'
     | '/about/'
     | '/pricing/'
     | '/rankings/'
@@ -751,9 +825,15 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  CompareAiApiPricingRoute: typeof CompareAiApiPricingRoute
   ConsoleLogRoute: typeof ConsoleLogRoute
   ConsoleTopupRoute: typeof ConsoleTopupRoute
+  GuidesOpenaiSdkCompatibleRoute: typeof GuidesOpenaiSdkCompatibleRoute
   OauthProviderRoute: typeof OauthProviderRoute
+  ProvidersDeepseekApiRoute: typeof ProvidersDeepseekApiRoute
+  ProvidersGeminiApiRoute: typeof ProvidersGeminiApiRoute
+  ProvidersQwenApiRoute: typeof ProvidersQwenApiRoute
+  UseCasesOpenaiCompatibleApiRoute: typeof UseCasesOpenaiCompatibleApiRoute
   AboutIndexRoute: typeof AboutIndexRoute
   PricingIndexRoute: typeof PricingIndexRoute
   RankingsIndexRoute: typeof RankingsIndexRoute
@@ -826,11 +906,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AboutIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/use-cases/openai-compatible-api': {
+      id: '/use-cases/openai-compatible-api'
+      path: '/use-cases/openai-compatible-api'
+      fullPath: '/use-cases/openai-compatible-api'
+      preLoaderRoute: typeof UseCasesOpenaiCompatibleApiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/providers/qwen-api': {
+      id: '/providers/qwen-api'
+      path: '/providers/qwen-api'
+      fullPath: '/providers/qwen-api'
+      preLoaderRoute: typeof ProvidersQwenApiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/providers/gemini-api': {
+      id: '/providers/gemini-api'
+      path: '/providers/gemini-api'
+      fullPath: '/providers/gemini-api'
+      preLoaderRoute: typeof ProvidersGeminiApiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/providers/deepseek-api': {
+      id: '/providers/deepseek-api'
+      path: '/providers/deepseek-api'
+      fullPath: '/providers/deepseek-api'
+      preLoaderRoute: typeof ProvidersDeepseekApiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/oauth/$provider': {
       id: '/oauth/$provider'
       path: '/oauth/$provider'
       fullPath: '/oauth/$provider'
       preLoaderRoute: typeof OauthProviderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/guides/openai-sdk-compatible': {
+      id: '/guides/openai-sdk-compatible'
+      path: '/guides/openai-sdk-compatible'
+      fullPath: '/guides/openai-sdk-compatible'
+      preLoaderRoute: typeof GuidesOpenaiSdkCompatibleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/console/topup': {
@@ -845,6 +960,13 @@ declare module '@tanstack/react-router' {
       path: '/console/log'
       fullPath: '/console/log'
       preLoaderRoute: typeof ConsoleLogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/compare/ai-api-pricing': {
+      id: '/compare/ai-api-pricing'
+      path: '/compare/ai-api-pricing'
+      fullPath: '/compare/ai-api-pricing'
+      preLoaderRoute: typeof CompareAiApiPricingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/chat2link': {
@@ -1311,9 +1433,15 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  CompareAiApiPricingRoute: CompareAiApiPricingRoute,
   ConsoleLogRoute: ConsoleLogRoute,
   ConsoleTopupRoute: ConsoleTopupRoute,
+  GuidesOpenaiSdkCompatibleRoute: GuidesOpenaiSdkCompatibleRoute,
   OauthProviderRoute: OauthProviderRoute,
+  ProvidersDeepseekApiRoute: ProvidersDeepseekApiRoute,
+  ProvidersGeminiApiRoute: ProvidersGeminiApiRoute,
+  ProvidersQwenApiRoute: ProvidersQwenApiRoute,
+  UseCasesOpenaiCompatibleApiRoute: UseCasesOpenaiCompatibleApiRoute,
   AboutIndexRoute: AboutIndexRoute,
   PricingIndexRoute: PricingIndexRoute,
   RankingsIndexRoute: RankingsIndexRoute,

@@ -19,12 +19,15 @@ var (
 	twitterPattern        = regexp.MustCompile(`(?is)<meta\s+name=["']twitter:[^"']+["'][^>]*>`)
 	jsonLDPattern         = regexp.MustCompile(`(?is)<script\s+type=["']application/ld\+json["'][^>]*>.*?</script>`)
 	seoInjectedTagPattern = regexp.MustCompile(`(?is)<!--seo:injected:start-->.*?<!--seo:injected:end-->\s*`)
+	seoBodyPattern        = regexp.MustCompile(`(?is)<!--seo:body:start-->.*?<!--seo:body:end-->\s*`)
 	headClosePattern      = regexp.MustCompile(`(?is)</head>`)
+	bodyOpenPattern       = regexp.MustCompile(`(?is)<body[^>]*>`)
 )
 
-func RenderIndexHTML(indexHTML []byte, meta Meta) []byte {
+func RenderIndexHTML(indexHTML []byte, meta Meta, bodyContent ...string) []byte {
 	output := string(indexHTML)
 	output = seoInjectedTagPattern.ReplaceAllString(output, "")
+	output = seoBodyPattern.ReplaceAllString(output, "")
 	output = titleTagPattern.ReplaceAllString(output, "")
 	output = descriptionPattern.ReplaceAllString(output, "")
 	output = metaTitlePattern.ReplaceAllString(output, "")
@@ -36,9 +39,14 @@ func RenderIndexHTML(indexHTML []byte, meta Meta) []byte {
 
 	seo := buildSEOTags(meta)
 	if headClosePattern.MatchString(output) {
-		return []byte(headClosePattern.ReplaceAllLiteralString(output, seo+"</head>"))
+		output = headClosePattern.ReplaceAllLiteralString(output, seo+"</head>")
+	} else {
+		output = seo + output
 	}
-	return []byte(seo + output)
+	if len(bodyContent) > 0 && strings.TrimSpace(bodyContent[0]) != "" {
+		output = injectBodyContent(output, bodyContent[0])
+	}
+	return []byte(output)
 }
 
 func buildSEOTags(meta Meta) string {
@@ -101,4 +109,14 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func injectBodyContent(output string, bodyContent string) string {
+	injected := "<!--seo:body:start-->" + bodyContent + "<!--seo:body:end-->"
+	if bodyOpenPattern.MatchString(output) {
+		return bodyOpenPattern.ReplaceAllStringFunc(output, func(match string) string {
+			return match + injected
+		})
+	}
+	return injected + output
 }

@@ -4,17 +4,74 @@ type SEOMeta = {
   robots: string
 }
 
+type RouteSEOAction =
+  | { kind: 'sync'; meta: SEOMeta }
+  | { kind: 'noindex'; updateTitle: false }
+
+const SEO_FALLBACK_TITLES = new Set([
+  'Page Not Found | Lizh AI',
+  '页面未找到 | Lizh AI',
+  'Console | Lizh AI',
+  '控制台 | Lizh AI',
+])
+
+const TOPIC_META: Record<string, SEOMeta> = {
+  '/use-cases/openai-compatible-api': {
+    title: 'OpenAI-Compatible API for GPT, Gemini, DeepSeek and Qwen | Lizh AI',
+    description:
+      'Use Lizh AI as an OpenAI-compatible API gateway for GPT, Gemini, DeepSeek, Qwen, Doubao, GLM, MiniMax, Kimi, and other mainstream AI models.',
+    robots: 'index,follow',
+  },
+  '/compare/ai-api-pricing': {
+    title: 'AI API Pricing Comparison for Mainstream Models | Lizh AI',
+    description:
+      'Compare approximate AI API prices across GPT, Gemini, DeepSeek, Qwen, Doubao, GLM, MiniMax, Kimi, and other models available in Lizh AI.',
+    robots: 'index,follow',
+  },
+  '/providers/gemini-api': {
+    title: 'Gemini API Pricing and Model Access | Lizh AI',
+    description:
+      'Explore Gemini API model options, approximate prices, model IDs, and OpenAI-compatible access paths through Lizh AI.',
+    robots: 'index,follow',
+  },
+  '/providers/deepseek-api': {
+    title: 'DeepSeek API Pricing and Model Access | Lizh AI',
+    description:
+      'Explore DeepSeek API options for reasoning, coding, and cost-conscious AI workloads with approximate prices and model IDs in Lizh AI.',
+    robots: 'index,follow',
+  },
+  '/providers/qwen-api': {
+    title: 'Qwen API Pricing and Model Access | Lizh AI',
+    description:
+      'Explore Qwen API pricing, model IDs, multilingual and coding use cases, and OpenAI-compatible access through Lizh AI.',
+    robots: 'index,follow',
+  },
+  '/guides/openai-sdk-compatible': {
+    title: 'OpenAI SDK Compatible API Guide for Multiple AI Models | Lizh AI',
+    description:
+      'Learn how to use OpenAI-compatible client patterns, API base URLs, API keys, and model IDs to access multiple AI model families from Lizh AI.',
+    robots: 'index,follow',
+  },
+}
+
 const DEFAULT_META: SEOMeta = {
-  title: 'Lizh AI | GPT、Gemini、DeepSeek、Qwen 多模型 API 聚合平台',
+  title: 'Lizh AI | AI Model Marketplace and OpenAI-Compatible API Gateway',
   description:
-    'Lizh AI 提供 OpenAI 兼容的大模型 API 聚合服务，支持 GPT、Gemini、DeepSeek、Qwen、豆包、GLM、MiniMax、Kimi 等模型，统一计费、统一接口、快速接入。',
+    'Lizh AI is an AI model marketplace with OpenAI-compatible API access for GPT, Gemini, DeepSeek, Qwen, Doubao, GLM, MiniMax, Kimi, and other mainstream models.',
   robots: 'index,follow',
 }
 
 export function syncRouteSEO(href: string) {
   if (typeof document === 'undefined') return
   const url = new URL(href, window.location.origin)
-  const meta = getRouteMeta(url.pathname)
+  const action = getRouteSEOAction(url.pathname)
+  if (action.kind === 'noindex') {
+    upsertMeta('name', 'robots', 'noindex,nofollow')
+    removeCanonical()
+    restoreAppTitleIfNeeded()
+    return
+  }
+  const meta = action.meta
   document.title = meta.title
   upsertMeta('name', 'title', meta.title)
   upsertMeta('name', 'description', meta.description)
@@ -22,79 +79,78 @@ export function syncRouteSEO(href: string) {
   upsertCanonical(`${window.location.origin}${url.pathname}`)
 }
 
-function getRouteMeta(pathname: string): SEOMeta {
+function getRouteSEOAction(pathname: string): RouteSEOAction {
   const path = pathname.replace(/\/+$/, '') || '/'
-  if (path === '/') return DEFAULT_META
+  if (path === '/') return { kind: 'sync', meta: DEFAULT_META }
+  if (TOPIC_META[path]) return { kind: 'sync', meta: TOPIC_META[path] }
   if (path === '/pricing') {
     return {
-      title:
-        'AI 大模型 API 价格广场 | GPT、Gemini、DeepSeek、Qwen、豆包模型价格 - Lizh AI',
-      description:
-        '查看 Lizh AI 在售大模型 API 价格，覆盖 GPT、Gemini、DeepSeek、Qwen、GLM、豆包、MiniMax、Kimi 等 50+ 模型，支持文本、图像、工具调用和结构化输出。',
-      robots: 'index,follow',
+      kind: 'sync',
+      meta: {
+        title:
+          'AI Model API Pricing Marketplace | GPT, Gemini, DeepSeek, Qwen - Lizh AI',
+        description:
+          'Compare AI model API prices in Lizh AI, including GPT, Gemini, DeepSeek, Qwen, Doubao, GLM, MiniMax, Kimi, and other mainstream models.',
+        robots: 'index,follow',
+      },
     }
   }
   if (path.startsWith('/pricing/')) {
     const modelId = safeDecodeURIComponent(path.slice('/pricing/'.length))
     return {
-      title: `${formatModelName(modelId)} API 价格 | Lizh AI`,
-      description: `查看 ${formatModelName(modelId)} API 在 Lizh AI 的模型价格、能力和 OpenAI 兼容接入信息。`,
-      robots: 'index,follow',
+      kind: 'sync',
+      meta: {
+        title: `${formatModelName(modelId)} API Pricing | Lizh AI`,
+        description: `View ${formatModelName(modelId)} API pricing, capabilities, model ID, and OpenAI-compatible access information in Lizh AI.`,
+        robots: 'index,follow',
+      },
     }
   }
   if (path === '/rankings') {
     return {
-      title: '热门 AI 大模型排行榜 | Lizh AI',
-      description:
-        '查看 Lizh AI 大模型调用排行榜，了解 GPT、Gemini、DeepSeek、Qwen、豆包、GLM 等模型的热门程度和使用趋势。',
-      robots: 'index,follow',
+      kind: 'sync',
+      meta: {
+        title: 'Popular AI Model Rankings | Lizh AI',
+        description:
+          'Explore popular AI model rankings for GPT, Gemini, DeepSeek, Qwen, Doubao, GLM, and other model families available through Lizh AI.',
+        robots: 'index,follow',
+      },
     }
   }
   if (path === '/about') {
     return {
-      title: '关于 Lizh AI | 多模型 API 聚合与 OpenAI 兼容网关',
-      description:
-        '了解 Lizh AI 的多模型 API 聚合服务、OpenAI 兼容接口、统一计费能力和面向开发者的模型接入体验。',
-      robots: 'index,follow',
+      kind: 'sync',
+      meta: {
+        title: 'About Lizh AI | AI Model Marketplace and API Gateway',
+        description:
+          'Learn about Lizh AI, an AI model marketplace for multi-model API access, OpenAI-compatible integration, and unified account settlement.',
+        robots: 'index,follow',
+      },
     }
   }
   if (path === '/privacy-policy') {
     return {
-      title: '隐私政策 | Lizh AI',
-      description:
-        '查看 Lizh AI 隐私政策，了解账号、API 调用、计费与服务数据的处理方式。',
-      robots: 'index,follow',
+      kind: 'sync',
+      meta: {
+        title: 'Privacy Policy | Lizh AI',
+        description:
+          'Review the Lizh AI privacy policy for account, API usage, billing, and service data handling.',
+        robots: 'index,follow',
+      },
     }
   }
   if (path === '/user-agreement') {
     return {
-      title: '用户协议 | Lizh AI',
-      description:
-        '查看 Lizh AI 用户协议，了解 API 聚合服务使用、账号、计费与合规要求。',
-      robots: 'index,follow',
+      kind: 'sync',
+      meta: {
+        title: 'User Agreement | Lizh AI',
+        description:
+          'Review the Lizh AI user agreement for API gateway usage, account, billing, and compliance requirements.',
+        robots: 'index,follow',
+      },
     }
   }
-  return {
-    title: utilityTitle(path),
-    description: '该页面用于账号、控制台或系统流程，不建议作为搜索结果收录。',
-    robots: 'noindex,nofollow',
-  }
-}
-
-function utilityTitle(path: string): string {
-  if (path === '/sign-in') return '登录 | Lizh AI'
-  if (path === '/sign-up') return '注册 | Lizh AI'
-  if (path.includes('reset') || path === '/forgot-password') {
-    return '找回密码 | Lizh AI'
-  }
-  if (path.startsWith('/oauth')) return '授权登录 | Lizh AI'
-  if (path.startsWith('/console') || path.startsWith('/_authenticated')) {
-    return '控制台 | Lizh AI'
-  }
-  if (path === '/setup') return '系统初始化 | Lizh AI'
-  if (/^\/(401|403|forbidden)$/.test(path)) return '无权访问 | Lizh AI'
-  if (/^\/(500|503)$/.test(path)) return '服务错误 | Lizh AI'
-  return '页面未找到 | Lizh AI'
+  return { kind: 'noindex', updateTitle: false }
 }
 
 function formatModelName(modelId: string): string {
@@ -152,4 +208,28 @@ function upsertCanonical(href: string) {
     document.head.appendChild(element)
   }
   element.href = href
+}
+
+function removeCanonical() {
+  document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.remove()
+}
+
+function restoreAppTitleIfNeeded() {
+  if (!SEO_FALLBACK_TITLES.has(document.title)) return
+
+  const systemName = getCachedSystemName()
+  if (systemName) {
+    document.title = systemName
+  }
+}
+
+function getCachedSystemName(): string {
+  try {
+    const saved = window.localStorage?.getItem('status')
+    if (!saved) return ''
+    const status = JSON.parse(saved) as { system_name?: unknown }
+    return typeof status.system_name === 'string' ? status.system_name : ''
+  } catch {
+    return ''
+  }
 }

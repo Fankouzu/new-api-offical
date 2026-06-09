@@ -50,6 +50,7 @@ import PersonalSetting from './components/settings/PersonalSetting';
 import Setup from './pages/Setup';
 import SetupCheck from './components/layout/SetupCheck';
 import { syncRouteSEO } from './helpers/seo';
+import PublicTopic from './pages/PublicTopic';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -365,6 +366,30 @@ function App() {
               <About />
             </Suspense>
           }
+        />
+        <Route
+          path='/use-cases/openai-compatible-api'
+          element={<PublicTopic path='/use-cases/openai-compatible-api' />}
+        />
+        <Route
+          path='/compare/ai-api-pricing'
+          element={<PublicTopic path='/compare/ai-api-pricing' />}
+        />
+        <Route
+          path='/providers/gemini-api'
+          element={<PublicTopic path='/providers/gemini-api' />}
+        />
+        <Route
+          path='/providers/deepseek-api'
+          element={<PublicTopic path='/providers/deepseek-api' />}
+        />
+        <Route
+          path='/providers/qwen-api'
+          element={<PublicTopic path='/providers/qwen-api' />}
+        />
+        <Route
+          path='/guides/openai-sdk-compatible'
+          element={<PublicTopic path='/guides/openai-sdk-compatible' />}
         />
         <Route
           path='/user-agreement'

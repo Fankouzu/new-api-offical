@@ -51,11 +51,13 @@ func SetWebRouter(router *gin.Engine, assets ThemeAssets) {
 		}
 		c.Header("Cache-Control", "no-cache")
 		theme := common.GetTheme()
-		meta := webseo.ResolveMetaForTheme(c.Request.RequestURI, system_setting.ServerAddress, model.GetPricing(), theme)
+		pricings := model.GetPricing()
+		meta := webseo.ResolveMetaForTheme(c.Request.RequestURI, system_setting.ServerAddress, pricings, theme)
+		body := webseo.BuildBodyContent(meta, c.Request.RequestURI, system_setting.ServerAddress, pricings, theme)
 		if theme == "classic" {
-			c.Data(http.StatusOK, "text/html; charset=utf-8", webseo.RenderIndexHTML(assets.ClassicIndexPage, meta))
+			c.Data(http.StatusOK, "text/html; charset=utf-8", webseo.RenderIndexHTML(assets.ClassicIndexPage, meta, body))
 		} else {
-			c.Data(http.StatusOK, "text/html; charset=utf-8", webseo.RenderIndexHTML(assets.DefaultIndexPage, meta))
+			c.Data(http.StatusOK, "text/html; charset=utf-8", webseo.RenderIndexHTML(assets.DefaultIndexPage, meta, body))
 		}
 	})
 }
