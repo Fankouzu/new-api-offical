@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -73,6 +74,8 @@ var (
 	config   = loadConfigFromEnv()
 
 	httpSender sender = &http.Client{Timeout: config.Timeout}
+
+	regexpGA4APISecret = regexp.MustCompile(`([?&]api_secret=)[^&\s]+`)
 )
 
 func loadConfigFromEnv() Config {
@@ -138,6 +141,10 @@ func currentConfig() Config {
 
 func trackingEnabled(cfg Config) bool {
 	return cfg.Enabled && cfg.MeasurementID != "" && cfg.APISecret != ""
+}
+
+func Enabled() bool {
+	return trackingEnabled(currentConfig())
 }
 
 func HashIdentifier(value string) string {
@@ -259,7 +266,7 @@ func track(c *gin.Context, cfg Config, userID int, tokenID int, eventName string
 	payload := buildPayload(c, userID, tokenID, eventName, params)
 	gopool.Go(func() {
 		if err := sendPayload(context.Background(), cfg, payload); err != nil {
-			common.SysLog(fmt.Sprintf("GA4 event send failed: event=%s error=%s", eventName, err.Error()))
+			common.SysLog(fmt.Sprintf("GA4 event send failed: event=%s error=%s", eventName, sanitizeError(err).Error()))
 		}
 	})
 }
@@ -325,4 +332,18 @@ func buildEndpoint(cfg Config) (string, error) {
 	q.Set("api_secret", cfg.APISecret)
 	u.RawQuery = q.Encode()
 	return u.String(), nil
+}
+
+func sanitizeError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s", sanitizeGA4Secrets(err.Error()))
+}
+
+func sanitizeGA4Secrets(message string) string {
+	if message == "" {
+		return ""
+	}
+	return regexpGA4APISecret.ReplaceAllString(message, "${1}[redacted]")
 }

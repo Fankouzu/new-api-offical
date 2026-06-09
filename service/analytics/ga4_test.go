@@ -202,3 +202,33 @@ func TestSendPayloadReturnsStatusErrorWithoutPanic(t *testing.T) {
 		t.Fatalf("expected status error, got %v", err)
 	}
 }
+
+func TestEnabledReflectsUsableConfig(t *testing.T) {
+	cfg := testConfig()
+	restore := ConfigureForTest(cfg, nil)
+	if !Enabled() {
+		t.Fatalf("complete GA4 config should be enabled")
+	}
+	restore()
+
+	cfg.APISecret = ""
+	restore = ConfigureForTest(cfg, nil)
+	defer restore()
+	if Enabled() {
+		t.Fatalf("missing API secret should disable GA4 tracking")
+	}
+}
+
+func TestSanitizeGA4SecretsRedactsAPISecret(t *testing.T) {
+	raw := "Post \"https://www.google-analytics.com/mp/collect?measurement_id=G-TEST&api_secret=leaked-secret\": dial tcp timeout"
+	got := sanitizeGA4Secrets(raw)
+	if strings.Contains(got, "leaked-secret") {
+		t.Fatalf("secret leaked after sanitization: %s", got)
+	}
+	if !strings.Contains(got, "api_secret=[redacted]") {
+		t.Fatalf("redacted marker missing: %s", got)
+	}
+	if !strings.Contains(got, "measurement_id=G-TEST") {
+		t.Fatalf("non-secret query params should remain: %s", got)
+	}
+}

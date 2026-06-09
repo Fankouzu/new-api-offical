@@ -458,6 +458,9 @@ func trackFirstAPICallIfNeeded(relayInfo *relaycommon.RelayInfo, quota int) {
 	if relayInfo == nil || relayInfo.IsPlayground || quota <= 0 || relayInfo.TokenId <= 0 {
 		return
 	}
+	if !analytics.Enabled() {
+		return
+	}
 	if !model.TryMarkAnalyticsEvent("token", relayInfo.TokenId, "first_api_call") {
 		return
 	}
