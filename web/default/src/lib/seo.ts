@@ -88,13 +88,33 @@ function utilityTitle(path: string): string {
     return '找回密码 | Lizh AI'
   }
   if (path.startsWith('/oauth')) return '授权登录 | Lizh AI'
-  if (path.startsWith('/console') || path.startsWith('/_authenticated')) {
+  if (isAuthenticatedAppPath(path)) {
     return '控制台 | Lizh AI'
   }
   if (path === '/setup') return '系统初始化 | Lizh AI'
   if (/^\/(401|403|forbidden)$/.test(path)) return '无权访问 | Lizh AI'
   if (/^\/(500|503)$/.test(path)) return '服务错误 | Lizh AI'
   return '页面未找到 | Lizh AI'
+}
+
+function isAuthenticatedAppPath(path: string): boolean {
+  return [
+    '/_authenticated',
+    '/console',
+    '/usage-logs',
+    '/playground',
+    '/wallet',
+    '/tokens',
+    '/settings',
+    '/user',
+    '/users',
+    '/channels',
+    '/redemption',
+    '/topup',
+    '/subscription',
+    '/billing',
+    '/logs',
+  ].some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
 }
 
 function formatModelName(modelId: string): string {

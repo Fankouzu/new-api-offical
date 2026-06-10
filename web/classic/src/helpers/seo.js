@@ -70,10 +70,29 @@ function utilityTitle(path) {
   if (path === '/register') return '注册 | Lizh AI';
   if (path.includes('reset')) return '找回密码 | Lizh AI';
   if (path.startsWith('/oauth')) return '授权登录 | Lizh AI';
-  if (path.startsWith('/console')) return '控制台 | Lizh AI';
+  if (isAuthenticatedAppPath(path)) return '控制台 | Lizh AI';
   if (path === '/setup') return '系统初始化 | Lizh AI';
   if (path === '/forbidden') return '无权访问 | Lizh AI';
   return '页面未找到 | Lizh AI';
+}
+
+function isAuthenticatedAppPath(path) {
+  return [
+    '/console',
+    '/usage-logs',
+    '/playground',
+    '/wallet',
+    '/tokens',
+    '/settings',
+    '/user',
+    '/users',
+    '/channels',
+    '/redemption',
+    '/topup',
+    '/subscription',
+    '/billing',
+    '/logs',
+  ].some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
 function formatModelName(modelId) {

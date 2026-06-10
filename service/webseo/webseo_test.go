@@ -108,6 +108,30 @@ func TestResolveMetaNoindexesUtilityAndUnknownRoutes(t *testing.T) {
 	}
 }
 
+func TestResolveMetaForAuthenticatedRoutesUsesConsoleTitle(t *testing.T) {
+	paths := []string{
+		"/usage-logs/common?startTime=1781107200000&endTime=1781127101503&page=1",
+		"/usage-logs/task",
+		"/wallet",
+		"/tokens",
+		"/playground",
+		"/settings",
+		"/user/edit",
+	}
+	for _, path := range paths {
+		meta := ResolveMeta(path, "https://lizh.ai", testCatalog)
+		if meta.Robots != "noindex,nofollow" {
+			t.Fatalf("%s should remain noindex,nofollow, got %q", path, meta.Robots)
+		}
+		if strings.Contains(meta.Title, "页面未找到") {
+			t.Fatalf("%s should not use not-found title, got %q", path, meta.Title)
+		}
+		if meta.Title != "控制台 | Lizh AI" {
+			t.Fatalf("%s title = %q, want console title", path, meta.Title)
+		}
+	}
+}
+
 func TestRenderIndexHTMLInjectsRouteSpecificTags(t *testing.T) {
 	html := `<!doctype html><html><head><title>New API</title><meta name="description" content="old"></head><body><div id="root"></div></body></html>`
 	meta := ResolveMeta("/pricing/deepseek-v4-flash", "https://lizh.ai", testCatalog)

@@ -141,7 +141,7 @@ func utilityTitle(path string) string {
 		return "找回密码 | Lizh AI"
 	case strings.HasPrefix(path, "/oauth"):
 		return "授权登录 | Lizh AI"
-	case strings.HasPrefix(path, "/console"):
+	case isAuthenticatedAppPath(path):
 		return "控制台 | Lizh AI"
 	case path == "/setup":
 		return "系统初始化 | Lizh AI"
@@ -152,4 +152,30 @@ func utilityTitle(path string) string {
 	default:
 		return "页面未找到 | Lizh AI"
 	}
+}
+
+func isAuthenticatedAppPath(path string) bool {
+	authPrefixes := []string{
+		"/_authenticated",
+		"/console",
+		"/usage-logs",
+		"/playground",
+		"/wallet",
+		"/tokens",
+		"/settings",
+		"/user",
+		"/users",
+		"/channels",
+		"/redemption",
+		"/topup",
+		"/subscription",
+		"/billing",
+		"/logs",
+	}
+	for _, prefix := range authPrefixes {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
