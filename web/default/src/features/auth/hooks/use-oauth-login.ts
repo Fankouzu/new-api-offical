@@ -21,7 +21,8 @@ import type { AxiosRequestConfig } from 'axios'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { api, getSelf } from '@/lib/api'
+import { api } from '@/lib/api'
+import type { AuthUser } from '@/stores/auth-store'
 import { getOAuthState } from '../api'
 import {
   buildGitHubOAuthUrl,
@@ -246,9 +247,8 @@ export function useOAuthLogin(status: SystemStatus | null) {
         return
       }
 
-      const selfResponse = await getSelf()
-      if (selfResponse?.success && selfResponse.data) {
-        auth.setUser(selfResponse.data)
+      if (res.data.data) {
+        auth.setUser(res.data.data as AuthUser)
       }
       toast.success(t('Signed in successfully!'))
       window.location.href = '/dashboard'
