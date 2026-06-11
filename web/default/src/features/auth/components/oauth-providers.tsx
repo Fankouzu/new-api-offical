@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next'
 import {
   IconDiscord,
   IconGithub,
+  IconGoogle,
   IconLinuxDo,
   IconTelegram,
   IconWeChat,
@@ -29,7 +30,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { TelegramLoginWidget } from './telegram-login-widget'
 import { useOAuthLogin } from '../hooks/use-oauth-login'
-import type { SystemStatus } from '../types'
+import type { CustomOAuthProviderInfo, SystemStatus } from '../types'
 
 type OAuthProvidersProps = {
   status: SystemStatus | null
@@ -46,6 +47,19 @@ type ProviderButton = {
   icon?: ReactNode
   disabled?: boolean
   render?: ReactNode
+}
+
+function getCustomOAuthIcon(provider: CustomOAuthProviderInfo): ReactNode {
+  const identity = [provider.icon, provider.slug, provider.name]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  if (/\bgoogle\b/.test(identity)) {
+    return <IconGoogle className='h-4 w-4' />
+  }
+
+  return undefined
 }
 
 export function OAuthProviders({
@@ -168,6 +182,7 @@ export function OAuthProviders({
         key: `custom-${provider.slug}`,
         label: t('Continue with {{name}}', { name: provider.name }),
         onClick: () => handleCustomOAuthLogin(provider),
+        icon: getCustomOAuthIcon(provider),
       })
     }
   }
