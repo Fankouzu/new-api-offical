@@ -22,7 +22,9 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
+import type { AuthUser } from '@/stores/auth-store'
 import { getOAuthState } from '../api'
+import { saveUserId } from '../lib/storage'
 import {
   buildGitHubOAuthUrl,
   buildDiscordOAuthUrl,
@@ -30,6 +32,10 @@ import {
   buildLinuxDOOAuthUrl,
 } from '../lib/oauth'
 import type { SystemStatus, CustomOAuthProviderInfo } from '../types'
+import {
+  loadTelegramWidgetScript,
+  type TelegramAuthPayload,
+} from '../components/telegram-login-widget'
 
 type LogoutRequestConfig = AxiosRequestConfig & {
   skipErrorHandler?: boolean
@@ -185,8 +191,78 @@ export function useOAuthLogin(status: SystemStatus | null) {
     }
   }
 
-  const handleTelegramLogin = () => {
-    toast.info(t('Telegram login requires widget integration; coming soon'))
+  useEffect(() => {
+    if (!status?.telegram_bot_id) return
+    void loadTelegramWidgetScript().catch(() => {
+      // Keep the button visible; the click handler will show the translated error.
+    })
+  }, [status?.telegram_bot_id])
+
+  const handleTelegramLogin = async () => {
+    if (!status?.telegram_bot_id) {
+      toast.info(t('Use the Telegram button to continue'))
+      return
+    }
+
+    setIsLoading(true)
+    let authStarted = false
+    try {
+      await loadTelegramWidgetScript()
+      if (!window.Telegram?.Login?.auth) {
+        toast.error(t('Telegram login failed'))
+        return
+      }
+
+      window.Telegram.Login.auth(
+        {
+          bot_id: status.telegram_bot_id,
+          request_access: 'write',
+        },
+        (user) => {
+          if (!user) {
+            setIsLoading(false)
+            return
+          }
+          authStarted = true
+          void handleTelegramAuth(user)
+        }
+      )
+    } catch (_error) {
+      toast.error(t('Telegram login failed'))
+    } finally {
+      if (!authStarted) {
+        setIsLoading(false)
+      }
+    }
+  }
+
+  const handleTelegramAuth = async (payload: TelegramAuthPayload) => {
+    setIsLoading(true)
+    try {
+      const res = await api.post('/api/oauth/telegram/login', pickTelegramAuthParams(payload), {
+        disableDuplicate: true,
+      } as Record<string, unknown>)
+      if (!res?.data?.success) {
+        toast.error(res?.data?.message || t('Telegram login failed'))
+        return
+      }
+
+      if (res.data.data) {
+        const user = res.data.data as AuthUser
+        auth.setUser(user)
+        if (user.id) {
+          saveUserId(user.id)
+        }
+      }
+      toast.success(t('Signed in successfully!'))
+      window.location.href = '/dashboard'
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : t('Telegram login failed')
+      toast.error(message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleCustomOAuthLogin = async (provider: CustomOAuthProviderInfo) => {
@@ -230,6 +306,28 @@ export function useOAuthLogin(status: SystemStatus | null) {
     handleOIDCLogin,
     handleLinuxDOLogin,
     handleTelegramLogin,
+    handleTelegramAuth,
     handleCustomOAuthLogin,
   }
+}
+
+function pickTelegramAuthParams(payload: TelegramAuthPayload) {
+  const fields = [
+    'id',
+    'first_name',
+    'last_name',
+    'username',
+    'photo_url',
+    'auth_date',
+    'hash',
+    'lang',
+  ] as const
+  const params: Record<string, string> = {}
+  for (const field of fields) {
+    const value = payload[field]
+    if (value !== undefined && value !== null && value !== '') {
+      params[field] = String(value)
+    }
+  }
+  return params
 }

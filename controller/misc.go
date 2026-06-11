@@ -61,6 +61,7 @@ func GetStatus(c *gin.Context) {
 		"linuxdo_minimum_trust_level": common.LinuxDOMinimumTrustLevel,
 		"telegram_oauth":              common.TelegramOAuthEnabled,
 		"telegram_bot_name":           common.TelegramBotName,
+		"telegram_bot_id":             getTelegramBotID(common.TelegramBotToken),
 		"theme":                       system_setting.GetThemeSettings().Frontend,
 		"system_name":                 common.SystemName,
 		"logo":                        common.Logo,
@@ -164,6 +165,14 @@ func GetStatus(c *gin.Context) {
 		"data":    data,
 	})
 	return
+}
+
+func getTelegramBotID(token string) string {
+	parts := strings.SplitN(token, ":", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	return parts[0]
 }
 
 func GetNotice(c *gin.Context) {
