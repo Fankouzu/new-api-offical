@@ -125,10 +125,26 @@ export function OAuthProviders({
         onClick: handleTelegramLogin,
         icon: <IconTelegram className='h-4 w-4' />,
         render: (
-          <div className='flex justify-center rounded-lg border px-3 py-2'>
+          <div
+            className={cn(
+              'relative h-11 w-full overflow-hidden rounded-lg',
+              (disabled || isLoading) && 'pointer-events-none opacity-50'
+            )}
+          >
+            <Button
+              variant='outline'
+              type='button'
+              tabIndex={-1}
+              aria-hidden='true'
+              className='pointer-events-none absolute inset-0 h-11 w-full justify-center gap-2 rounded-lg'
+            >
+              <IconTelegram className='h-4 w-4' />
+              {t('Continue with Telegram')}
+            </Button>
             <TelegramLoginWidget
               botName={status.telegram_bot_name}
               onAuth={handleTelegramAuth}
+              className='absolute inset-0 [&_iframe]:!h-full [&_iframe]:!w-full [&_iframe]:!opacity-0'
             />
           </div>
         ),
