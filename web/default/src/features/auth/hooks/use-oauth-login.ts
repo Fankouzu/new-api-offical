@@ -21,7 +21,7 @@ import type { AxiosRequestConfig } from 'axios'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { api } from '@/lib/api'
+import { api, getSelf } from '@/lib/api'
 import { getOAuthState } from '../api'
 import {
   buildGitHubOAuthUrl,
@@ -30,6 +30,7 @@ import {
   buildLinuxDOOAuthUrl,
 } from '../lib/oauth'
 import type { SystemStatus, CustomOAuthProviderInfo } from '../types'
+import type { TelegramAuthPayload } from '../components/telegram-login-widget'
 
 type LogoutRequestConfig = AxiosRequestConfig & {
   skipErrorHandler?: boolean
@@ -186,7 +187,34 @@ export function useOAuthLogin(status: SystemStatus | null) {
   }
 
   const handleTelegramLogin = () => {
-    toast.info(t('Telegram login requires widget integration; coming soon'))
+    toast.info(t('Use the Telegram button to continue'))
+  }
+
+  const handleTelegramAuth = async (payload: TelegramAuthPayload) => {
+    setIsLoading(true)
+    try {
+      await resetSession()
+      const res = await api.get('/api/oauth/telegram/login', {
+        params: pickTelegramAuthParams(payload),
+      })
+      if (!res?.data?.success) {
+        toast.error(res?.data?.message || t('Telegram login failed'))
+        return
+      }
+
+      const selfResponse = await getSelf()
+      if (selfResponse?.success && selfResponse.data) {
+        auth.setUser(selfResponse.data)
+      }
+      toast.success(t('Signed in successfully!'))
+      window.location.href = '/dashboard'
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : t('Telegram login failed')
+      toast.error(message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleCustomOAuthLogin = async (provider: CustomOAuthProviderInfo) => {
@@ -230,6 +258,28 @@ export function useOAuthLogin(status: SystemStatus | null) {
     handleOIDCLogin,
     handleLinuxDOLogin,
     handleTelegramLogin,
+    handleTelegramAuth,
     handleCustomOAuthLogin,
   }
+}
+
+function pickTelegramAuthParams(payload: TelegramAuthPayload) {
+  const fields = [
+    'id',
+    'first_name',
+    'last_name',
+    'username',
+    'photo_url',
+    'auth_date',
+    'hash',
+    'lang',
+  ] as const
+  const params: Record<string, string> = {}
+  for (const field of fields) {
+    const value = payload[field]
+    if (value !== undefined && value !== null && value !== '') {
+      params[field] = String(value)
+    }
+  }
+  return params
 }

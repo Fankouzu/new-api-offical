@@ -22,10 +22,12 @@ import {
   IconDiscord,
   IconGithub,
   IconLinuxDo,
+  IconTelegram,
   IconWeChat,
 } from '@/assets/brand-icons'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { TelegramLoginWidget } from './telegram-login-widget'
 import { useOAuthLogin } from '../hooks/use-oauth-login'
 import type { SystemStatus } from '../types'
 
@@ -43,6 +45,7 @@ type ProviderButton = {
   onClick: () => void
   icon?: ReactNode
   disabled?: boolean
+  render?: ReactNode
 }
 
 export function OAuthProviders({
@@ -62,6 +65,7 @@ export function OAuthProviders({
     handleOIDCLogin,
     handleLinuxDOLogin,
     handleTelegramLogin,
+    handleTelegramAuth,
     handleCustomOAuthLogin,
   } = useOAuthLogin(status)
 
@@ -114,11 +118,22 @@ export function OAuthProviders({
   }
 
   if (status?.telegram_oauth) {
-    providerButtons.push({
-      key: 'telegram',
-      label: t('Continue with Telegram'),
-      onClick: handleTelegramLogin,
-    })
+    if (status.telegram_bot_name) {
+      providerButtons.push({
+        key: 'telegram',
+        label: t('Continue with Telegram'),
+        onClick: handleTelegramLogin,
+        icon: <IconTelegram className='h-4 w-4' />,
+        render: (
+          <div className='flex justify-center rounded-lg border px-3 py-2'>
+            <TelegramLoginWidget
+              botName={status.telegram_bot_name}
+              onAuth={handleTelegramAuth}
+            />
+          </div>
+        ),
+      })
+    }
   }
 
   // Custom OAuth providers
@@ -150,19 +165,22 @@ export function OAuthProviders({
 
       <div className='flex flex-col gap-2'>
         {providerButtons.map(
-          ({ key, label, onClick, icon, disabled: extraDisabled }) => (
-            <Button
-              key={key}
-              variant='outline'
-              type='button'
-              disabled={disabled || isLoading || extraDisabled}
-              onClick={onClick}
-              className='h-11 w-full justify-center gap-2 rounded-lg'
-            >
-              {icon}
-              {label}
-            </Button>
-          )
+          ({ key, label, onClick, icon, disabled: extraDisabled, render }) =>
+            render ? (
+              <div key={key}>{render}</div>
+            ) : (
+              <Button
+                key={key}
+                variant='outline'
+                type='button'
+                disabled={disabled || isLoading || extraDisabled}
+                onClick={onClick}
+                className='h-11 w-full justify-center gap-2 rounded-lg'
+              >
+                {icon}
+                {label}
+              </Button>
+            )
         )}
       </div>
     </div>
