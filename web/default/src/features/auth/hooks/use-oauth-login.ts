@@ -239,8 +239,7 @@ export function useOAuthLogin(status: SystemStatus | null) {
   const handleTelegramAuth = async (payload: TelegramAuthPayload) => {
     setIsLoading(true)
     try {
-      const res = await api.get('/api/oauth/telegram/login', {
-        params: pickTelegramAuthParams(payload),
+      const res = await api.post('/api/oauth/telegram/login', pickTelegramAuthParams(payload), {
         disableDuplicate: true,
       } as Record<string, unknown>)
       if (!res?.data?.success) {

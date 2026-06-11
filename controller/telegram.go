@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -16,6 +18,19 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
+
+const telegramAuthMaxAge = 24 * time.Hour
+
+type telegramAuthRequest struct {
+	Id        string `json:"id"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	Username  string `json:"username"`
+	PhotoURL  string `json:"photo_url"`
+	AuthDate  string `json:"auth_date"`
+	Hash      string `json:"hash"`
+	Lang      string `json:"lang"`
+}
 
 func TelegramBind(c *gin.Context) {
 	if !common.TelegramOAuthEnabled {
@@ -26,7 +41,7 @@ func TelegramBind(c *gin.Context) {
 		return
 	}
 	params := c.Request.URL.Query()
-	if !checkTelegramAuthorization(params, common.TelegramBotToken) {
+	if !checkTelegramAuthorization(params, common.TelegramBotToken, true) {
 		c.JSON(200, gin.H{
 			"message": "无效的请求",
 			"success": false,
@@ -44,7 +59,15 @@ func TelegramBind(c *gin.Context) {
 
 	session := sessions.Default(c)
 	id := session.Get("id")
-	user := model.User{Id: id.(int)}
+	userId, ok := id.(int)
+	if !ok || userId == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "用户未登录",
+			"success": false,
+		})
+		return
+	}
+	user := model.User{Id: userId}
 	if err := user.FillUserById(); err != nil {
 		c.JSON(200, gin.H{
 			"message": err.Error(),
@@ -79,8 +102,8 @@ func TelegramLogin(c *gin.Context) {
 		})
 		return
 	}
-	params := c.Request.URL.Query()
-	if !checkTelegramAuthorization(params, common.TelegramBotToken) {
+	params, ok := getTelegramLoginParams(c)
+	if !ok || !checkTelegramAuthorization(params, common.TelegramBotToken, true) {
 		c.JSON(200, gin.H{
 			"message": "无效的请求",
 			"success": false,
@@ -126,6 +149,33 @@ func TelegramLogin(c *gin.Context) {
 		}
 	}
 	setupLogin(&user, c)
+}
+
+func getTelegramLoginParams(c *gin.Context) (url.Values, bool) {
+	if c.Request.Method == http.MethodGet {
+		return c.Request.URL.Query(), true
+	}
+
+	var req telegramAuthRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		return nil, false
+	}
+	params := url.Values{}
+	setTelegramParam(params, "id", req.Id)
+	setTelegramParam(params, "first_name", req.FirstName)
+	setTelegramParam(params, "last_name", req.LastName)
+	setTelegramParam(params, "username", req.Username)
+	setTelegramParam(params, "photo_url", req.PhotoURL)
+	setTelegramParam(params, "auth_date", req.AuthDate)
+	setTelegramParam(params, "hash", req.Hash)
+	setTelegramParam(params, "lang", req.Lang)
+	return params, true
+}
+
+func setTelegramParam(params url.Values, key string, value string) {
+	if value != "" {
+		params.Set(key, value)
+	}
 }
 
 func getTelegramUsername(params map[string][]string) string {
@@ -176,7 +226,7 @@ func truncateTelegramField(value string, maxLen int) string {
 	return string(runes[:maxLen])
 }
 
-func firstTelegramParam(params map[string][]string, key string) string {
+func firstTelegramParam(params url.Values, key string) string {
 	values := params[key]
 	if len(values) == 0 {
 		return ""
@@ -184,10 +234,25 @@ func firstTelegramParam(params map[string][]string, key string) string {
 	return values[0]
 }
 
-func checkTelegramAuthorization(params map[string][]string, token string) bool {
+func checkTelegramAuthorization(params url.Values, token string, enforceFreshness bool) bool {
+	if token == "" {
+		return false
+	}
+	if firstTelegramParam(params, "id") == "" ||
+		firstTelegramParam(params, "auth_date") == "" ||
+		firstTelegramParam(params, "hash") == "" {
+		return false
+	}
+	if enforceFreshness && !isFreshTelegramAuthDate(firstTelegramParam(params, "auth_date")) {
+		return false
+	}
+
 	strs := []string{}
 	var hash = ""
 	for k, v := range params {
+		if len(v) == 0 {
+			continue
+		}
 		if k == "hash" {
 			hash = v[0]
 			continue
@@ -206,6 +271,19 @@ func checkTelegramAuthorization(params map[string][]string, token string) bool {
 	io.WriteString(sha256hash, token)
 	hmachash := hmac.New(sha256.New, sha256hash.Sum(nil))
 	io.WriteString(hmachash, imploded)
-	ss := hex.EncodeToString(hmachash.Sum(nil))
-	return hash == ss
+	expectedHash := hmachash.Sum(nil)
+	actualHash, err := hex.DecodeString(hash)
+	if err != nil {
+		return false
+	}
+	return hmac.Equal(actualHash, expectedHash)
+}
+
+func isFreshTelegramAuthDate(authDate string) bool {
+	timestamp, err := strconv.ParseInt(authDate, 10, 64)
+	if err != nil {
+		return false
+	}
+	createdAt := time.Unix(timestamp, 0)
+	return time.Since(createdAt) <= telegramAuthMaxAge && time.Until(createdAt) <= time.Minute
 }

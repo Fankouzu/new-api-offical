@@ -102,6 +102,7 @@ function isAuthenticatedAppPath(path: string): boolean {
   return [
     '/_authenticated',
     '/console',
+    '/dashboard',
     '/usage-logs',
     '/playground',
     '/wallet',
