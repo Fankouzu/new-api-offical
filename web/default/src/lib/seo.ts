@@ -5,7 +5,7 @@ type SEOMeta = {
 }
 
 const DEFAULT_META: SEOMeta = {
-  title: 'Lizh AI | GPT, Gemini, DeepSeek, and Qwen API marketplace',
+  title: 'Lizh AI',
   description:
     'Access GPT, Gemini, DeepSeek, Qwen, Doubao, GLM, MiniMax, Kimi, and other AI models through one OpenAI-compatible API gateway with unified billing.',
   robots: 'index,follow',

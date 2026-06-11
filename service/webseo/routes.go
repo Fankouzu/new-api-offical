@@ -32,7 +32,7 @@ func ResolveMetaForTheme(requestURI string, baseURL string, pricings []model.Pri
 
 	switch {
 	case path == "/":
-		meta.Title = "Lizh AI | GPT, Gemini, DeepSeek, and Qwen API marketplace"
+		meta.Title = defaultSiteName
 		meta.Description = "Access GPT, Gemini, DeepSeek, Qwen, Doubao, GLM, MiniMax, Kimi, and other AI models through one OpenAI-compatible API gateway with unified billing."
 		meta.Robots = indexRobots
 		meta.JSONLD = homepageJSONLD(base)
