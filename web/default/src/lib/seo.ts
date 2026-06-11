@@ -15,6 +15,20 @@ export function syncRouteSEO(href: string) {
   if (typeof document === 'undefined') return
   const url = new URL(href, window.location.origin)
   const meta = getRouteMeta(url.pathname)
+  if (!meta) {
+    const title = getDefaultAppTitle()
+    document.title = title
+    upsertMeta('name', 'title', title)
+    upsertMeta(
+      'name',
+      'description',
+      'Authenticated application page for account, console, and system workflows.'
+    )
+    upsertMeta('name', 'robots', 'noindex,nofollow')
+    removeCanonical()
+    return
+  }
+
   document.title = meta.title
   upsertMeta('name', 'title', meta.title)
   upsertMeta('name', 'description', meta.description)
@@ -22,7 +36,7 @@ export function syncRouteSEO(href: string) {
   upsertCanonical(`${window.location.origin}${url.pathname}`)
 }
 
-function getRouteMeta(pathname: string): SEOMeta {
+function getRouteMeta(pathname: string): SEOMeta | null {
   const path = pathname.replace(/\/+$/, '') || '/'
   if (path === '/') return DEFAULT_META
   if (path === '/pricing') {
@@ -74,49 +88,35 @@ function getRouteMeta(pathname: string): SEOMeta {
       robots: 'index,follow',
     }
   }
-  return {
-    title: utilityTitle(path),
-    description:
-      'This page is used for account, console, or system workflows and should not be indexed by search engines.',
-    robots: 'noindex,nofollow',
+  if (path === '/sign-in') {
+    return {
+      title: 'Sign in | Lizh AI',
+      description: 'Sign in to your Lizh AI account.',
+      robots: 'noindex,nofollow',
+    }
   }
-}
-
-function utilityTitle(path: string): string {
-  if (path === '/sign-in') return 'Sign in | Lizh AI'
-  if (path === '/sign-up') return 'Sign up | Lizh AI'
+  if (path === '/sign-up') {
+    return {
+      title: 'Sign up | Lizh AI',
+      description: 'Create a Lizh AI account.',
+      robots: 'noindex,nofollow',
+    }
+  }
   if (path.includes('reset') || path === '/forgot-password') {
-    return 'Reset password | Lizh AI'
+    return {
+      title: 'Reset password | Lizh AI',
+      description: 'Reset your Lizh AI account password.',
+      robots: 'noindex,nofollow',
+    }
   }
-  if (path.startsWith('/oauth')) return 'OAuth authorization | Lizh AI'
-  if (isAuthenticatedAppPath(path)) {
-    return 'Console | Lizh AI'
+  if (path.startsWith('/oauth')) {
+    return {
+      title: 'OAuth authorization | Lizh AI',
+      description: 'Complete OAuth authorization for Lizh AI.',
+      robots: 'noindex,nofollow',
+    }
   }
-  if (path === '/setup') return 'System setup | Lizh AI'
-  if (/^\/(401|403|forbidden)$/.test(path)) return 'Access denied | Lizh AI'
-  if (/^\/(500|503)$/.test(path)) return 'Service error | Lizh AI'
-  return 'Page not found | Lizh AI'
-}
-
-function isAuthenticatedAppPath(path: string): boolean {
-  return [
-    '/_authenticated',
-    '/console',
-    '/dashboard',
-    '/usage-logs',
-    '/playground',
-    '/wallet',
-    '/tokens',
-    '/settings',
-    '/user',
-    '/users',
-    '/channels',
-    '/redemption',
-    '/topup',
-    '/subscription',
-    '/billing',
-    '/logs',
-  ].some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
+  return null
 }
 
 function formatModelName(modelId: string): string {
@@ -174,4 +174,26 @@ function upsertCanonical(href: string) {
     document.head.appendChild(element)
   }
   element.href = href
+}
+
+function removeCanonical() {
+  const element = document.head.querySelector<HTMLLinkElement>(
+    'link[rel="canonical"]'
+  )
+  element?.remove()
+}
+
+function getDefaultAppTitle(): string {
+  try {
+    const saved = window.localStorage.getItem('status')
+    if (saved) {
+      const status = JSON.parse(saved) as { system_name?: unknown }
+      if (typeof status.system_name === 'string' && status.system_name.trim()) {
+        return status.system_name.trim()
+      }
+    }
+  } catch {
+    /* empty */
+  }
+  return 'Lychee AI'
 }
