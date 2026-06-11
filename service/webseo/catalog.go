@@ -97,19 +97,19 @@ func modelFamily(id string) string {
 }
 
 func endpointCapabilities(endpoints []constant.EndpointType) []string {
-	capabilities := []string{"文本生成"}
+	capabilities := []string{"text generation"}
 	for _, endpoint := range endpoints {
 		switch endpoint {
 		case constant.EndpointTypeImageGeneration:
-			capabilities = appendUnique(capabilities, "图像生成")
+			capabilities = appendUnique(capabilities, "image generation")
 		case constant.EndpointTypeEmbeddings:
-			capabilities = appendUnique(capabilities, "向量嵌入")
+			capabilities = appendUnique(capabilities, "embeddings")
 		case constant.EndpointTypeOpenAIResponse, constant.EndpointTypeOpenAIResponseCompact:
 			capabilities = appendUnique(capabilities, "Responses API")
 		case constant.EndpointTypeGemini:
-			capabilities = appendUnique(capabilities, "Gemini 兼容")
+			capabilities = appendUnique(capabilities, "Gemini-compatible access")
 		case constant.EndpointTypeAnthropic:
-			capabilities = appendUnique(capabilities, "Claude 兼容")
+			capabilities = appendUnique(capabilities, "Claude-compatible access")
 		}
 	}
 	return capabilities
@@ -126,7 +126,7 @@ func appendUnique(values []string, value string) []string {
 
 func formatPrice(price float64) string {
 	if price <= 0 {
-		return "按请求或配置计费"
+		return "priced per request or configuration"
 	}
 	return fmt.Sprintf("$%.4f / 1M tokens", price)
 }

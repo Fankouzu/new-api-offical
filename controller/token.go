@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service/analytics"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
@@ -227,6 +228,9 @@ func AddToken(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	analytics.TrackAPIKeyCreated(c, cleanToken.UserId, cleanToken.Id, cleanToken.Key, analytics.UserAttribution{
+		VoucherSource: "lizh_ai",
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

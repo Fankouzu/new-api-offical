@@ -58,7 +58,7 @@ func TestResolveMetaForIndexablePublicRoutes(t *testing.T) {
 	if pricing.CanonicalURL != "https://lizh.ai/pricing" {
 		t.Fatalf("pricing canonical should drop query strings, got %q", pricing.CanonicalURL)
 	}
-	if !strings.Contains(pricing.Title, "AI 大模型 API 价格广场") {
+	if !strings.Contains(pricing.Title, "AI Model API Pricing Marketplace") {
 		t.Fatalf("unexpected pricing title: %q", pricing.Title)
 	}
 	if len(pricing.JSONLD) == 0 {
@@ -71,7 +71,7 @@ func TestResolveMetaForModelDetail(t *testing.T) {
 	if meta.Robots != "index,follow" {
 		t.Fatalf("expected known model page to be indexable, got %q", meta.Robots)
 	}
-	if !strings.Contains(meta.Title, "DeepSeek V4 Flash API 价格") {
+	if !strings.Contains(meta.Title, "DeepSeek V4 Flash API pricing") {
 		t.Fatalf("unexpected model title: %q", meta.Title)
 	}
 	if !strings.Contains(meta.Description, "$1.0000 / 1M tokens") {
@@ -90,7 +90,7 @@ func TestResolveMetaForEscapedModelDetail(t *testing.T) {
 	if meta.Robots != "index,follow" {
 		t.Fatalf("expected escaped model page to be indexable, got %q", meta.Robots)
 	}
-	if !strings.Contains(meta.Title, "Openai GPT 4o Mini API 价格") {
+	if !strings.Contains(meta.Title, "Openai GPT 4o Mini API pricing") {
 		t.Fatalf("unexpected model title: %q", meta.Title)
 	}
 	if meta.CanonicalURL != "https://lizh.ai/pricing/openai%2Fgpt-4o-mini" {
@@ -108,6 +108,30 @@ func TestResolveMetaNoindexesUtilityAndUnknownRoutes(t *testing.T) {
 	}
 }
 
+func TestResolveMetaForAuthenticatedRoutesUsesConsoleTitle(t *testing.T) {
+	paths := []string{
+		"/usage-logs/common?startTime=1781107200000&endTime=1781127101503&page=1",
+		"/usage-logs/task",
+		"/wallet",
+		"/tokens",
+		"/playground",
+		"/settings",
+		"/user/edit",
+	}
+	for _, path := range paths {
+		meta := ResolveMeta(path, "https://lizh.ai", testCatalog)
+		if meta.Robots != "noindex,nofollow" {
+			t.Fatalf("%s should remain noindex,nofollow, got %q", path, meta.Robots)
+		}
+		if strings.Contains(meta.Title, "Page not found") {
+			t.Fatalf("%s should not use not-found title, got %q", path, meta.Title)
+		}
+		if meta.Title != "Console | Lizh AI" {
+			t.Fatalf("%s title = %q, want console title", path, meta.Title)
+		}
+	}
+}
+
 func TestRenderIndexHTMLInjectsRouteSpecificTags(t *testing.T) {
 	html := `<!doctype html><html><head><title>New API</title><meta name="description" content="old"></head><body><div id="root"></div></body></html>`
 	meta := ResolveMeta("/pricing/deepseek-v4-flash", "https://lizh.ai", testCatalog)
@@ -115,11 +139,11 @@ func TestRenderIndexHTMLInjectsRouteSpecificTags(t *testing.T) {
 	rendered := RenderIndexHTML([]byte(html), meta)
 	text := string(rendered)
 	required := []string{
-		"<title>DeepSeek V4 Flash API 价格 | Lizh AI</title>",
+		"<title>DeepSeek V4 Flash API pricing | Lizh AI</title>",
 		`<meta name="description" content="DeepSeek V4 Flash API`,
 		`<meta name="robots" content="index,follow">`,
 		`<link rel="canonical" href="https://lizh.ai/pricing/deepseek-v4-flash">`,
-		`<meta property="og:title" content="DeepSeek V4 Flash API 价格 | Lizh AI">`,
+		`<meta property="og:title" content="DeepSeek V4 Flash API pricing | Lizh AI">`,
 		`<script type="application/ld+json">`,
 	}
 	for _, needle := range required {

@@ -1,7 +1,7 @@
 const DEFAULT_META = {
-  title: 'Lizh AI | GPT、Gemini、DeepSeek、Qwen 多模型 API 聚合平台',
+  title: 'Lizh AI | GPT, Gemini, DeepSeek, and Qwen API marketplace',
   description:
-    'Lizh AI 提供 OpenAI 兼容的大模型 API 聚合服务，支持 GPT、Gemini、DeepSeek、Qwen、豆包、GLM、MiniMax、Kimi 等模型，统一计费、统一接口、快速接入。',
+    'Access GPT, Gemini, DeepSeek, Qwen, Doubao, GLM, MiniMax, Kimi, and other AI models through one OpenAI-compatible API gateway with unified billing.',
   robots: 'index,follow',
 };
 
@@ -20,60 +20,80 @@ function getRouteMeta(pathname) {
   if (path === '/pricing') {
     return {
       title:
-        'AI 大模型 API 价格广场 | GPT、Gemini、DeepSeek、Qwen、豆包模型价格 - Lizh AI',
+        'AI Model API Pricing Marketplace | GPT, Gemini, DeepSeek, Qwen - Lizh AI',
       description:
-        '查看 Lizh AI 在售大模型 API 价格，覆盖 GPT、Gemini、DeepSeek、Qwen、GLM、豆包、MiniMax、Kimi 等 50+ 模型，支持文本、图像、工具调用和结构化输出。',
+        'Compare Lizh AI model API pricing for GPT, Gemini, DeepSeek, Qwen, GLM, Doubao, MiniMax, Kimi, and 50+ models with text, image, tool, and structured-output support.',
       robots: 'index,follow',
     };
   }
   if (path.startsWith('/pricing/')) {
     const modelId = safeDecodeURIComponent(path.slice('/pricing/'.length));
     return {
-      title: `${formatModelName(modelId)} API 价格 | Lizh AI`,
-      description: `查看 ${formatModelName(modelId)} API 在 Lizh AI 的模型价格、能力和 OpenAI 兼容接入信息。`,
+      title: `${formatModelName(modelId)} API pricing | Lizh AI`,
+      description: `View ${formatModelName(modelId)} API pricing, capabilities, and OpenAI-compatible access details on Lizh AI.`,
       robots: 'index,follow',
     };
   }
   if (path === '/about') {
     return {
-      title: '关于 Lizh AI | 多模型 API 聚合与 OpenAI 兼容网关',
+      title: 'About Lizh AI | Multi-model API marketplace',
       description:
-        '了解 Lizh AI 的多模型 API 聚合服务、OpenAI 兼容接口、统一计费能力和面向开发者的模型接入体验。',
+        "Learn about Lizh AI's multi-model API marketplace, OpenAI-compatible gateway, unified billing, and developer-focused model access experience.",
       robots: 'index,follow',
     };
   }
   if (path === '/privacy-policy') {
     return {
-      title: '隐私政策 | Lizh AI',
+      title: 'Privacy Policy | Lizh AI',
       description:
-        '查看 Lizh AI 隐私政策，了解账号、API 调用、计费与服务数据的处理方式。',
+        'Read the Lizh AI privacy policy to understand how account, API usage, billing, and service data are processed.',
       robots: 'index,follow',
     };
   }
   if (path === '/user-agreement') {
     return {
-      title: '用户协议 | Lizh AI',
+      title: 'User Agreement | Lizh AI',
       description:
-        '查看 Lizh AI 用户协议，了解 API 聚合服务使用、账号、计费与合规要求。',
+        'Read the Lizh AI user agreement covering API marketplace usage, accounts, billing, and compliance requirements.',
       robots: 'index,follow',
     };
   }
   return {
     title: utilityTitle(path),
-    description: '该页面用于账号、控制台或系统流程，不建议作为搜索结果收录。',
+    description:
+      'This page is used for account, console, or system workflows and should not be indexed by search engines.',
     robots: 'noindex,nofollow',
   };
 }
 
 function utilityTitle(path) {
-  if (path === '/login') return '登录 | Lizh AI';
-  if (path === '/register') return '注册 | Lizh AI';
-  if (path.includes('reset')) return '找回密码 | Lizh AI';
-  if (path.startsWith('/oauth')) return '授权登录 | Lizh AI';
-  if (path.startsWith('/console')) return '控制台 | Lizh AI';
-  if (path === '/setup') return '系统初始化 | Lizh AI';
-  if (path === '/forbidden') return '无权访问 | Lizh AI';
-  return '页面未找到 | Lizh AI';
+  if (path === '/login') return 'Sign in | Lizh AI';
+  if (path === '/register') return 'Sign up | Lizh AI';
+  if (path.includes('reset')) return 'Reset password | Lizh AI';
+  if (path.startsWith('/oauth')) return 'OAuth authorization | Lizh AI';
+  if (isAuthenticatedAppPath(path)) return 'Console | Lizh AI';
+  if (path === '/setup') return 'System setup | Lizh AI';
+  if (path === '/forbidden') return 'Access denied | Lizh AI';
+  return 'Page not found | Lizh AI';
+}
+
+function isAuthenticatedAppPath(path) {
+  return [
+    '/console',
+    '/usage-logs',
+    '/playground',
+    '/wallet',
+    '/tokens',
+    '/settings',
+    '/user',
+    '/users',
+    '/channels',
+    '/redemption',
+    '/topup',
+    '/subscription',
+    '/billing',
+    '/logs',
+  ].some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
 function formatModelName(modelId) {
