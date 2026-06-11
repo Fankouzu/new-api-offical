@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -88,14 +90,98 @@ func TelegramLogin(c *gin.Context) {
 
 	telegramId := params["id"][0]
 	user := model.User{TelegramId: telegramId}
-	if err := user.FillUserByTelegramId(); err != nil {
-		c.JSON(200, gin.H{
-			"message": err.Error(),
-			"success": false,
-		})
-		return
+	if model.IsTelegramIdAlreadyTaken(telegramId) {
+		if err := user.FillUserByTelegramId(); err != nil {
+			c.JSON(200, gin.H{
+				"message": err.Error(),
+				"success": false,
+			})
+			return
+		}
+	} else {
+		if !common.RegisterEnabled {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "管理员关闭了新用户注册",
+			})
+			return
+		}
+
+		session := sessions.Default(c)
+		inviterId := 0
+		if affCode := session.Get("aff"); affCode != nil {
+			inviterId, _ = model.GetUserIdByAffCode(affCode.(string))
+		}
+
+		user.Username = getTelegramUsername(params)
+		user.DisplayName = getTelegramDisplayName(params)
+		user.Role = common.RoleCommonUser
+		user.Status = common.UserStatusEnabled
+		if err := user.Insert(inviterId); err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
 	}
 	setupLogin(&user, c)
+}
+
+func getTelegramUsername(params map[string][]string) string {
+	if username := firstTelegramParam(params, "username"); username != "" {
+		return getUniqueTelegramUsername(username)
+	}
+	return "telegram_" + strconv.Itoa(model.GetMaxUserId()+1)
+}
+
+func isTelegramUsernameTaken(username string) bool {
+	return model.DB.Where("username = ?", username).Find(&model.User{}).RowsAffected == 1
+}
+
+func getUniqueTelegramUsername(username string) string {
+	username = truncateTelegramField(username, 20)
+	if !isTelegramUsernameTaken(username) {
+		return username
+	}
+	for i := 1; i < 1000; i++ {
+		suffix := "_" + strconv.Itoa(i)
+		prefix := truncateTelegramField(username, 20-len(suffix))
+		candidate := prefix + suffix
+		if !isTelegramUsernameTaken(candidate) {
+			return candidate
+		}
+	}
+	return "telegram_" + strconv.Itoa(model.GetMaxUserId()+1)
+}
+
+func getTelegramDisplayName(params map[string][]string) string {
+	firstName := firstTelegramParam(params, "first_name")
+	lastName := firstTelegramParam(params, "last_name")
+	displayName := strings.TrimSpace(strings.Join([]string{firstName, lastName}, " "))
+	if displayName != "" {
+		return truncateTelegramField(displayName, 20)
+	}
+	if username := firstTelegramParam(params, "username"); username != "" {
+		return truncateTelegramField(username, 20)
+	}
+	return "Telegram User"
+}
+
+func truncateTelegramField(value string, maxLen int) string {
+	runes := []rune(value)
+	if len(runes) <= maxLen {
+		return value
+	}
+	return string(runes[:maxLen])
+}
+
+func firstTelegramParam(params map[string][]string, key string) string {
+	values := params[key]
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
 }
 
 func checkTelegramAuthorization(params map[string][]string, token string) bool {
