@@ -13,8 +13,8 @@ func homepageJSONLD(base string) []map[string]any {
 			"@type":           "WebSite",
 			"name":            defaultSiteName,
 			"url":             base + "/",
-			"description":     "OpenAI 兼容的大模型 API 聚合平台",
-			"inLanguage":      "zh-CN",
+			"description":     "OpenAI-compatible AI model API marketplace",
+			"inLanguage":      "en",
 			"potentialAction": searchAction(base),
 		},
 		{
@@ -45,12 +45,12 @@ func pricingJSONLD(base string, items []ModelSEOItem) []map[string]any {
 		{
 			"@context":        "https://schema.org",
 			"@type":           "ItemList",
-			"name":            "Lizh AI 大模型 API 价格广场",
+			"name":            "Lizh AI AI model API pricing marketplace",
 			"itemListElement": list,
 		},
 		breadcrumbJSONLD(base, []breadcrumbItem{
-			{Name: "首页", URL: base + "/"},
-			{Name: "价格广场", URL: base + "/pricing"},
+			{Name: "Home", URL: base + "/"},
+			{Name: "Pricing", URL: base + "/pricing"},
 		}),
 	}
 }
@@ -74,8 +74,8 @@ func modelJSONLD(base string, item ModelSEOItem) []map[string]any {
 			},
 		},
 		breadcrumbJSONLD(base, []breadcrumbItem{
-			{Name: "首页", URL: base + "/"},
-			{Name: "价格广场", URL: base + "/pricing"},
+			{Name: "Home", URL: base + "/"},
+			{Name: "Pricing", URL: base + "/pricing"},
 			{Name: item.Name, URL: base + modelURLPath(item.ID)},
 		}),
 	}

@@ -23,8 +23,8 @@ func ResolveMetaForTheme(requestURI string, baseURL string, pricings []model.Pri
 	base := normalizeBaseURL(baseURL)
 	catalog := BuildCatalog(pricings)
 	meta := Meta{
-		Title:        defaultSiteName + " | OpenAI 兼容多模型 API 网关",
-		Description:  "Lizh AI 提供 OpenAI 兼容的大模型 API 聚合服务，统一接入 GPT、Gemini、DeepSeek、Qwen、豆包、GLM、MiniMax、Kimi 等模型。",
+		Title:        defaultSiteName + " | OpenAI-compatible multi-model API gateway",
+		Description:  "Lizh AI provides an OpenAI-compatible AI model API marketplace with unified access to GPT, Gemini, DeepSeek, Qwen, Doubao, GLM, MiniMax, Kimi, and more.",
 		CanonicalURL: canonicalURL(base, path),
 		Robots:       noindexRobots,
 		OGType:       "website",
@@ -32,13 +32,13 @@ func ResolveMetaForTheme(requestURI string, baseURL string, pricings []model.Pri
 
 	switch {
 	case path == "/":
-		meta.Title = "Lizh AI | GPT、Gemini、DeepSeek、Qwen 多模型 API 聚合平台"
-		meta.Description = "Lizh AI 提供 OpenAI 兼容的大模型 API 聚合服务，支持 GPT、Gemini、DeepSeek、Qwen、豆包、GLM、MiniMax、Kimi 等模型，统一计费、统一接口、快速接入。"
+		meta.Title = "Lizh AI | GPT, Gemini, DeepSeek, and Qwen API marketplace"
+		meta.Description = "Access GPT, Gemini, DeepSeek, Qwen, Doubao, GLM, MiniMax, Kimi, and other AI models through one OpenAI-compatible API gateway with unified billing."
 		meta.Robots = indexRobots
 		meta.JSONLD = homepageJSONLD(base)
 	case path == "/pricing":
-		meta.Title = "AI 大模型 API 价格广场 | GPT、Gemini、DeepSeek、Qwen、豆包模型价格 - Lizh AI"
-		meta.Description = "查看 Lizh AI 在售大模型 API 价格，覆盖 GPT、Gemini、DeepSeek、Qwen、GLM、豆包、MiniMax、Kimi 等 50+ 模型，支持文本、图像、工具调用和结构化输出。"
+		meta.Title = "AI Model API Pricing Marketplace | GPT, Gemini, DeepSeek, Qwen - Lizh AI"
+		meta.Description = "Compare Lizh AI model API pricing for GPT, Gemini, DeepSeek, Qwen, GLM, Doubao, MiniMax, Kimi, and 50+ models with text, image, tool, and structured-output support."
 		meta.Robots = indexRobots
 		meta.JSONLD = pricingJSONLD(base, catalog)
 	case strings.HasPrefix(path, "/pricing/"):
@@ -47,36 +47,36 @@ func ResolveMetaForTheme(requestURI string, baseURL string, pricings []model.Pri
 			modelID = strings.TrimPrefix(path, "/pricing/")
 		}
 		if item, ok := findModel(catalog, modelID); ok {
-			meta.Title = fmt.Sprintf("%s API 价格 | Lizh AI", item.Name)
+			meta.Title = fmt.Sprintf("%s API pricing | Lizh AI", item.Name)
 			meta.Description = modelDescription(item)
 			meta.CanonicalURL = base + modelURLPath(item.ID)
 			meta.Robots = indexRobots
 			meta.OGType = "product"
 			meta.JSONLD = modelJSONLD(base, item)
 		} else {
-			meta.Title = "模型价格未找到 | Lizh AI"
-			meta.Description = "该模型价格页面暂不可用，请返回 Lizh AI 大模型价格广场查看当前在售模型。"
+			meta.Title = "Model pricing not found | Lizh AI"
+			meta.Description = "This model pricing page is not available. Return to the Lizh AI model marketplace to view currently available models."
 			meta.Robots = noindexRobots
 		}
 	case path == "/rankings" && theme != "classic":
-		meta.Title = "热门 AI 大模型排行榜 | Lizh AI"
-		meta.Description = "查看 Lizh AI 大模型调用排行榜，了解 GPT、Gemini、DeepSeek、Qwen、豆包、GLM 等模型的热门程度和使用趋势。"
+		meta.Title = "Popular AI Model Rankings | Lizh AI"
+		meta.Description = "Explore Lizh AI model usage rankings and compare demand trends for GPT, Gemini, DeepSeek, Qwen, Doubao, GLM, and other AI models."
 		meta.Robots = indexRobots
 	case path == "/about":
-		meta.Title = "关于 Lizh AI | 多模型 API 聚合与 OpenAI 兼容网关"
-		meta.Description = "了解 Lizh AI 的多模型 API 聚合服务、OpenAI 兼容接口、统一计费能力和面向开发者的模型接入体验。"
+		meta.Title = "About Lizh AI | Multi-model API marketplace"
+		meta.Description = "Learn about Lizh AI's multi-model API marketplace, OpenAI-compatible gateway, unified billing, and developer-focused model access experience."
 		meta.Robots = indexRobots
 	case path == "/privacy-policy":
-		meta.Title = "隐私政策 | Lizh AI"
-		meta.Description = "查看 Lizh AI 隐私政策，了解账号、API 调用、计费与服务数据的处理方式。"
+		meta.Title = "Privacy Policy | Lizh AI"
+		meta.Description = "Read the Lizh AI privacy policy to understand how account, API usage, billing, and service data are processed."
 		meta.Robots = indexRobots
 	case path == "/user-agreement":
-		meta.Title = "用户协议 | Lizh AI"
-		meta.Description = "查看 Lizh AI 用户协议，了解 API 聚合服务使用、账号、计费与合规要求。"
+		meta.Title = "User Agreement | Lizh AI"
+		meta.Description = "Read the Lizh AI user agreement covering API marketplace usage, accounts, billing, and compliance requirements."
 		meta.Robots = indexRobots
 	default:
 		meta.Title = utilityTitle(path)
-		meta.Description = "该页面用于账号、控制台或系统流程，不建议作为搜索结果收录。"
+		meta.Description = "This page is used for account, console, or system workflows and should not be indexed by search engines."
 		meta.Robots = noindexRobots
 	}
 
@@ -123,34 +123,34 @@ func modelURLPath(modelID string) string {
 func modelDescription(item ModelSEOItem) string {
 	description := strings.TrimSpace(item.Description)
 	if description == "" {
-		description = fmt.Sprintf("%s API 属于 %s 模型系列", item.Name, item.Family)
+		description = fmt.Sprintf("%s API belongs to the %s model family", item.Name, item.Family)
 	} else {
-		description = fmt.Sprintf("%s API：%s", item.Name, description)
+		description = fmt.Sprintf("%s API: %s", item.Name, description)
 	}
-	caps := strings.Join(item.Capabilities, "、")
-	return fmt.Sprintf("%s，支持%s，输入价格约 %s，输出价格约 %s。", description, caps, formatPrice(item.InputPrice), formatPrice(item.OutputPrice))
+	caps := strings.Join(item.Capabilities, ", ")
+	return fmt.Sprintf("%s. Supports %s. Approximate input price %s and output price %s.", description, caps, formatPrice(item.InputPrice), formatPrice(item.OutputPrice))
 }
 
 func utilityTitle(path string) string {
 	switch {
 	case path == "/login" || path == "/sign-in":
-		return "登录 | Lizh AI"
+		return "Sign in | Lizh AI"
 	case path == "/register" || path == "/sign-up":
-		return "注册 | Lizh AI"
+		return "Sign up | Lizh AI"
 	case path == "/reset" || path == "/forgot-password" || path == "/user/reset":
-		return "找回密码 | Lizh AI"
+		return "Reset password | Lizh AI"
 	case strings.HasPrefix(path, "/oauth"):
-		return "授权登录 | Lizh AI"
+		return "OAuth authorization | Lizh AI"
 	case isAuthenticatedAppPath(path):
-		return "控制台 | Lizh AI"
+		return "Console | Lizh AI"
 	case path == "/setup":
-		return "系统初始化 | Lizh AI"
+		return "System setup | Lizh AI"
 	case path == "/401" || path == "/403" || path == "/forbidden":
-		return "无权访问 | Lizh AI"
+		return "Access denied | Lizh AI"
 	case path == "/500" || path == "/503":
-		return "服务错误 | Lizh AI"
+		return "Service error | Lizh AI"
 	default:
-		return "页面未找到 | Lizh AI"
+		return "Page not found | Lizh AI"
 	}
 }
 
