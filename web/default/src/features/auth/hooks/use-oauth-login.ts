@@ -24,6 +24,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import type { AuthUser } from '@/stores/auth-store'
 import { getOAuthState } from '../api'
+import { saveUserId } from '../lib/storage'
 import {
   buildGitHubOAuthUrl,
   buildDiscordOAuthUrl,
@@ -238,17 +239,21 @@ export function useOAuthLogin(status: SystemStatus | null) {
   const handleTelegramAuth = async (payload: TelegramAuthPayload) => {
     setIsLoading(true)
     try {
-      await resetSession()
       const res = await api.get('/api/oauth/telegram/login', {
         params: pickTelegramAuthParams(payload),
-      })
+        disableDuplicate: true,
+      } as Record<string, unknown>)
       if (!res?.data?.success) {
         toast.error(res?.data?.message || t('Telegram login failed'))
         return
       }
 
       if (res.data.data) {
-        auth.setUser(res.data.data as AuthUser)
+        const user = res.data.data as AuthUser
+        auth.setUser(user)
+        if (user.id) {
+          saveUserId(user.id)
+        }
       }
       toast.success(t('Signed in successfully!'))
       window.location.href = '/dashboard'
