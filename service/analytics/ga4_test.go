@@ -145,6 +145,26 @@ func TestSendPayloadNoopsWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestTrackFirstAPICallWithResultDoesNotReportSuccessWhenDisabled(t *testing.T) {
+	sender := &captureSender{}
+	cfg := testConfig()
+	cfg.Enabled = false
+	restore := ConfigureForTest(cfg, sender)
+	defer restore()
+
+	called := false
+	TrackFirstAPICallWithResult(nil, 42, 7, "token-key", "gpt-test", 100, func(err error) {
+		called = true
+	})
+
+	if called {
+		t.Fatalf("disabled tracking should not report successful delivery")
+	}
+	if len(sender.requests) != 0 {
+		t.Fatalf("disabled tracking sent %d requests", len(sender.requests))
+	}
+}
+
 func TestSendPayloadPostsMeasurementProtocolPayload(t *testing.T) {
 	sender := &captureSender{}
 	cfg := testConfig()

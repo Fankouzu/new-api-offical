@@ -244,9 +244,6 @@ func TrackFirstAPICall(c *gin.Context, userID int, tokenID int, tokenKey string,
 func TrackFirstAPICallWithResult(c *gin.Context, userID int, tokenID int, tokenKey string, modelID string, quotaSpent int, onResult func(error)) {
 	cfg := currentConfig()
 	if !trackingEnabled(cfg) {
-		if onResult != nil {
-			onResult(nil)
-		}
 		return
 	}
 	hashSource := strconv.Itoa(tokenID)

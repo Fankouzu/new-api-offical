@@ -67,3 +67,34 @@ func TestAnalyticsEventMarkStatusRetriesFailedAndSuppressesSent(t *testing.T) {
 		t.Fatalf("status = %q, want sent", mark.Status)
 	}
 }
+
+func TestAnalyticsEventMarkSuppressesFreshSendingDelivery(t *testing.T) {
+	truncateTables(t)
+
+	id := BeginAnalyticsEventDelivery("token", 123, "first_api_call")
+	if id <= 0 {
+		t.Fatalf("first delivery should begin")
+	}
+
+	if BeginAnalyticsEventDelivery("token", 123, "first_api_call") != 0 {
+		t.Fatalf("fresh sending delivery should suppress duplicate")
+	}
+}
+
+func TestAnalyticsEventMarkRetriesStaleSendingDelivery(t *testing.T) {
+	truncateTables(t)
+
+	id := BeginAnalyticsEventDelivery("token", 123, "first_api_call")
+	if id <= 0 {
+		t.Fatalf("first delivery should begin")
+	}
+	staleUpdatedAt := currentAnalyticsEventTimestamp() - analyticsEventSendingTimeoutSeconds - 1
+	if err := DB.Model(&AnalyticsEventMark{}).Where("id = ?", id).Update("updated_at", staleUpdatedAt).Error; err != nil {
+		t.Fatalf("make delivery stale: %v", err)
+	}
+
+	retryID := BeginAnalyticsEventDelivery("token", 123, "first_api_call")
+	if retryID != id {
+		t.Fatalf("stale sending retry id = %d, want existing id %d", retryID, id)
+	}
+}

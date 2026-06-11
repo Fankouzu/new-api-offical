@@ -13,6 +13,8 @@ const (
 	AnalyticsEventStatusSending = "sending"
 	AnalyticsEventStatusSent    = "sent"
 	AnalyticsEventStatusFailed  = "failed"
+
+	analyticsEventSendingTimeoutSeconds int64 = 300
 )
 
 type AnalyticsEventMark struct {
@@ -33,7 +35,7 @@ func BeginAnalyticsEventDelivery(subjectType string, subjectID int, eventName st
 	if subjectType == "" || subjectID <= 0 || eventName == "" {
 		return 0
 	}
-	now := common.GetTimestamp()
+	now := currentAnalyticsEventTimestamp()
 	mark := AnalyticsEventMark{
 		SubjectType: subjectType,
 		SubjectId:   subjectID,
@@ -49,11 +51,18 @@ func BeginAnalyticsEventDelivery(subjectType string, subjectID int, eventName st
 
 	var existing AnalyticsEventMark
 	err = DB.Where("subject_type = ? AND subject_id = ? AND event_name = ?", subjectType, subjectID, eventName).First(&existing).Error
-	if err != nil || existing.Status == AnalyticsEventStatusSent || existing.Status == AnalyticsEventStatusSending {
+	if err != nil || !isAnalyticsEventDeliveryRetryable(existing, now) {
 		return 0
 	}
+	staleBefore := now - analyticsEventSendingTimeoutSeconds
 	result := DB.Model(&AnalyticsEventMark{}).
-		Where("id = ? AND status IN ?", existing.Id, []string{AnalyticsEventStatusPending, AnalyticsEventStatusFailed}).
+		Where(
+			"id = ? AND (status IN ? OR (status = ? AND updated_at <= ?))",
+			existing.Id,
+			[]string{AnalyticsEventStatusPending, AnalyticsEventStatusFailed},
+			AnalyticsEventStatusSending,
+			staleBefore,
+		).
 		Updates(map[string]interface{}{
 			"status":     AnalyticsEventStatusSending,
 			"updated_at": now,
@@ -62,6 +71,17 @@ func BeginAnalyticsEventDelivery(subjectType string, subjectID int, eventName st
 		return 0
 	}
 	return existing.Id
+}
+
+func isAnalyticsEventDeliveryRetryable(mark AnalyticsEventMark, now int64) bool {
+	switch mark.Status {
+	case AnalyticsEventStatusPending, AnalyticsEventStatusFailed:
+		return true
+	case AnalyticsEventStatusSending:
+		return mark.UpdatedAt <= now-analyticsEventSendingTimeoutSeconds
+	default:
+		return false
+	}
 }
 
 func MarkAnalyticsEventSent(id int) bool {
@@ -80,9 +100,13 @@ func updateAnalyticsEventStatus(id int, status string) bool {
 		Where("id = ?", id).
 		Updates(map[string]interface{}{
 			"status":     status,
-			"updated_at": common.GetTimestamp(),
+			"updated_at": currentAnalyticsEventTimestamp(),
 		})
 	return result.Error == nil && result.RowsAffected > 0
+}
+
+func currentAnalyticsEventTimestamp() int64 {
+	return common.GetTimestamp()
 }
 
 func GetAnalyticsEventMark(subjectType string, subjectID int, eventName string) (*AnalyticsEventMark, error) {
