@@ -46,6 +46,7 @@ func buildSEOTags(meta Meta) string {
 	builder.WriteString("    <!--seo:injected:start-->\n")
 	writeTag(&builder, "title", meta.Title)
 	writeMeta(&builder, "name", "title", meta.Title)
+	writeMeta(&builder, "name", "application-name", defaultSiteName)
 	writeMeta(&builder, "name", "description", meta.Description)
 	writeMeta(&builder, "name", "robots", firstNonEmpty(meta.Robots, noindexRobots))
 	if meta.CanonicalURL != "" {
@@ -54,6 +55,7 @@ func buildSEOTags(meta Meta) string {
 		builder.WriteString(`">` + "\n")
 	}
 	writeMeta(&builder, "property", "og:type", firstNonEmpty(meta.OGType, "website"))
+	writeMeta(&builder, "property", "og:site_name", defaultSiteName)
 	writeMeta(&builder, "property", "og:title", meta.Title)
 	writeMeta(&builder, "property", "og:description", meta.Description)
 	writeMeta(&builder, "property", "og:url", meta.CanonicalURL)

@@ -47,7 +47,10 @@ func TestResolveMetaForIndexablePublicRoutes(t *testing.T) {
 	if meta.Robots != "index,follow" {
 		t.Fatalf("expected homepage to be indexable, got %q", meta.Robots)
 	}
-	if !strings.Contains(meta.Title, "Lizh AI") || !strings.Contains(meta.Description, "GPT") {
+	if meta.Title != "Lizh AI" {
+		t.Fatalf("homepage title should match OAuth brand name, got %q", meta.Title)
+	}
+	if !strings.Contains(meta.Description, "GPT") {
 		t.Fatalf("homepage metadata is not marketplace-specific: %+v", meta)
 	}
 	if meta.CanonicalURL != "https://lizh.ai/" {
