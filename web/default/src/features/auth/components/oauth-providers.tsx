@@ -118,7 +118,14 @@ export function OAuthProviders({
   }
 
   if (status?.telegram_oauth) {
-    if (status.telegram_bot_name) {
+    if (status.telegram_bot_id) {
+      providerButtons.push({
+        key: 'telegram',
+        label: t('Continue with Telegram'),
+        onClick: handleTelegramLogin,
+        icon: <IconTelegram className='h-4 w-4' />,
+      })
+    } else if (status.telegram_bot_name) {
       providerButtons.push({
         key: 'telegram',
         label: t('Continue with Telegram'),
@@ -136,6 +143,7 @@ export function OAuthProviders({
               type='button'
               tabIndex={-1}
               aria-hidden='true'
+              disabled={disabled || isLoading}
               className='pointer-events-none absolute inset-0 h-11 w-full justify-center gap-2 rounded-lg'
             >
               <IconTelegram className='h-4 w-4' />

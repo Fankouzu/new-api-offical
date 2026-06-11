@@ -38,12 +38,62 @@ type TelegramLoginWidgetProps = {
   radius?: number
   requestAccess?: 'write'
   className?: string
+  onReady?: () => void
+  onError?: () => void
 }
 
 declare global {
   interface Window {
     TelegramLoginWidget?: Record<string, (user: TelegramAuthPayload) => void>
+    Telegram?: {
+      Login?: {
+        auth?: (
+          options: {
+            bot_id: string
+            request_access?: 'write'
+            lang?: string
+          },
+          callback: (user: TelegramAuthPayload | false) => void
+        ) => void
+      }
+    }
   }
+}
+
+let telegramWidgetScriptPromise: Promise<void> | null = null
+
+export function loadTelegramWidgetScript() {
+  if (typeof window === 'undefined') return Promise.resolve()
+  if (window.Telegram?.Login?.auth) return Promise.resolve()
+  if (telegramWidgetScriptPromise) return telegramWidgetScriptPromise
+
+  telegramWidgetScriptPromise = new Promise((resolve, reject) => {
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[data-telegram-widget-script="true"]'
+    )
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(), { once: true })
+      existingScript.addEventListener('error', () => reject(), { once: true })
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://telegram.org/js/telegram-widget.js?22'
+    script.async = true
+    script.setAttribute('data-telegram-widget-script', 'true')
+    script.addEventListener('load', () => resolve(), { once: true })
+    script.addEventListener(
+      'error',
+      () => {
+        telegramWidgetScriptPromise = null
+        reject()
+      },
+      { once: true }
+    )
+    document.head.appendChild(script)
+  })
+
+  return telegramWidgetScriptPromise
 }
 
 export function TelegramLoginWidget({
@@ -55,6 +105,8 @@ export function TelegramLoginWidget({
   radius = 8,
   requestAccess = 'write',
   className,
+  onReady,
+  onError,
 }: TelegramLoginWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const id = useId().replace(/:/g, '')
@@ -86,15 +138,40 @@ export function TelegramLoginWidget({
       )
     }
 
+    script.onerror = () => {
+      onError?.()
+    }
+
+    const observer = new MutationObserver(() => {
+      const iframe = container.querySelector('iframe')
+      if (!iframe) return
+
+      iframe.addEventListener('load', () => onReady?.(), { once: true })
+      observer.disconnect()
+    })
+    observer.observe(container, { childList: true })
+
     container.appendChild(script)
 
     return () => {
+      observer.disconnect()
       container.innerHTML = ''
       if (window.TelegramLoginWidget) {
         delete window.TelegramLoginWidget[callbackName]
       }
     }
-  }, [authUrl, botName, id, mode, onAuth, radius, requestAccess, size])
+  }, [
+    authUrl,
+    botName,
+    id,
+    mode,
+    onAuth,
+    onError,
+    onReady,
+    radius,
+    requestAccess,
+    size,
+  ])
 
   return <div ref={containerRef} className={className} />
 }
