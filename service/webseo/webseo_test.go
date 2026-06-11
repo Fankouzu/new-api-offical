@@ -1,6 +1,8 @@
 package webseo
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -40,6 +42,15 @@ var testCatalog = []model.Pricing{
 			constant.EndpointTypeOpenAI,
 		},
 	},
+}
+
+func readDefaultIndexHTML(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "web", "default", "index.html"))
+	if err != nil {
+		t.Fatalf("failed to read default index html: %v", err)
+	}
+	return string(data)
 }
 
 func TestResolveMetaForIndexablePublicRoutes(t *testing.T) {
@@ -156,6 +167,16 @@ func TestRenderIndexHTMLInjectsRouteSpecificTags(t *testing.T) {
 	}
 	if strings.Contains(text, `content="old"`) {
 		t.Fatalf("old generic description should be removed:\n%s", text)
+	}
+}
+
+func TestDefaultIndexHTMLExposesHomepageBrandWithoutJavaScript(t *testing.T) {
+	html := readDefaultIndexHTML(t)
+	if !strings.Contains(html, "<title>Lizh AI</title>") {
+		t.Fatalf("default index title should expose short OAuth brand name:\n%s", html)
+	}
+	if !strings.Contains(html, "<h1") || !strings.Contains(html, "Lizh AI") {
+		t.Fatalf("default index body should expose homepage brand without JavaScript:\n%s", html)
 	}
 }
 
