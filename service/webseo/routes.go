@@ -51,7 +51,7 @@ func ResolveMetaForTheme(requestURI string, baseURL string, pricings []model.Pri
 			meta.Description = modelDescription(item)
 			meta.CanonicalURL = base + modelURLPath(item.ID)
 			meta.Robots = indexRobots
-			meta.OGType = "product"
+			meta.OGType = "website"
 			meta.JSONLD = modelJSONLD(base, item)
 		} else {
 			meta.Title = "Model pricing not found | Lizh AI"
