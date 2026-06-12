@@ -31,6 +31,19 @@ const (
 	developmentHashSalt       = "ga4-development-hash-salt"
 )
 
+var attributionURLParamAllowlist = map[string]struct{}{
+	"utm_source":   {},
+	"utm_medium":   {},
+	"utm_campaign": {},
+	"utm_term":     {},
+	"utm_content":  {},
+	"gclid":        {},
+	"fbclid":       {},
+	"ttclid":       {},
+	"yclid":        {},
+	"aff":          {},
+}
+
 type EventParams map[string]any
 
 type RedemptionAttribution struct {
@@ -267,8 +280,8 @@ func TrackSignUp(c *gin.Context, userID int, attrs SignUpAttribution) {
 	params := EventParams{
 		"method": method,
 	}
-	addStringParam(params, "page_location", attrs.PageLocation)
-	addStringParam(params, "page_referrer", attrs.PageReferrer)
+	addStringParam(params, "page_location", sanitizeAttributionURL(attrs.PageLocation))
+	addStringParam(params, "page_referrer", sanitizeAttributionURL(attrs.PageReferrer))
 	addStringParam(params, "source", attrs.Source)
 	addStringParam(params, "medium", attrs.Medium)
 	addStringParam(params, "campaign", attrs.Campaign)
@@ -309,6 +322,35 @@ func addStringParam(params EventParams, key string, value string) {
 	if value != "" {
 		params[key] = value
 	}
+}
+
+func sanitizeAttributionURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	clean := url.URL{
+		Scheme: parsed.Scheme,
+		Host:   parsed.Host,
+		Path:   parsed.EscapedPath(),
+	}
+	query := url.Values{}
+	for key, values := range parsed.Query() {
+		if _, ok := attributionURLParamAllowlist[key]; !ok {
+			continue
+		}
+		for _, value := range values {
+			if strings.TrimSpace(value) != "" {
+				query.Add(key, value)
+			}
+		}
+	}
+	clean.RawQuery = query.Encode()
+	return clean.String()
 }
 
 func track(c *gin.Context, cfg Config, userID int, tokenID int, eventName string, params EventParams) {

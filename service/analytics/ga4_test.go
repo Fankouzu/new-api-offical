@@ -192,6 +192,46 @@ func TestTrackSignUpIncludesAttributionWithoutPII(t *testing.T) {
 	}
 }
 
+func TestTrackSignUpSanitizesAttributionURLs(t *testing.T) {
+	sender := &captureSender{done: make(chan struct{}, 1)}
+	cfg := testConfig()
+	restore := ConfigureForTest(cfg, sender)
+	defer restore()
+
+	TrackSignUp(nil, 42, SignUpAttribution{
+		ClientID:     "111.222",
+		PageLocation: "https://lizh.ai/user/reset?email=private@example.com&token=secret-token&utm_source=plati&gclid=gclid-value",
+		PageReferrer: "https://partner.example/path?email=private@example.com&token=secret-token&utm_medium=marketplace",
+		Source:       "plati",
+		Medium:       "marketplace",
+		Method:       "email",
+	})
+
+	select {
+	case <-sender.done:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for sign_up send")
+	}
+
+	var decoded ga4Payload
+	if err := common.Unmarshal([]byte(sender.bodies[0]), &decoded); err != nil {
+		t.Fatalf("payload is not valid json: %v", err)
+	}
+	body := sender.bodies[0]
+	for _, forbidden := range []string{"private@example.com", "secret-token", "email=", "token="} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("sign_up payload leaked private URL value %q: %s", forbidden, body)
+		}
+	}
+	params := decoded.Events[0].Params
+	if params["page_location"] != "https://lizh.ai/user/reset?gclid=gclid-value&utm_source=plati" {
+		t.Fatalf("unexpected sanitized page_location: %#v", params["page_location"])
+	}
+	if params["page_referrer"] != "https://partner.example/path?utm_medium=marketplace" {
+		t.Fatalf("unexpected sanitized page_referrer: %#v", params["page_referrer"])
+	}
+}
+
 func TestSendPayloadNoopsWhenDisabled(t *testing.T) {
 	sender := &captureSender{}
 	cfg := testConfig()

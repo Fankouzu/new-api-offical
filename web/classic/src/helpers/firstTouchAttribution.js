@@ -7,6 +7,7 @@ const UTM_PARAMS = [
   'utm_term',
   'utm_content',
 ];
+const SAFE_URL_PARAMS = [...UTM_PARAMS, ...CLICK_ID_PARAMS, 'aff'];
 
 function readGAClientID() {
   if (typeof document === 'undefined') return '';
@@ -41,6 +42,24 @@ function writeStoredAttribution(attribution) {
   }
 }
 
+function sanitizeAttributionURL(raw) {
+  try {
+    const url = new URL(raw);
+    const safeParams = new URLSearchParams();
+    for (const key of SAFE_URL_PARAMS) {
+      const values = url.searchParams.getAll(key);
+      for (const value of values) {
+        const trimmed = value.trim();
+        if (trimmed) safeParams.append(key, trimmed);
+      }
+    }
+    const query = safeParams.toString();
+    return `${url.origin}${url.pathname}${query ? `?${query}` : ''}`;
+  } catch {
+    return undefined;
+  }
+}
+
 export function initializeFirstTouchAttribution() {
   if (typeof window === 'undefined') return;
 
@@ -55,8 +74,10 @@ export function initializeFirstTouchAttribution() {
 
   const params = new URLSearchParams(window.location.search);
   const attribution = {
-    page_location: window.location.href,
-    page_referrer: document.referrer || undefined,
+    page_location: sanitizeAttributionURL(window.location.href),
+    page_referrer: document.referrer
+      ? sanitizeAttributionURL(document.referrer)
+      : undefined,
     first_visit_at: new Date().toISOString(),
   };
   if (clientID) attribution.client_id = clientID;
