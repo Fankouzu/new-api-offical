@@ -59,19 +59,17 @@ func modelJSONLD(base string, item ModelSEOItem) []map[string]any {
 	return []map[string]any{
 		{
 			"@context":    "https://schema.org",
-			"@type":       "Product",
-			"name":        item.Name + " API",
+			"@type":       "Service",
+			"name":        item.Name + " API access",
 			"description": modelDescription(item),
-			"brand": map[string]any{
-				"@type": "Brand",
+			"serviceType": "AI model API access",
+			"provider": map[string]any{
+				"@type": "Organization",
 				"name":  defaultSiteName,
+				"url":   base + "/",
 			},
-			"offers": map[string]any{
-				"@type":         "Offer",
-				"url":           base + modelURLPath(item.ID),
-				"priceCurrency": "USD",
-				"availability":  "https://schema.org/InStock",
-			},
+			"areaServed": "Worldwide",
+			"url":        base + modelURLPath(item.ID),
 		},
 		breadcrumbJSONLD(base, []breadcrumbItem{
 			{Name: "Home", URL: base + "/"},

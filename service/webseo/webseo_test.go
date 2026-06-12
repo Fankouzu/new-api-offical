@@ -86,6 +86,42 @@ func TestResolveMetaForModelDetail(t *testing.T) {
 	if meta.CanonicalURL != "https://lizh.ai/pricing/deepseek-v4-flash" {
 		t.Fatalf("unexpected canonical URL: %q", meta.CanonicalURL)
 	}
+	if meta.OGType != "website" {
+		t.Fatalf("model detail page should not use product Open Graph type, got %q", meta.OGType)
+	}
+}
+
+func TestModelDetailJSONLDAvoidsProductAndMerchantRichResults(t *testing.T) {
+	html := `<!doctype html><html><head><title>New API</title></head><body><div id="root"></div></body></html>`
+	meta := ResolveMeta("/pricing/deepseek-v4-flash", "https://lizh.ai", testCatalog)
+	rendered := string(RenderIndexHTML([]byte(html), meta))
+
+	required := []string{
+		`"@type":"Service"`,
+		`"serviceType":"AI model API access"`,
+		`"provider":{"@type":"Organization"`,
+	}
+	for _, needle := range required {
+		if !strings.Contains(rendered, needle) {
+			t.Fatalf("model JSON-LD missing %q:\n%s", needle, rendered)
+		}
+	}
+
+	forbidden := []string{
+		`"@type":"Product"`,
+		`"@type":"Offer"`,
+		`"offers"`,
+		`"priceSpecification"`,
+		`"aggregateRating"`,
+		`"review"`,
+		`"hasMerchantReturnPolicy"`,
+		`"shippingDetails"`,
+	}
+	for _, needle := range forbidden {
+		if strings.Contains(rendered, needle) {
+			t.Fatalf("model JSON-LD should not include product or merchant rich-result field %q:\n%s", needle, rendered)
+		}
+	}
 }
 
 func TestResolveMetaForEscapedModelDetail(t *testing.T) {
