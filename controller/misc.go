@@ -3,7 +3,6 @@ package controller
 import (
 	"encoding/json"
 	"fmt"
-	"html"
 	"net/http"
 	"strings"
 
@@ -214,72 +213,6 @@ func GetPrivacyPolicy(c *gin.Context) {
 		"data":    system_setting.GetLegalSettings().PrivacyPolicy,
 	})
 	return
-}
-
-func GetUserAgreementHTML(c *gin.Context) {
-	renderLegalDocumentHTML(c, "User Agreement", "user-agreement", system_setting.GetLegalSettings().UserAgreement)
-}
-
-func GetPrivacyPolicyHTML(c *gin.Context) {
-	renderLegalDocumentHTML(c, "Privacy Policy", "privacy-policy", system_setting.GetLegalSettings().PrivacyPolicy)
-}
-
-func renderLegalDocumentHTML(c *gin.Context, title string, slug string, content string) {
-	baseURL := strings.TrimRight(system_setting.ServerAddress, "/")
-	if baseURL == "" {
-		baseURL = "https://" + c.Request.Host
-	}
-
-	trimmedContent := strings.TrimSpace(content)
-	bodyContent := "<p>This document has not been configured yet.</p>"
-	if trimmedContent != "" {
-		if isLegalDocumentExternalURL(trimmedContent) {
-			escapedURL := html.EscapeString(trimmedContent)
-			bodyContent = fmt.Sprintf(`<p>This document is available at <a href="%s" rel="noopener noreferrer">%s</a>.</p>`, escapedURL, escapedURL)
-		} else if isLegalDocumentHTML(trimmedContent) {
-			bodyContent = trimmedContent
-		} else {
-			bodyContent = "<pre>" + html.EscapeString(trimmedContent) + "</pre>"
-		}
-	}
-
-	c.Header("Cache-Control", "no-cache")
-	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(fmt.Sprintf(`<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>%s | Lizh AI</title>
-  <meta name="robots" content="index,follow">
-  <link rel="canonical" href="%s/%s">
-  <style>
-    :root { color-scheme: light; }
-    body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #171717; background: #ffffff; }
-    main { width: min(920px, calc(100%% - 32px)); margin: 0 auto; padding: 48px 0 72px; }
-    h1 { margin: 0 0 24px; font-size: 2rem; line-height: 1.2; }
-    article { font-size: 1rem; line-height: 1.75; }
-    article :first-child { margin-top: 0; }
-    a { color: #0f766e; }
-    pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: inherit; }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>%s</h1>
-    <article>
-%s
-    </article>
-  </main>
-</body>
-</html>`, html.EscapeString(title), html.EscapeString(baseURL), html.EscapeString(slug), html.EscapeString(title), bodyContent)))
-}
-
-func isLegalDocumentExternalURL(value string) bool {
-	return strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://")
-}
-
-func isLegalDocumentHTML(value string) bool {
-	return strings.Contains(value, "<") && strings.Contains(value, ">")
 }
 
 func GetMidjourney(c *gin.Context) {
