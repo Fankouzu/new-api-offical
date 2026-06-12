@@ -54,6 +54,7 @@ import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { useEmailVerification } from '@/features/auth/hooks/use-email-verification'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
 import { getAffiliateCode } from '@/features/auth/lib/storage'
+import { getFirstTouchAttribution } from '@/lib/first-touch-attribution'
 
 export function SignUpForm({
   className,
@@ -157,6 +158,7 @@ export function SignUpForm({
         verification_code: verificationCode || undefined,
         aff: getAffiliateCode(),
         turnstile: turnstileToken,
+        attribution: getFirstTouchAttribution(),
       })
 
       if (res?.success) {

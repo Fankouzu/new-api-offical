@@ -64,6 +64,7 @@ import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 import { useTranslation } from 'react-i18next';
 import { SiDiscord } from 'react-icons/si';
+import { getFirstTouchAttribution } from '../../helpers/firstTouchAttribution';
 
 const RegisterForm = () => {
   let navigate = useNavigate();
@@ -234,10 +235,14 @@ const RegisterForm = () => {
         if (!affCode) {
           affCode = localStorage.getItem('aff');
         }
-        inputs.aff_code = affCode;
+        const payload = {
+          ...inputs,
+          aff_code: affCode,
+          attribution: getFirstTouchAttribution(),
+        };
         const res = await API.post(
           `/api/user/register?turnstile=${turnstileToken}`,
-          inputs,
+          payload,
         );
         const { success, message } = res.data;
         if (success) {

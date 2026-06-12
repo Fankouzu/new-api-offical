@@ -30,6 +30,12 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+type RegisterRequest struct {
+	model.User
+	Attribution analytics.SignUpAttribution `json:"attribution"`
+	Aff         string                      `json:"aff"`
+}
+
 func Login(c *gin.Context) {
 	if !common.PasswordLoginEnabled {
 		common.ApiErrorI18n(c, i18n.MsgUserPasswordLoginDisabled)
@@ -144,11 +150,15 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserPasswordRegisterDisabled)
 		return
 	}
-	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
+	var req RegisterRequest
+	err := json.NewDecoder(c.Request.Body).Decode(&req)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
+	}
+	user := req.User
+	if user.AffCode == "" {
+		user.AffCode = req.Aff
 	}
 	if err := common.Validate.Struct(&user); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
@@ -225,6 +235,13 @@ func Register(c *gin.Context) {
 			return
 		}
 	}
+
+	if user.Email != "" {
+		req.Attribution.Method = "email"
+	} else {
+		req.Attribution.Method = "username"
+	}
+	analytics.TrackSignUp(c, insertedUser.Id, req.Attribution)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

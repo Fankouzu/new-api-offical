@@ -49,6 +49,7 @@ import OAuth2Callback from './components/auth/OAuth2Callback';
 import PersonalSetting from './components/settings/PersonalSetting';
 import Setup from './pages/Setup';
 import SetupCheck from './components/layout/SetupCheck';
+import { initializeFirstTouchAttribution } from './helpers/firstTouchAttribution';
 import { syncRouteSEO } from './helpers/seo';
 
 const Home = lazy(() => import('./pages/Home'));
@@ -65,6 +66,10 @@ function DynamicOAuth2Callback() {
 function App() {
   const location = useLocation();
   const [statusState] = useContext(StatusContext);
+
+  useEffect(() => {
+    initializeFirstTouchAttribution();
+  }, []);
 
   useEffect(() => {
     syncRouteSEO(location.pathname);
