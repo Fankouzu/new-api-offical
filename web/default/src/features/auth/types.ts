@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { User } from '@/features/users/types'
+import type { FirstTouchAttribution } from '@/lib/first-touch-attribution'
 
 // ============================================================================
 // API Payloads
@@ -39,6 +40,7 @@ export interface RegisterPayload {
   verification_code?: string
   aff?: string
   turnstile?: string
+  attribution?: FirstTouchAttribution
 }
 
 export interface PasswordResetPayload {

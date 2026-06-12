@@ -27,6 +27,7 @@ import {
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { initConfiguredGoogleAnalytics, trackPageView } from '@/lib/analytics'
+import { initializeFirstTouchAttribution } from '@/lib/first-touch-attribution'
 import { syncRouteSEO } from '@/lib/seo'
 import { ThemeCustomizationProvider } from '@/context/theme-customization-provider'
 import { useSystemConfig } from '@/hooks/use-system-config'
@@ -45,6 +46,7 @@ function RootComponent() {
   })
 
   useEffect(() => {
+    initializeFirstTouchAttribution()
     initConfiguredGoogleAnalytics()
   }, [])
 

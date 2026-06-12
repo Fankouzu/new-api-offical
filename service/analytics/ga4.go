@@ -22,6 +22,7 @@ import (
 )
 
 const (
+	eventSignUp               = "sign_up"
 	eventVoucherRedeemSuccess = "voucher_redeem_success"
 	eventAPIKeyCreated        = "api_key_created"
 	eventFirstAPICall         = "first_api_call"
@@ -29,6 +30,19 @@ const (
 	defaultTimeoutMS          = 1500
 	developmentHashSalt       = "ga4-development-hash-salt"
 )
+
+var attributionURLParamAllowlist = map[string]struct{}{
+	"utm_source":   {},
+	"utm_medium":   {},
+	"utm_campaign": {},
+	"utm_term":     {},
+	"utm_content":  {},
+	"gclid":        {},
+	"fbclid":       {},
+	"ttclid":       {},
+	"yclid":        {},
+	"aff":          {},
+}
 
 type EventParams map[string]any
 
@@ -41,6 +55,23 @@ type RedemptionAttribution struct {
 
 type UserAttribution struct {
 	VoucherSource string
+}
+
+type SignUpAttribution struct {
+	ClientID     string `json:"client_id"`
+	PageLocation string `json:"page_location"`
+	PageReferrer string `json:"page_referrer"`
+	Source       string `json:"source"`
+	Medium       string `json:"medium"`
+	Campaign     string `json:"campaign"`
+	Term         string `json:"term"`
+	Content      string `json:"content"`
+	GCLID        string `json:"gclid"`
+	FBCLID       string `json:"fbclid"`
+	TTCLID       string `json:"ttclid"`
+	YCLID        string `json:"yclid"`
+	FirstVisitAt string `json:"first_visit_at"`
+	Method       string `json:"method"`
 }
 
 type Config struct {
@@ -237,6 +268,33 @@ func TrackAPIKeyCreated(c *gin.Context, userID int, tokenID int, tokenKey string
 	track(c, cfg, userID, tokenID, eventAPIKeyCreated, params)
 }
 
+func TrackSignUp(c *gin.Context, userID int, attrs SignUpAttribution) {
+	cfg := currentConfig()
+	if !trackingEnabled(cfg) {
+		return
+	}
+	method := strings.TrimSpace(attrs.Method)
+	if method == "" {
+		method = "unknown"
+	}
+	params := EventParams{
+		"method": method,
+	}
+	addStringParam(params, "page_location", sanitizeAttributionURL(attrs.PageLocation))
+	addStringParam(params, "page_referrer", sanitizeAttributionURL(attrs.PageReferrer))
+	addStringParam(params, "source", attrs.Source)
+	addStringParam(params, "medium", attrs.Medium)
+	addStringParam(params, "campaign", attrs.Campaign)
+	addStringParam(params, "term", attrs.Term)
+	addStringParam(params, "content", attrs.Content)
+	addStringParam(params, "gclid", attrs.GCLID)
+	addStringParam(params, "fbclid", attrs.FBCLID)
+	addStringParam(params, "ttclid", attrs.TTCLID)
+	addStringParam(params, "yclid", attrs.YCLID)
+	addStringParam(params, "first_visit_at", attrs.FirstVisitAt)
+	trackWithClientID(c, cfg, userID, 0, eventSignUp, params, attrs.ClientID, nil)
+}
+
 func TrackFirstAPICall(c *gin.Context, userID int, tokenID int, tokenKey string, modelID string, quotaSpent int) {
 	TrackFirstAPICallWithResult(c, userID, tokenID, tokenKey, modelID, quotaSpent, nil)
 }
@@ -266,12 +324,45 @@ func addStringParam(params EventParams, key string, value string) {
 	}
 }
 
+func sanitizeAttributionURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	clean := url.URL{
+		Scheme: parsed.Scheme,
+		Host:   parsed.Host,
+		Path:   parsed.EscapedPath(),
+	}
+	query := url.Values{}
+	for key, values := range parsed.Query() {
+		if _, ok := attributionURLParamAllowlist[key]; !ok {
+			continue
+		}
+		for _, value := range values {
+			if strings.TrimSpace(value) != "" {
+				query.Add(key, value)
+			}
+		}
+	}
+	clean.RawQuery = query.Encode()
+	return clean.String()
+}
+
 func track(c *gin.Context, cfg Config, userID int, tokenID int, eventName string, params EventParams) {
 	trackWithResult(c, cfg, userID, tokenID, eventName, params, nil)
 }
 
 func trackWithResult(c *gin.Context, cfg Config, userID int, tokenID int, eventName string, params EventParams, onResult func(error)) {
-	payload := buildPayload(c, userID, tokenID, eventName, params)
+	trackWithClientID(c, cfg, userID, tokenID, eventName, params, "", onResult)
+}
+
+func trackWithClientID(c *gin.Context, cfg Config, userID int, tokenID int, eventName string, params EventParams, clientID string, onResult func(error)) {
+	payload := buildPayloadWithClientID(c, userID, tokenID, eventName, params, clientID)
 	gopool.Go(func() {
 		if err := sendPayload(context.Background(), cfg, payload); err != nil {
 			common.SysLog(fmt.Sprintf("GA4 event send failed: event=%s error=%s", eventName, sanitizeError(err).Error()))
@@ -287,8 +378,16 @@ func trackWithResult(c *gin.Context, cfg Config, userID int, tokenID int, eventN
 }
 
 func buildPayload(c *gin.Context, userID int, tokenID int, eventName string, params EventParams) ga4Payload {
+	return buildPayloadWithClientID(c, userID, tokenID, eventName, params, "")
+}
+
+func buildPayloadWithClientID(c *gin.Context, userID int, tokenID int, eventName string, params EventParams, clientID string) ga4Payload {
+	clientID = strings.TrimSpace(clientID)
+	if clientID == "" {
+		clientID = ResolveGAClientID(c, userID, tokenID)
+	}
 	return ga4Payload{
-		ClientID:           ResolveGAClientID(c, userID, tokenID),
+		ClientID:           clientID,
 		UserID:             HashIdentifier(strconv.Itoa(userID)),
 		NonPersonalizedAds: true,
 		Events: []ga4Event{
