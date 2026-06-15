@@ -325,6 +325,33 @@ func TestConvertToOpenAIVideoSuppressesGatewayProxyURL(t *testing.T) {
 	}
 }
 
+func TestConvertToOpenAIVideoRecoversDirectURLFromStoredTencentData(t *testing.T) {
+	a := &TaskAdaptor{}
+	data, err := a.ConvertToOpenAIVideo(&model.Task{
+		TaskID:   "task_public",
+		Status:   model.TaskStatusSuccess,
+		Progress: "100%",
+		Properties: model.Properties{
+			OriginModelName: "hailuo-2.3-fast",
+		},
+		PrivateData: model.TaskPrivateData{
+			UpstreamKind: "video",
+			ResultURL:    "https://lizh.ai/v1/videos/task_public/content",
+		},
+		Data: []byte(`{"Response":{"Status":"FINISH","Output":{"FileInfos":[{"MediaBasicInfo":{"MediaUrl":"https://example.com/out.mp4"}}]}}}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response map[string]any
+	if err := common.Unmarshal(data, &response); err != nil {
+		t.Fatal(err)
+	}
+	if response["url"] != "https://example.com/out.mp4" {
+		t.Fatalf("response = %#v", response)
+	}
+}
+
 func TestParseTaskResultMapsTencentStatesAndURLs(t *testing.T) {
 	a := &TaskAdaptor{}
 	success, err := a.ParseTaskResult([]byte(`{"Response":{"Status":"FINISH","Output":{"VideoUrl":"https://example.com/out.mp4"},"RequestId":"req-1"}}`))
