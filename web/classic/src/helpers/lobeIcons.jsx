@@ -37,8 +37,6 @@ import MinimaxMono from '@lobehub/icons/es/Minimax/components/Mono';
 import MistralColor from '@lobehub/icons/es/Mistral/components/Color';
 import MistralMono from '@lobehub/icons/es/Mistral/components/Mono';
 import MoonshotMono from '@lobehub/icons/es/Moonshot/components/Mono';
-import NanoBananaColor from '@lobehub/icons/es/NanoBanana/components/Color';
-import NanoBananaMono from '@lobehub/icons/es/NanoBanana/components/Mono';
 import OllamaMono from '@lobehub/icons/es/Ollama/components/Mono';
 import OpenAIMono from '@lobehub/icons/es/OpenAI/components/Mono';
 import OpenRouterMono from '@lobehub/icons/es/OpenRouter/components/Mono';
@@ -111,6 +109,35 @@ const createIcon = (Mono, Color) => {
   return Icon;
 };
 
+const packageIconModules = import.meta.glob(
+  '/node_modules/@lobehub/icons/es/*/components/{Mono,Color}.js',
+  { eager: true },
+);
+
+const createPackageIconRegistry = () => {
+  const iconComponents = {};
+  Object.entries(packageIconModules).forEach(([path, mod]) => {
+    const match = path.match(/\/([^/]+)\/components\/(Mono|Color)\.js$/);
+    if (!match) return;
+    const [, iconName, variant] = match;
+    const Component = mod?.default;
+    if (!Component) return;
+    iconComponents[iconName] = {
+      ...iconComponents[iconName],
+      [variant]: Component,
+    };
+  });
+
+  return Object.fromEntries(
+    Object.entries(iconComponents)
+      .filter(([, components]) => components.Mono || components.Color)
+      .map(([iconName, components]) => [
+        iconName,
+        createIcon(components.Mono || components.Color, components.Color),
+      ]),
+  );
+};
+
 export const Ai360 = createIcon(Ai360Mono, Ai360Color);
 export const AzureAI = createIcon(AzureAIMono, AzureAIColor);
 export const Claude = createIcon(ClaudeMono, ClaudeColor);
@@ -132,7 +159,6 @@ export const Midjourney = createIcon(MidjourneyMono);
 export const Minimax = createIcon(MinimaxMono, MinimaxColor);
 export const Mistral = createIcon(MistralMono, MistralColor);
 export const Moonshot = createIcon(MoonshotMono);
-export const NanoBanana = createIcon(NanoBananaMono, NanoBananaColor);
 export const Ollama = createIcon(OllamaMono);
 export const OpenAI = createIcon(OpenAIMono);
 export const OpenRouter = createIcon(OpenRouterMono);
@@ -151,6 +177,7 @@ export const Yi = createIcon(YiMono, YiColor);
 export const Zhipu = createIcon(ZhipuMono, ZhipuColor);
 
 export const LobeIcons = {
+  ...createPackageIconRegistry(),
   Ai360,
   AzureAI,
   Claude,
@@ -172,7 +199,6 @@ export const LobeIcons = {
   Minimax,
   Mistral,
   Moonshot,
-  NanoBanana,
   Ollama,
   OpenAI,
   OpenRouter,
