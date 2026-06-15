@@ -107,6 +107,38 @@ func TestConvertVideoRequestPayload(t *testing.T) {
 	}
 }
 
+func TestDocumentedModelMatrixIncludesRequestedVendors(t *testing.T) {
+	cases := []struct {
+		publicModel  string
+		kind         string
+		modelName    string
+		modelVersion string
+	}{
+		{publicModel: ModelGG31Image, kind: modelKindImage, modelName: "GG", modelVersion: "3.1"},
+		{publicModel: ModelMJv7Image, kind: modelKindImage, modelName: "MJ", modelVersion: "v7"},
+		{publicModel: ModelQwen0925Image, kind: modelKindImage, modelName: "Qwen", modelVersion: "0925"},
+		{publicModel: ModelSI50LiteImage, kind: modelKindImage, modelName: "SI", modelVersion: "5.0-lite"},
+		{publicModel: ModelJimeng40, kind: modelKindVideo, modelName: "Jimeng", modelVersion: "4.0"},
+		{publicModel: ModelSV10Pro, kind: modelKindVideo, modelName: "SV", modelVersion: "1.0-pro"},
+		{publicModel: ModelOS20, kind: modelKindVideo, modelName: "OS", modelVersion: "2.0"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.publicModel, func(t *testing.T) {
+			spec, ok := lookupModelSpec(tc.publicModel)
+			if !ok {
+				t.Fatalf("missing model spec for %s", tc.publicModel)
+			}
+			if spec.Kind != tc.kind || spec.TencentModelName != tc.modelName || spec.TencentModelVersion != tc.modelVersion {
+				t.Fatalf("spec = %+v", spec)
+			}
+			if !containsModel(ModelList, tc.publicModel) {
+				t.Fatalf("%s missing from ModelList", tc.publicModel)
+			}
+		})
+	}
+}
+
 func TestEstimateBillingUsesResolutionDurationAndCount(t *testing.T) {
 	a := &TaskAdaptor{}
 	c := taskContext(t, `{"model":"vidu-q3-turbo","prompt":"video","resolution":"1080P","duration":5}`)
@@ -120,6 +152,15 @@ func TestEstimateBillingUsesResolutionDurationAndCount(t *testing.T) {
 	if image["resolution"] != 1.8 || image["count"] != 4 {
 		t.Fatalf("image ratios = %#v", image)
 	}
+}
+
+func containsModel(models []string, target string) bool {
+	for _, model := range models {
+		if model == target {
+			return true
+		}
+	}
+	return false
 }
 
 func TestBuildRequestHeaderSignsTencentVODRequest(t *testing.T) {
