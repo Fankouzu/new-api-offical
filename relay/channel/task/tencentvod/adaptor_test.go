@@ -270,6 +270,36 @@ func TestDoResponseReturnsPublicTaskAndStoresUpstreamID(t *testing.T) {
 	}
 }
 
+func TestConvertToOpenAIVideoReturnsNeutralTaskStatus(t *testing.T) {
+	a := &TaskAdaptor{}
+	data, err := a.ConvertToOpenAIVideo(&model.Task{
+		TaskID:    "task_public",
+		Status:    model.TaskStatusSuccess,
+		Progress:  "100%",
+		CreatedAt: 1781495472,
+		UpdatedAt: 1781495572,
+		Properties: model.Properties{
+			OriginModelName: "og-image2-high",
+		},
+		PrivateData: model.TaskPrivateData{
+			ResultURL: "https://example.com/out.png",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response map[string]any
+	if err := common.Unmarshal(data, &response); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := response["object"]; ok {
+		t.Fatalf("Tencent VOD poll response should not include video object: %#v", response)
+	}
+	if response["id"] != "task_public" || response["status"] != dto.VideoStatusCompleted || response["url"] != "https://example.com/out.png" {
+		t.Fatalf("response = %#v", response)
+	}
+}
+
 func TestParseTaskResultMapsTencentStatesAndURLs(t *testing.T) {
 	a := &TaskAdaptor{}
 	success, err := a.ParseTaskResult([]byte(`{"Response":{"Status":"FINISH","Output":{"VideoUrl":"https://example.com/out.mp4"},"RequestId":"req-1"}}`))

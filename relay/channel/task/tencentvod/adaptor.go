@@ -286,6 +286,24 @@ func (a *TaskAdaptor) GetChannelName() string {
 	return ChannelName
 }
 
+func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
+	out := map[string]any{
+		"id":         originTask.TaskID,
+		"task_id":    originTask.TaskID,
+		"status":     originTask.Status.ToVideoStatus(),
+		"progress":   originTask.Progress,
+		"model":      originTask.Properties.OriginModelName,
+		"created_at": originTask.CreatedAt,
+		"updated_at": originTask.UpdatedAt,
+	}
+	if originTask.Status == model.TaskStatusFailure {
+		out["error"] = map[string]any{"message": originTask.FailReason}
+	} else if resultURL := originTask.GetResultURL(); resultURL != "" {
+		out["url"] = resultURL
+	}
+	return common.Marshal(out)
+}
+
 func (a *TaskAdaptor) convertToTencentPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*tencentPayload, string, error) {
 	spec, ok := lookupModelSpec(resolveModelName(req.Model, info))
 	if !ok {
