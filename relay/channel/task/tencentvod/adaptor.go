@@ -192,12 +192,14 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return "", responseBody, service.TaskErrorWrapperLocal(fmt.Errorf("missing Tencent VOD task id"), "missing_task_id", http.StatusBadGateway)
 	}
 
-	openAIVideo := dto.NewOpenAIVideo()
-	openAIVideo.ID = info.PublicTaskID
-	openAIVideo.TaskID = info.PublicTaskID
-	openAIVideo.CreatedAt = time.Now().Unix()
-	openAIVideo.Model = info.OriginModelName
-	c.JSON(http.StatusOK, openAIVideo)
+	c.JSON(http.StatusOK, gin.H{
+		"id":         info.PublicTaskID,
+		"task_id":    info.PublicTaskID,
+		"model":      info.OriginModelName,
+		"status":     dto.VideoStatusQueued,
+		"progress":   0,
+		"created_at": time.Now().Unix(),
+	})
 	return envelope.Response.TaskID, responseBody, nil
 }
 

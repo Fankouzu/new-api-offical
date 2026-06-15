@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
@@ -256,6 +257,16 @@ func TestDoResponseReturnsPublicTaskAndStoresUpstreamID(t *testing.T) {
 	}
 	if !strings.Contains(string(rawBody), "vod-task-123") || w.Code != http.StatusOK {
 		t.Fatalf("response code=%d raw=%s", w.Code, rawBody)
+	}
+	var response map[string]any
+	if err := common.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := response["object"]; ok {
+		t.Fatalf("Tencent VOD submit response should not include object: %#v", response)
+	}
+	if response["id"] != "task_public" || response["task_id"] != "task_public" || response["status"] != dto.VideoStatusQueued {
+		t.Fatalf("response = %#v", response)
 	}
 }
 
