@@ -153,8 +153,91 @@ func TestConvertVideoRequestPayload(t *testing.T) {
 	if len(body.FileInfos) != 1 {
 		t.Fatalf("file infos = %#v", body.FileInfos)
 	}
-	if body.FileInfos[0].Type != "Url" || body.FileInfos[0].Category != "Image" || body.FileInfos[0].Usage != "Reference" {
-		t.Fatalf("video file info should include category and usage: %#v", body.FileInfos[0])
+	if body.FileInfos[0].Type != "Url" || body.FileInfos[0].Category != "Image" || body.FileInfos[0].Usage != "FirstFrame" {
+		t.Fatalf("video single-image input should be sent as first frame: %#v", body.FileInfos[0])
+	}
+}
+
+func TestConvertVideoRequestPayloadMapsMultipleImagesToFrames(t *testing.T) {
+	a := &TaskAdaptor{}
+	body, action, err := a.convertToTencentPayload(&relaycommon.TaskSubmitReq{
+		Prompt: "make a video",
+		Images: []string{
+			"https://example.com/first.png",
+			"https://example.com/last.png",
+			"https://example.com/ref.png",
+		},
+	}, &relaycommon.RelayInfo{
+		OriginModelName: "kling-3.0",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "kling-3.0",
+			ApiVersion:        "ap-guangzhou",
+			ApiKey:            "sid|skey|1500044236",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action != actionCreateVideoTask {
+		t.Fatalf("action = %q", action)
+	}
+	if len(body.FileInfos) != 2 {
+		t.Fatalf("file infos = %#v lastFrame=%q", body.FileInfos, body.LastFrameURL)
+	}
+	if body.FileInfos[0].Usage != "FirstFrame" || body.LastFrameURL != "https://example.com/last.png" || body.FileInfos[1].Usage != "Reference" {
+		t.Fatalf("video file inputs = %#v lastFrame=%q", body.FileInfos, body.LastFrameURL)
+	}
+}
+
+func TestConvertVideoRequestPayloadKeepsInputReferenceAsReference(t *testing.T) {
+	a := &TaskAdaptor{}
+	body, _, err := a.convertToTencentPayload(&relaycommon.TaskSubmitReq{
+		Prompt:         "make a video",
+		Image:          "https://example.com/first.png",
+		InputReference: "https://example.com/ref.png",
+	}, &relaycommon.RelayInfo{
+		OriginModelName: "kling-3.0",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "kling-3.0",
+			ApiVersion:        "ap-guangzhou",
+			ApiKey:            "sid|skey|1500044236",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(body.FileInfos) != 2 {
+		t.Fatalf("file infos = %#v", body.FileInfos)
+	}
+	if body.FileInfos[0].Usage != "FirstFrame" || body.FileInfos[1].Usage != "Reference" {
+		t.Fatalf("video file usages = %#v", body.FileInfos)
+	}
+}
+
+func TestConvertVideoRequestPayloadMapsSecondFileIDToLastFrameID(t *testing.T) {
+	a := &TaskAdaptor{}
+	body, _, err := a.convertToTencentPayload(&relaycommon.TaskSubmitReq{
+		Prompt: "make a video",
+		Images: []string{
+			"https://example.com/first.png",
+			"vod-file-id-last",
+		},
+	}, &relaycommon.RelayInfo{
+		OriginModelName: "kling-3.0",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "kling-3.0",
+			ApiVersion:        "ap-guangzhou",
+			ApiKey:            "sid|skey|1500044236",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body.LastFrameID != "vod-file-id-last" || body.LastFrameURL != "" {
+		t.Fatalf("last frame fields = url:%q id:%q", body.LastFrameURL, body.LastFrameID)
+	}
+	if len(body.FileInfos) != 1 || body.FileInfos[0].Usage != "FirstFrame" {
+		t.Fatalf("file infos = %#v", body.FileInfos)
 	}
 }
 
@@ -397,6 +480,31 @@ func TestParseTaskResultFindsNestedTencentMediaURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	if info.Status != model.TaskStatusSuccess || info.Url != "https://example.com/direct-video.mp4" {
+		t.Fatalf("info = %+v", info)
+	}
+}
+
+func TestParseTaskResultTreatsNestedAIGCErrCodeAsFailure(t *testing.T) {
+	a := &TaskAdaptor{}
+	info, err := a.ParseTaskResult([]byte(`{
+		"Response": {
+			"TaskType": "AigcVideoTask",
+			"Status": "FINISH",
+			"AigcVideoTask": {
+				"TaskId": "1442393297-AigcVideoTask-failed",
+				"Status": "FINISH",
+				"ErrCode": 70000,
+				"ErrCodeExt": "InternalError",
+				"Message": "task failed with status: FAIL, message: invalid params",
+				"Progress": 100,
+				"Output": {"FileInfos": []}
+			}
+		}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Status != model.TaskStatusFailure || !strings.Contains(info.Reason, "invalid params") {
 		t.Fatalf("info = %+v", info)
 	}
 }

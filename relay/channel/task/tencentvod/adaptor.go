@@ -50,6 +50,8 @@ type tencentPayload struct {
 	ModelVersion string         `json:"ModelVersion,omitempty"`
 	Prompt       string         `json:"Prompt,omitempty"`
 	FileInfos    []fileInfo     `json:"FileInfos,omitempty"`
+	LastFrameURL string         `json:"LastFrameUrl,omitempty"`
+	LastFrameID  string         `json:"LastFrameFileId,omitempty"`
 	OutputConfig map[string]any `json:"OutputConfig,omitempty"`
 	SceneType    string         `json:"SceneType,omitempty"`
 	ExtInfo      map[string]any `json:"ExtInfo,omitempty"`
@@ -251,6 +253,10 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	}
 
 	taskRoot := tencentAIGCTaskRoot(root)
+	if failureReason := tencentTaskFailureReason(taskRoot); failureReason != "" {
+		return &relaycommon.TaskInfo{Status: model.TaskStatusFailure, Reason: failureReason}, nil
+	}
+
 	status := strings.ToUpper(firstString(findString(taskRoot, "Status"), findString(taskRoot, "TaskStatus"), findString(taskRoot, "State")))
 	taskInfo := &relaycommon.TaskInfo{Progress: normalizeProgress(findAny(taskRoot, "Progress"))}
 	switch status {
@@ -299,6 +305,24 @@ func tencentAIGCTaskRoot(root map[string]any) map[string]any {
 		}
 	}
 	return root
+}
+
+func tencentTaskFailureReason(taskRoot map[string]any) string {
+	errCode := strings.TrimSpace(findString(taskRoot, "ErrCode"))
+	errCodeExt := strings.TrimSpace(findString(taskRoot, "ErrCodeExt"))
+	message := firstString(
+		findString(taskRoot, "Message"),
+		findString(taskRoot, "ErrMsg"),
+		findString(taskRoot, "ErrorMessage"),
+		findString(taskRoot, "Reason"),
+	)
+	if errCode != "" && errCode != "0" {
+		return firstString(message, errCodeExt, errCode)
+	}
+	if errCodeExt != "" {
+		return firstString(message, errCodeExt)
+	}
+	return ""
 }
 
 func (a *TaskAdaptor) GetModelList() []string {
@@ -351,12 +375,15 @@ func (a *TaskAdaptor) convertToTencentPayload(req *relaycommon.TaskSubmitReq, in
 	if aspectRatio := metadataString(req.Metadata, "aspect_ratio"); aspectRatio != "" {
 		output["AspectRatio"] = aspectRatio
 	}
+	fileInfos, lastFrameURL, lastFrameID := buildTencentFileInputs(req, spec.Kind)
 	body := &tencentPayload{
 		SubAppID:     cfg.SubAppID,
 		ModelName:    spec.TencentModelName,
 		ModelVersion: spec.TencentModelVersion,
 		Prompt:       req.Prompt,
-		FileInfos:    buildFileInfos(req, spec.Kind),
+		FileInfos:    fileInfos,
+		LastFrameURL: lastFrameURL,
+		LastFrameID:  lastFrameID,
 		OutputConfig: output,
 		SceneType:    spec.SceneType,
 		ExtInfo:      metadataMap(req.Metadata, "ext_info"),
@@ -380,46 +407,103 @@ func resolveModelName(requestModel string, info *relaycommon.RelayInfo) string {
 	return requestModel
 }
 
-func buildFileInfos(req *relaycommon.TaskSubmitReq, modelKind string) []fileInfo {
-	files := make([]fileInfo, 0, len(req.Images)+1)
+func buildTencentFileInputs(req *relaycommon.TaskSubmitReq, modelKind string) ([]fileInfo, string, string) {
+	if modelKind != modelKindVideo {
+		return buildImageFileInfos(req), "", ""
+	}
+	return buildVideoFileInputs(req)
+}
+
+func buildImageFileInfos(req *relaycommon.TaskSubmitReq) []fileInfo {
+	files := make([]fileInfo, 0, len(req.Images)+2)
 	if strings.TrimSpace(req.Image) != "" {
-		files = append(files, newURLFileInfo(strings.TrimSpace(req.Image), modelKind))
+		files = append(files, newURLFileInfo(strings.TrimSpace(req.Image), modelKindImage, ""))
 	}
 	for _, image := range req.Images {
 		if strings.TrimSpace(image) != "" {
-			files = append(files, newURLFileInfo(strings.TrimSpace(image), modelKind))
+			files = append(files, newURLFileInfo(strings.TrimSpace(image), modelKindImage, ""))
 		}
 	}
 	if req.InputReference != "" {
 		if parsed, err := url.Parse(req.InputReference); err == nil && parsed.Scheme != "" {
-			files = append(files, newURLFileInfo(req.InputReference, modelKind))
+			files = append(files, newURLFileInfo(req.InputReference, modelKindImage, ""))
 		} else {
-			files = append(files, newFileIDInfo(req.InputReference, modelKind))
+			files = append(files, newFileIDInfo(req.InputReference, modelKindImage, ""))
 		}
 	}
 	return files
 }
 
-func newURLFileInfo(rawURL string, modelKind string) fileInfo {
+func buildVideoFileInputs(req *relaycommon.TaskSubmitReq) ([]fileInfo, string, string) {
+	generated := make([]string, 0, len(req.Images)+1)
+	if strings.TrimSpace(req.Image) != "" {
+		generated = append(generated, strings.TrimSpace(req.Image))
+	}
+	for _, image := range req.Images {
+		if strings.TrimSpace(image) != "" {
+			generated = append(generated, strings.TrimSpace(image))
+		}
+	}
+
+	files := make([]fileInfo, 0, len(generated)+1)
+	if len(generated) > 0 {
+		files = append(files, mediaToFileInfo(generated[0], modelKindVideo, "FirstFrame"))
+	}
+
+	lastFrameURL := ""
+	lastFrameID := ""
+	if len(generated) > 1 {
+		if isURLInput(generated[1]) {
+			lastFrameURL = generated[1]
+		} else {
+			lastFrameID = generated[1]
+		}
+	}
+	if len(generated) > 2 {
+		for _, reference := range generated[2:] {
+			files = append(files, mediaToFileInfo(reference, modelKindVideo, "Reference"))
+		}
+	}
+
+	if strings.TrimSpace(req.InputReference) != "" {
+		files = append(files, mediaToFileInfo(strings.TrimSpace(req.InputReference), modelKindVideo, "Reference"))
+	}
+
+	return files, lastFrameURL, lastFrameID
+}
+
+func mediaToFileInfo(value string, modelKind string, usage string) fileInfo {
+	if isURLInput(value) {
+		return newURLFileInfo(value, modelKind, usage)
+	}
+	return newFileIDInfo(value, modelKind, usage)
+}
+
+func isURLInput(value string) bool {
+	parsed, err := url.Parse(value)
+	return err == nil && parsed.Scheme != "" && parsed.Host != ""
+}
+
+func newURLFileInfo(rawURL string, modelKind string, usage string) fileInfo {
 	info := fileInfo{
-		Type:     "Url",
-		URL:      rawURL,
+		Type: "Url",
+		URL:  rawURL,
 	}
 	if modelKind == modelKindVideo {
 		info.Category = "Image"
-		info.Usage = "Reference"
+		info.Usage = usage
 	}
 	return info
 }
 
-func newFileIDInfo(fileID string, modelKind string) fileInfo {
+func newFileIDInfo(fileID string, modelKind string, usage string) fileInfo {
 	info := fileInfo{
 		Type: "File",
 		ID:   fileID,
 	}
 	if modelKind == modelKindVideo {
 		info.Category = "Image"
-		info.Usage = "Reference"
+		info.Usage = usage
 	}
 	return info
 }

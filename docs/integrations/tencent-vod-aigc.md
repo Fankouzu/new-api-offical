@@ -145,10 +145,10 @@ Video task file input:
 Usage rules:
 
 - Image tasks must not send video-only fields such as `Category` or `Usage`.
-- One image in image-to-video defaults to `FirstFrame`.
-- Two images in video generation map to first-frame + `LastFrameUrl`, unless
-  metadata explicitly sets per-file usage.
-- Multiple images default to `Reference`.
+- One image in image-to-video maps to `FileInfos[0].Usage=FirstFrame`.
+- Two images in video generation map to first-frame plus top-level
+  `LastFrameUrl` / `LastFrameFileId`.
+- Additional images and `input_reference` map to `FileInfos[].Usage=Reference`.
 - Metadata `file_infos` may override generated FileInfos for advanced Tencent
   parameters such as `ObjectId`, `Text`, `ReferenceType`, or `VoiceId`.
 
