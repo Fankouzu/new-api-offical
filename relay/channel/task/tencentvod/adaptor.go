@@ -37,8 +37,11 @@ type TaskAdaptor struct {
 }
 
 type fileInfo struct {
-	URL string `json:"Url,omitempty"`
-	ID  string `json:"FileId,omitempty"`
+	Type     string `json:"Type,omitempty"`
+	Category string `json:"Category,omitempty"`
+	URL      string `json:"Url,omitempty"`
+	ID       string `json:"FileId,omitempty"`
+	Usage    string `json:"Usage,omitempty"`
 }
 
 type tencentPayload struct {
@@ -328,21 +331,39 @@ func resolveModelName(requestModel string, info *relaycommon.RelayInfo) string {
 func buildFileInfos(req *relaycommon.TaskSubmitReq) []fileInfo {
 	files := make([]fileInfo, 0, len(req.Images)+1)
 	if strings.TrimSpace(req.Image) != "" {
-		files = append(files, fileInfo{URL: strings.TrimSpace(req.Image)})
+		files = append(files, newURLFileInfo(strings.TrimSpace(req.Image)))
 	}
 	for _, image := range req.Images {
 		if strings.TrimSpace(image) != "" {
-			files = append(files, fileInfo{URL: strings.TrimSpace(image)})
+			files = append(files, newURLFileInfo(strings.TrimSpace(image)))
 		}
 	}
 	if req.InputReference != "" {
 		if parsed, err := url.Parse(req.InputReference); err == nil && parsed.Scheme != "" {
-			files = append(files, fileInfo{URL: req.InputReference})
+			files = append(files, newURLFileInfo(req.InputReference))
 		} else {
-			files = append(files, fileInfo{ID: req.InputReference})
+			files = append(files, newFileIDInfo(req.InputReference))
 		}
 	}
 	return files
+}
+
+func newURLFileInfo(rawURL string) fileInfo {
+	return fileInfo{
+		Type:     "Url",
+		Category: "Image",
+		URL:      rawURL,
+		Usage:    "Reference",
+	}
+}
+
+func newFileIDInfo(fileID string) fileInfo {
+	return fileInfo{
+		Type:     "FileId",
+		Category: "Image",
+		ID:       fileID,
+		Usage:    "Reference",
+	}
 }
 
 func resolveDuration(req *relaycommon.TaskSubmitReq, spec modelSpec) int {

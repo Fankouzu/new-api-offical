@@ -78,6 +78,47 @@ func TestConvertImageRequestPayload(t *testing.T) {
 	if len(body.FileInfos) != 1 || body.FileInfos[0].URL != "https://example.com/in.png" {
 		t.Fatalf("file infos = %#v", body.FileInfos)
 	}
+	if body.FileInfos[0].Type != "Url" || body.FileInfos[0].Category != "Image" || body.FileInfos[0].Usage != "Reference" {
+		t.Fatalf("file info should force Tencent URL image mode: %#v", body.FileInfos[0])
+	}
+}
+
+func TestConvertImageRequestPayloadAcceptsOpenAIImageArray(t *testing.T) {
+	c := taskContext(t, `{
+		"model": "og-image2-high",
+		"prompt": "edit image",
+		"image": ["https://example.com/input.jpg"],
+		"size": "2496x1664"
+	}`)
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &TaskAdaptor{}
+	body, action, err := a.convertToTencentPayload(&req, &relaycommon.RelayInfo{
+		OriginModelName: "og-image2-high",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "og-image2-high",
+			ApiVersion:        "ap-guangzhou",
+			ApiKey:            "sid|skey|1500044236",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action != actionCreateImageTask {
+		t.Fatalf("action = %q", action)
+	}
+	if body.ModelName != "OG" || body.ModelVersion != "image2_high" {
+		t.Fatalf("model = %s/%s", body.ModelName, body.ModelVersion)
+	}
+	if len(body.FileInfos) != 1 {
+		t.Fatalf("file infos = %#v", body.FileInfos)
+	}
+	got := body.FileInfos[0]
+	if got.Type != "Url" || got.Category != "Image" || got.URL != "https://example.com/input.jpg" || got.Usage != "Reference" || got.ID != "" {
+		t.Fatalf("file info = %#v", got)
+	}
 }
 
 func TestConvertVideoRequestPayload(t *testing.T) {
