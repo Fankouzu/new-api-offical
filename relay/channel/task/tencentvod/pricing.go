@@ -156,16 +156,16 @@ var tencentVODPriceRows = map[string]map[string]vodPriceRow{
 		"default": {Unit: unitSecond, Prices: map[string]float64{"768P": 0.225, "1080P": 0.385, "2K": 0.580, "4K": 0.870}},
 	},
 	ModelGV31: {
-		"audio":  {Unit: unitSecond, Prices: map[string]float64{"720P": 3.000, "1080P": 3.000, "2K": 3.750, "4K": 4.500}, BaseModeOverride: "silent"},
-		"silent": {Unit: unitSecond, Prices: map[string]float64{"720P": 1.500, "1080P": 1.500, "2K": 2.250, "4K": 3.000}},
+		"audio":  {Unit: unitSecond, Prices: map[string]float64{"720P": 0.5000, "1080P": 0.5000, "2K": 0.5000, "4K": 0.5000}, BaseModeOverride: "silent"},
+		"silent": {Unit: unitSecond, Prices: map[string]float64{"720P": 0.5000, "1080P": 0.5000, "2K": 0.5000, "4K": 0.5000}},
 	},
 	ModelGV31Fast: {
-		"audio":  {Unit: unitSecond, Prices: map[string]float64{"720P": 1.125, "1080P": 1.125, "2K": 1.875, "4K": 2.625}, BaseModeOverride: "silent"},
-		"silent": {Unit: unitSecond, Prices: map[string]float64{"720P": 0.750, "1080P": 0.750, "2K": 1.500, "4K": 2.250}},
+		"audio":  {Unit: unitSecond, Prices: map[string]float64{"720P": 0.1917, "1080P": 0.1917, "2K": 0.1917, "4K": 0.1917}, BaseModeOverride: "silent"},
+		"silent": {Unit: unitSecond, Prices: map[string]float64{"720P": 0.1917, "1080P": 0.1917, "2K": 0.1917, "4K": 0.1917}},
 	},
 	ModelGV31Lite: {
-		"audio":  {Unit: unitSecond, Prices: map[string]float64{"720P": 0.375, "1080P": 0.600, "2K": 0.900, "4K": 1.125}, BaseModeOverride: "silent"},
-		"silent": {Unit: unitSecond, Prices: map[string]float64{"720P": 0.225, "1080P": 0.375, "2K": 0.600, "4K": 0.750}},
+		"audio":  {Unit: unitSecond, Prices: map[string]float64{"720P": 0.052083, "1080P": 0.083333, "2K": 0.125, "4K": 0.15625}, BaseModeOverride: "silent"},
+		"silent": {Unit: unitSecond, Prices: map[string]float64{"720P": 0.03125, "1080P": 0.052083, "2K": 0.083333, "4K": 0.104167}},
 	},
 	ModelOS20: {
 		"default": {Unit: unitSecond, Prices: map[string]float64{"720P": 0.750, "1080P": 1.125, "2K": 1.688, "4K": 2.531}},
@@ -424,11 +424,20 @@ func requestHasExtraReference(req *relaycommon.TaskSubmitReq) bool {
 }
 
 func requestHasAudio(req *relaycommon.TaskSubmitReq) bool {
-	if metadataBool(req.Metadata, "audio") || metadataBool(req.Metadata, "has_audio") {
+	if metadataBool(req.Metadata, "audio") ||
+		metadataBool(req.Metadata, "has_audio") ||
+		metadataBool(req.Metadata, "generate_audio") ||
+		metadataBool(req.Metadata, "with_audio") ||
+		metadataBool(req.Metadata, "enable_audio") {
 		return true
 	}
-	audioGeneration := strings.ToLower(metadataString(req.Metadata, "audio_generation"))
-	return audioGeneration == "enabled" || audioGeneration == "true" || audioGeneration == "1"
+	for _, key := range []string{"audio_generation", "generate_audio", "with_audio", "enable_audio"} {
+		switch strings.ToLower(metadataString(req.Metadata, key)) {
+		case "enabled", "true", "1", "yes", "on", "audio", "sound":
+			return true
+		}
+	}
+	return false
 }
 
 func metadataBool(m map[string]any, key string) bool {

@@ -305,8 +305,20 @@ func TestEstimateBillingUsesTencentVODModeSpecificPrices(t *testing.T) {
 
 	c = taskContext(t, `{"model":"gv-3.1-fast","prompt":"video","resolution":"2K","duration":8,"metadata":{"audio":true}}`)
 	gv := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: "gv-3.1-fast"})
-	if gv["duration"] != 8 || !floatClose(gv["resolution"], 1.875/0.750) {
+	if gv["duration"] != 8 || !floatClose(gv["resolution"], 0.1917/0.1917) {
 		t.Fatalf("gv audio ratios = %#v", gv)
+	}
+
+	c = taskContext(t, `{"model":"gv-3.1-lite","prompt":"video","resolution":"1080P","duration":8,"generate_audio":true}`)
+	gvLiteAudio := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: "gv-3.1-lite"})
+	if gvLiteAudio["duration"] != 8 || !floatClose(gvLiteAudio["resolution"], 0.083333/0.03125) {
+		t.Fatalf("gv lite top-level generate_audio should use audio ratios = %#v", gvLiteAudio)
+	}
+
+	c = taskContext(t, `{"model":"gv-3.1-lite","prompt":"video","resolution":"1080P","duration":8}`)
+	gvLiteSilent := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: "gv-3.1-lite"})
+	if gvLiteSilent["duration"] != 8 || !floatClose(gvLiteSilent["resolution"], 0.052083/0.03125) {
+		t.Fatalf("gv lite without audio should use silent ratios = %#v", gvLiteSilent)
 	}
 
 	c = taskContext(t, `{"model":"vidu-q2-image","prompt":"image","resolution":"4K","image":["https://example.com/a.png","https://example.com/b.png","https://example.com/c.png","https://example.com/d.png"]}`)
