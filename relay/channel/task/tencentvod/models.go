@@ -32,12 +32,16 @@ const (
 	ModelKling26MotionControl = "kling-2.6-motion-control"
 	ModelKling30              = "kling-3.0"
 	ModelKling30Omni          = "kling-3.0-omni"
+	ModelKlingO1              = "kling-o1"
 	ModelKlingAvatar          = "kling-avatar"
 	ModelKlingIdentifyFace    = "kling-identifyface"
 	ModelJimeng30Pro          = "jimeng-3.0-pro"
+	ModelJV30Pro              = "jv-3.0-pro"
 	ModelJimeng40             = "jimeng-4.0"
 	ModelSV10Pro              = "sv-1.0-pro"
+	ModelSV10ProFast          = "sv-1.0-pro-fast"
 	ModelSV10LiteI2V          = "sv-1.0-lite-i2v"
+	ModelSV15Pro              = "sv-1.5-pro"
 	ModelViduQ2               = "vidu-q2"
 	ModelViduQ2Turbo          = "vidu-q2-turbo"
 	ModelViduQ2Pro            = "vidu-q2-pro"
@@ -78,24 +82,6 @@ type modelSpec struct {
 	TaskMultiplier      float64
 }
 
-var imageResolutionRatios = map[string]float64{
-	"512P": 1,
-	"1K":   1,
-	"2K":   1.4,
-	"4K":   1.8,
-}
-
-var videoResolutionRatios = map[string]float64{
-	"360P":  1,
-	"480P":  1,
-	"540P":  1.1,
-	"720P":  1.5,
-	"768P":  1.5,
-	"1080P": 1.75,
-	"2K":    2.1,
-	"4K":    2.5,
-}
-
 var modelSpecs = map[string]modelSpec{
 	ModelOGImage2Low:       {PublicModel: ModelOGImage2Low, Kind: modelKindImage, TencentModelName: "OG", TencentModelVersion: "image2_low", DefaultResolution: "1K"},
 	ModelOGImage2Medium:    {PublicModel: ModelOGImage2Medium, Kind: modelKindImage, TencentModelName: "OG", TencentModelVersion: "image2_medium", DefaultResolution: "1K"},
@@ -126,16 +112,20 @@ var modelSpecs = map[string]modelSpec{
 	ModelKling26MotionControl: {PublicModel: ModelKling26MotionControl, Kind: modelKindVideo, TencentModelName: "Kling", TencentModelVersion: "2.6", SceneType: "motion_control", DefaultResolution: "720P", DefaultDuration: 5},
 	ModelKling30:              {PublicModel: ModelKling30, Kind: modelKindVideo, TencentModelName: "Kling", TencentModelVersion: "3.0", DefaultResolution: "720P", DefaultDuration: 5},
 	ModelKling30Omni:          {PublicModel: ModelKling30Omni, Kind: modelKindVideo, TencentModelName: "Kling", TencentModelVersion: "3.0-Omni", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelKlingO1:              {PublicModel: ModelKlingO1, Kind: modelKindVideo, TencentModelName: "Kling", TencentModelVersion: "O1", DefaultResolution: "720P", DefaultDuration: 5},
 	ModelKlingAvatar:          {PublicModel: ModelKlingAvatar, Kind: modelKindVideo, TencentModelName: "Kling", TencentModelVersion: "avater", DefaultResolution: "720P", DefaultDuration: 5},
-	ModelKlingIdentifyFace:    {PublicModel: ModelKlingIdentifyFace, Kind: modelKindVideo, TencentModelName: "Kling", TencentModelVersion: "Identifyface", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelKlingIdentifyFace:    {PublicModel: ModelKlingIdentifyFace, Kind: modelKindVideo, TencentModelName: "Kling", TencentModelVersion: "Identifyface", DefaultResolution: "1080P", DefaultDuration: 5},
 	ModelJimeng30Pro:          {PublicModel: ModelJimeng30Pro, Kind: modelKindVideo, TencentModelName: "Jimeng", TencentModelVersion: "3.0pro", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelJV30Pro:              {PublicModel: ModelJV30Pro, Kind: modelKindVideo, TencentModelName: "JV", TencentModelVersion: "3.0-pro", DefaultResolution: "1080P", DefaultDuration: 5},
 	ModelJimeng40:             {PublicModel: ModelJimeng40, Kind: modelKindVideo, TencentModelName: "Jimeng", TencentModelVersion: "4.0", DefaultResolution: "720P", DefaultDuration: 5},
 	ModelSV10Pro:              {PublicModel: ModelSV10Pro, Kind: modelKindVideo, TencentModelName: "SV", TencentModelVersion: "1.0-pro", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelSV10ProFast:          {PublicModel: ModelSV10ProFast, Kind: modelKindVideo, TencentModelName: "SV", TencentModelVersion: "1.0-pro-fast", DefaultResolution: "720P", DefaultDuration: 5},
 	ModelSV10LiteI2V:          {PublicModel: ModelSV10LiteI2V, Kind: modelKindVideo, TencentModelName: "SV", TencentModelVersion: "1.0-lite-i2v", DefaultResolution: "720P", DefaultDuration: 5},
-	ModelViduQ2:               {PublicModel: ModelViduQ2, Kind: modelKindVideo, TencentModelName: "Vidu", TencentModelVersion: "q2", DefaultResolution: "540P", DefaultDuration: 5},
-	ModelViduQ2Turbo:          {PublicModel: ModelViduQ2Turbo, Kind: modelKindVideo, TencentModelName: "Vidu", TencentModelVersion: "q2-turbo", DefaultResolution: "540P", DefaultDuration: 5},
-	ModelViduQ2Pro:            {PublicModel: ModelViduQ2Pro, Kind: modelKindVideo, TencentModelName: "Vidu", TencentModelVersion: "q2-pro", DefaultResolution: "540P", DefaultDuration: 5},
-	ModelViduQ2ProFast:        {PublicModel: ModelViduQ2ProFast, Kind: modelKindVideo, TencentModelName: "Vidu", TencentModelVersion: "q2-pro-fast", DefaultResolution: "540P", DefaultDuration: 5},
+	ModelSV15Pro:              {PublicModel: ModelSV15Pro, Kind: modelKindVideo, TencentModelName: "SV", TencentModelVersion: "1.5-pro", DefaultResolution: "540P", DefaultDuration: 5},
+	ModelViduQ2:               {PublicModel: ModelViduQ2, Kind: modelKindVideo, TencentModelName: "Vidu", TencentModelVersion: "q2", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelViduQ2Turbo:          {PublicModel: ModelViduQ2Turbo, Kind: modelKindVideo, TencentModelName: "Vidu", TencentModelVersion: "q2-turbo", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelViduQ2Pro:            {PublicModel: ModelViduQ2Pro, Kind: modelKindVideo, TencentModelName: "Vidu", TencentModelVersion: "q2-pro", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelViduQ2ProFast:        {PublicModel: ModelViduQ2ProFast, Kind: modelKindVideo, TencentModelName: "Vidu", TencentModelVersion: "q2-pro-fast", DefaultResolution: "720P", DefaultDuration: 5},
 	ModelViduQ3:               {PublicModel: ModelViduQ3, Kind: modelKindVideo, TencentModelName: "Vidu", TencentModelVersion: "q3", DefaultResolution: "540P", DefaultDuration: 5},
 	ModelViduQ3Turbo:          {PublicModel: ModelViduQ3Turbo, Kind: modelKindVideo, TencentModelName: "Vidu", TencentModelVersion: "q3-turbo", DefaultResolution: "540P", DefaultDuration: 5},
 	ModelViduQ3Pro:            {PublicModel: ModelViduQ3Pro, Kind: modelKindVideo, TencentModelName: "Vidu", TencentModelVersion: "q3-pro", DefaultResolution: "540P", DefaultDuration: 5},
@@ -185,12 +175,16 @@ var ModelList = []string{
 	ModelKling26MotionControl,
 	ModelKling30,
 	ModelKling30Omni,
+	ModelKlingO1,
 	ModelKlingAvatar,
 	ModelKlingIdentifyFace,
 	ModelJimeng30Pro,
+	ModelJV30Pro,
 	ModelJimeng40,
 	ModelSV10Pro,
+	ModelSV10ProFast,
 	ModelSV10LiteI2V,
+	ModelSV15Pro,
 	ModelViduQ2,
 	ModelViduQ2Turbo,
 	ModelViduQ2Pro,

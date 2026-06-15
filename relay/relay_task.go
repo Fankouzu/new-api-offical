@@ -193,7 +193,16 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// 5. 计费估算：让适配器根据用户请求提供 OtherRatios（时长、分辨率等）
 	//    必须在 ModelPriceHelperPerCall 之后调用（它会重建 PriceData）。
 	//    ResolveOriginTask 可能已在 remix 路径中预设了 OtherRatios，此处合并。
-	if estimatedRatios := adaptor.EstimateBilling(c, info); len(estimatedRatios) > 0 {
+	var estimatedRatios map[string]float64
+	if estimator, ok := adaptor.(channel.TaskBillingEstimatorWithError); ok {
+		estimatedRatios, err = estimator.EstimateBillingWithError(c, info)
+		if err != nil {
+			return nil, service.TaskErrorWrapper(err, "model_price_error", http.StatusBadRequest)
+		}
+	} else {
+		estimatedRatios = adaptor.EstimateBilling(c, info)
+	}
+	if len(estimatedRatios) > 0 {
 		for k, v := range estimatedRatios {
 			info.PriceData.AddOtherRatio(k, v)
 		}

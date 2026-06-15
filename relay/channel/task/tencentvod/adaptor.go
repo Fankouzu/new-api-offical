@@ -102,32 +102,24 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 }
 
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
-	req, err := relaycommon.GetTaskRequest(c)
+	ratios, err := a.EstimateBillingWithError(c, info)
 	if err != nil {
 		return nil
 	}
+	return ratios
+}
+
+func (a *TaskAdaptor) EstimateBillingWithError(c *gin.Context, info *relaycommon.RelayInfo) (map[string]float64, error) {
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return nil, err
+	}
 	spec, ok := lookupModelSpec(resolveModelName(req.Model, info))
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("unsupported Tencent VOD AIGC model %s", resolveModelName(req.Model, info))
 	}
 
-	if ratios, ok := estimatePreciseBillingRatios(&req, spec); ok {
-		return ratios
-	}
-
-	ratios := map[string]float64{}
-	resolution := normalizeResolution(firstString(req.Resolution, req.Size, metadataString(req.Metadata, "resolution"), metadataString(req.Metadata, "size"), spec.DefaultResolution))
-	if spec.Kind == modelKindImage {
-		ratios["resolution"] = ratioForResolution(imageResolutionRatios, resolution)
-		ratios["count"] = imageOutputCount(&req)
-	} else {
-		ratios["resolution"] = ratioForResolution(videoResolutionRatios, resolution)
-		ratios["duration"] = float64(resolveDuration(&req, spec))
-	}
-	if spec.TaskMultiplier > 0 && spec.TaskMultiplier != 1 {
-		ratios["task"] = spec.TaskMultiplier
-	}
-	return ratios
+	return estimatePreciseBillingRatios(&req, spec)
 }
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
@@ -378,6 +370,9 @@ func (a *TaskAdaptor) convertToTencentPayload(req *relaycommon.TaskSubmitReq, in
 	if aspectRatio := metadataString(req.Metadata, "aspect_ratio"); aspectRatio != "" {
 		output["AspectRatio"] = aspectRatio
 	}
+	if metadataBool(req.Metadata, "off_peak") || metadataBool(req.Metadata, "offpeak") {
+		output["OffPeak"] = "Enabled"
+	}
 	fileInfos, lastFrameURL, lastFrameID := buildTencentFileInputs(req, spec.Kind)
 	body := &tencentPayload{
 		SubAppID:     cfg.SubAppID,
@@ -539,13 +534,6 @@ func normalizeResolution(value string) string {
 		return value
 	}
 	return value
-}
-
-func ratioForResolution(ratios map[string]float64, resolution string) float64 {
-	if ratio, ok := ratios[normalizeResolution(resolution)]; ok {
-		return ratio
-	}
-	return 1
 }
 
 func metadataString(m map[string]any, key string) string {

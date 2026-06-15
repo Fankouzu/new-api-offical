@@ -1,0 +1,1817 @@
+{
+  "source": "Tencent Cloud VOD pay-as-you-go pricing",
+  "source_url": "https://cloud.tencent.com/document/product/266/95125",
+  "currency": "USD",
+  "notes": [
+    "Snapshot for Tencent VOD AIGC exact-billing design.",
+    "All rows are stored in USD for the models_price quoting system.",
+    "All metadata originalCurrency/originalPrices values are normalized to USD; no runtime currency conversion is required.",
+    "Image rows are USD per output image unless the mode indicates input image cost.",
+    "Video rows are USD per output second unless unit is task.",
+    "Tencent pricing can change; import as versioned data, not permanent constants."
+  ],
+  "image": [
+    {
+      "model": "hunyuan-3.0-image",
+      "mode": "default",
+      "unit": "image",
+      "prices": {},
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {},
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "si-5.0-lite-image",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "1K": 0.0339,
+        "2K": 0.0339,
+        "4K": 0.0339
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.0339,
+          "2K": 0.0339,
+          "4K": 0.0339
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "si-4.5-image",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "1K": 0.0385,
+        "2K": 0.0385,
+        "4K": 0.0385
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.0385,
+          "2K": 0.0385,
+          "4K": 0.0385
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "si-4.0-image",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "1K": 0.0308,
+        "2K": 0.0308,
+        "4K": 0.0308
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.0308,
+          "2K": 0.0308,
+          "4K": 0.0308
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "jimeng-4.0-image",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "1K": 0.0339,
+        "2K": 0.0339,
+        "4K": 0.0339
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.0339,
+          "2K": 0.0339,
+          "4K": 0.0339
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "qwen-0925-image",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "1K": 0.0462,
+        "2K": 0.0585,
+        "4K": 0.0708
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.0462,
+          "2K": 0.0585,
+          "4K": 0.0708
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "og-image2-low",
+      "mode": "input_image",
+      "unit": "image",
+      "prices": {
+        "input": 0.0154
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "input": 0.0154
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "og-image2-medium",
+      "mode": "input_image",
+      "unit": "image",
+      "prices": {
+        "input": 0.0154
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "input": 0.0154
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "og-image2-high",
+      "mode": "input_image",
+      "unit": "image",
+      "prices": {
+        "input": 0.0154
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "input": 0.0154
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "og-image2-low",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "1K": 0.006,
+        "2K": 0.012,
+        "4K": 0.02
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.006,
+          "2K": 0.012,
+          "4K": 0.02
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "og-image2-medium",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "1K": 0.053,
+        "2K": 0.107,
+        "4K": 0.178
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.053,
+          "2K": 0.107,
+          "4K": 0.178
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "og-image2-high",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "1K": 0.211,
+        "2K": 0.428,
+        "4K": 0.712
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.211,
+          "2K": 0.428,
+          "4K": 0.712
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "gg-3.1-image",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "512P": 0.045,
+        "1K": 0.067,
+        "2K": 0.101,
+        "4K": 0.151
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "512P": 0.045,
+          "1K": 0.067,
+          "2K": 0.101,
+          "4K": 0.151
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "gg-3.0-image",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "1K": 0.135,
+        "2K": 0.135,
+        "4K": 0.24
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.135,
+          "2K": 0.135,
+          "4K": 0.24
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "gg-2.5-image",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "1K": 0.039,
+        "2K": 0.051,
+        "4K": 0.063
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.039,
+          "2K": 0.051,
+          "4K": 0.063
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q2-image",
+      "mode": "text_to_image",
+      "unit": "image",
+      "prices": {
+        "1K": 0.0288,
+        "2K": 0.0385,
+        "4K": 0.0481
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.0288,
+          "2K": 0.0385,
+          "4K": 0.0481
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q2-image",
+      "mode": "reference_1_3",
+      "unit": "image",
+      "prices": {
+        "1K": 0.0385,
+        "2K": 0.0577,
+        "4K": 0.0769
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.0385,
+          "2K": 0.0577,
+          "4K": 0.0769
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q2-image",
+      "mode": "reference_4_7",
+      "unit": "image",
+      "prices": {
+        "1K": 0.0481,
+        "2K": 0.0962,
+        "4K": 0.1442
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.0481,
+          "2K": 0.0962,
+          "4K": 0.1442
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "mj-v7-image",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "1K": 0.039,
+        "2K": 0.051,
+        "4K": 0.063
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.039,
+          "2K": 0.051,
+          "4K": 0.063
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-image-3.0",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "1K": 0.028,
+        "2K": 0.028,
+        "4K": 0.056
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.028,
+          "2K": 0.028,
+          "4K": 0.056
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-image-3.0-omni",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "1K": 0.028,
+        "2K": 0.028,
+        "4K": 0.056
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.028,
+          "2K": 0.028,
+          "4K": 0.056
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-o1-image",
+      "mode": "default",
+      "unit": "image",
+      "prices": {
+        "1K": 0.028,
+        "2K": 0.028,
+        "4K": 0.056
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.028,
+          "2K": 0.028,
+          "4K": 0.056
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-2.1-image",
+      "mode": "text_to_image",
+      "unit": "image",
+      "prices": {
+        "1K": 0.014,
+        "2K": 0.014,
+        "4K": 0.037
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.014,
+          "2K": 0.014,
+          "4K": 0.037
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-2.1-image",
+      "mode": "multi_reference",
+      "unit": "image",
+      "prices": {
+        "1K": 0.056,
+        "2K": 0.068,
+        "4K": 0.079
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.056,
+          "2K": 0.068,
+          "4K": 0.079
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-scene-image",
+      "mode": "expand",
+      "unit": "image",
+      "prices": {
+        "expand": 0.028
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "expand": 0.028
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-2.1-image",
+      "mode": "single_reference",
+      "unit": "image",
+      "prices": {
+        "1K": 0.028,
+        "2K": 0.028,
+        "4K": 0.056
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1K": 0.028,
+          "2K": 0.028,
+          "4K": 0.056
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    }
+  ],
+  "video": [
+    {
+      "model": "hunyuan-1.5",
+      "mode": "default",
+      "unit": "second",
+      "prices": {},
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {},
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q3-mix",
+      "mode": "reference",
+      "unit": "second",
+      "prices": {
+        "720P": 0.125,
+        "1080P": 0.15,
+        "2K": 0.18,
+        "4K": 0.216
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.125,
+          "1080P": 0.15,
+          "2K": 0.18,
+          "4K": 0.216
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q3",
+      "mode": "reference",
+      "unit": "second",
+      "prices": {
+        "540P": 0.05,
+        "720P": 0.1,
+        "1080P": 0.125,
+        "2K": 0.15,
+        "4K": 0.18
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.05,
+          "720P": 0.1,
+          "1080P": 0.125,
+          "2K": 0.15,
+          "4K": 0.18
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q3",
+      "mode": "reference_off_peak",
+      "unit": "second",
+      "prices": {
+        "540P": 0.025,
+        "720P": 0.05,
+        "1080P": 0.063,
+        "2K": 0.075,
+        "4K": 0.09
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.025,
+          "720P": 0.05,
+          "1080P": 0.063,
+          "2K": 0.075,
+          "4K": 0.09
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q3-pro",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "540P": 0.05,
+        "720P": 0.125,
+        "1080P": 0.15,
+        "2K": 0.18,
+        "4K": 0.216
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.05,
+          "720P": 0.125,
+          "1080P": 0.15,
+          "2K": 0.18,
+          "4K": 0.216
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q3-pro",
+      "mode": "default_off_peak",
+      "unit": "second",
+      "prices": {
+        "540P": 0.025,
+        "720P": 0.0625,
+        "1080P": 0.075,
+        "2K": 0.09,
+        "4K": 0.108
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.025,
+          "720P": 0.0625,
+          "1080P": 0.075,
+          "2K": 0.09,
+          "4K": 0.108
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q3-turbo",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "540P": 0.04,
+        "720P": 0.06,
+        "1080P": 0.07,
+        "2K": 0.084,
+        "4K": 0.1008
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.04,
+          "720P": 0.06,
+          "1080P": 0.07,
+          "2K": 0.084,
+          "4K": 0.1008
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q3-turbo",
+      "mode": "default_off_peak",
+      "unit": "second",
+      "prices": {
+        "540P": 0.02,
+        "720P": 0.03,
+        "1080P": 0.035,
+        "2K": 0.042,
+        "4K": 0.0504
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.02,
+          "720P": 0.03,
+          "1080P": 0.035,
+          "2K": 0.042,
+          "4K": 0.0504
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q2",
+      "mode": "text",
+      "unit": "second",
+      "prices": {
+        "720P": 0.0492,
+        "1080P": 0.0723,
+        "2K": 0.1077,
+        "4K": 0.1615
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.0492,
+          "1080P": 0.0723,
+          "2K": 0.1077,
+          "4K": 0.1615
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q2",
+      "mode": "text_off_peak",
+      "unit": "second",
+      "prices": {
+        "720P": 0.0246,
+        "1080P": 0.0362,
+        "2K": 0.0538,
+        "4K": 0.0808
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.0246,
+          "1080P": 0.0362,
+          "2K": 0.0538,
+          "4K": 0.0808
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q2",
+      "mode": "reference",
+      "unit": "second",
+      "prices": {
+        "540P": 0.0369,
+        "720P": 0.0492,
+        "1080P": 0.1262,
+        "2K": 0.1892,
+        "4K": 0.2838
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.0369,
+          "720P": 0.0492,
+          "1080P": 0.1262,
+          "2K": 0.1892,
+          "4K": 0.2838
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q2",
+      "mode": "reference_off_peak",
+      "unit": "second",
+      "prices": {
+        "540P": 0.0185,
+        "720P": 0.0246,
+        "1080P": 0.0631,
+        "2K": 0.0946,
+        "4K": 0.1419
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.0185,
+          "720P": 0.0246,
+          "1080P": 0.0631,
+          "2K": 0.0946,
+          "4K": 0.1419
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q2-pro",
+      "mode": "i2v_first_last",
+      "unit": "second",
+      "prices": {
+        "720P": 0.0538,
+        "1080P": 0.1077,
+        "2K": 0.1538,
+        "4K": 0.2308
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.0538,
+          "1080P": 0.1077,
+          "2K": 0.1538,
+          "4K": 0.2308
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q2-pro",
+      "mode": "i2v_first_last_off_peak",
+      "unit": "second",
+      "prices": {
+        "720P": 0.0269,
+        "1080P": 0.0538,
+        "2K": 0.0769,
+        "4K": 0.1154
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.0269,
+          "1080P": 0.0538,
+          "2K": 0.0769,
+          "4K": 0.1154
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q2-pro",
+      "mode": "reference",
+      "unit": "second",
+      "prices": {
+        "540P": 0.0415,
+        "720P": 0.0538,
+        "1080P": 0.1385,
+        "2K": 0.2077,
+        "4K": 0.3115
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.0415,
+          "720P": 0.0538,
+          "1080P": 0.1385,
+          "2K": 0.2077,
+          "4K": 0.3115
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q2-pro",
+      "mode": "reference_off_peak",
+      "unit": "second",
+      "prices": {
+        "540P": 0.0208,
+        "720P": 0.0269,
+        "1080P": 0.0692,
+        "2K": 0.1038,
+        "4K": 0.1558
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.0208,
+          "720P": 0.0269,
+          "1080P": 0.0692,
+          "2K": 0.1038,
+          "4K": 0.1558
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q2-turbo",
+      "mode": "i2v_first_last",
+      "unit": "second",
+      "prices": {
+        "720P": 0.0385,
+        "1080P": 0.0723,
+        "2K": 0.1077,
+        "4K": 0.1615
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.0385,
+          "1080P": 0.0723,
+          "2K": 0.1077,
+          "4K": 0.1615
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "vidu-q2-turbo",
+      "mode": "i2v_first_last_off_peak",
+      "unit": "second",
+      "prices": {
+        "720P": 0.0192,
+        "1080P": 0.0362,
+        "2K": 0.0538,
+        "4K": 0.0808
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.0192,
+          "1080P": 0.0362,
+          "2K": 0.0538,
+          "4K": 0.0808
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-3.0-omni",
+      "mode": "no_reference_no_audio",
+      "unit": "second",
+      "prices": {
+        "720P": 0.084,
+        "1080P": 0.112,
+        "2K": 0.14,
+        "4K": 0.42
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.084,
+          "1080P": 0.112,
+          "2K": 0.14,
+          "4K": 0.42
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-3.0-omni",
+      "mode": "no_reference_audio",
+      "unit": "second",
+      "prices": {
+        "720P": 0.112,
+        "1080P": 0.14,
+        "2K": 0.168,
+        "4K": 0.42
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.112,
+          "1080P": 0.14,
+          "2K": 0.168,
+          "4K": 0.42
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-3.0-omni",
+      "mode": "reference_no_audio",
+      "unit": "second",
+      "prices": {
+        "720P": 0.126,
+        "1080P": 0.168,
+        "2K": 0.21,
+        "4K": 0.28
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.126,
+          "1080P": 0.168,
+          "2K": 0.21,
+          "4K": 0.28
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-3.0-omni",
+      "mode": "reference_audio",
+      "unit": "second",
+      "prices": {
+        "720P": 0.154,
+        "1080P": 0.196,
+        "2K": 0.252,
+        "4K": 0.336
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.154,
+          "1080P": 0.196,
+          "2K": 0.252,
+          "4K": 0.336
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-3.0",
+      "mode": "silent",
+      "unit": "second",
+      "prices": {
+        "720P": 0.084,
+        "1080P": 0.112,
+        "2K": 0.14,
+        "4K": 0.42
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.084,
+          "1080P": 0.112,
+          "2K": 0.14,
+          "4K": 0.42
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-3.0",
+      "mode": "audio_no_voice",
+      "unit": "second",
+      "prices": {
+        "720P": 0.126,
+        "1080P": 0.168,
+        "2K": 0.21,
+        "4K": 0.42
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.126,
+          "1080P": 0.168,
+          "2K": 0.21,
+          "4K": 0.42
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-3.0",
+      "mode": "audio_voice",
+      "unit": "second",
+      "prices": {
+        "720P": 0.154,
+        "1080P": 0.196,
+        "2K": 0.252,
+        "4K": 0.336
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.154,
+          "1080P": 0.196,
+          "2K": 0.252,
+          "4K": 0.336
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-3.0",
+      "mode": "motion_control",
+      "unit": "second",
+      "prices": {
+        "720P": 0.126,
+        "1080P": 0.168,
+        "2K": 0.252,
+        "4K": 0.378
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.126,
+          "1080P": 0.168,
+          "2K": 0.252,
+          "4K": 0.378
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-2.6",
+      "mode": "silent",
+      "unit": "second",
+      "prices": {
+        "720P": 0.042,
+        "1080P": 0.07,
+        "2K": 0.105,
+        "4K": 0.1568
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.042,
+          "1080P": 0.07,
+          "2K": 0.105,
+          "4K": 0.1568
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-2.6",
+      "mode": "audio",
+      "unit": "second",
+      "prices": {
+        "1080P": 0.14,
+        "2K": 0.21,
+        "4K": 0.315
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1080P": 0.14,
+          "2K": 0.21,
+          "4K": 0.315
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-2.6-motion-control",
+      "mode": "motion_control",
+      "unit": "second",
+      "prices": {
+        "720P": 0.07,
+        "1080P": 0.112,
+        "2K": 0.168,
+        "4K": 0.252
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.07,
+          "1080P": 0.112,
+          "2K": 0.168,
+          "4K": 0.252
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-2.5-pro",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "720P": 0.042,
+        "1080P": 0.07,
+        "2K": 0.105,
+        "4K": 0.157
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.042,
+          "1080P": 0.07,
+          "2K": 0.105,
+          "4K": 0.157
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-1.6",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "720P": 0.056,
+        "1080P": 0.098,
+        "2K": 0.14,
+        "4K": 0.21
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.056,
+          "1080P": 0.098,
+          "2K": 0.14,
+          "4K": 0.21
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-2.0",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "720P": 0.056,
+        "1080P": 0.098,
+        "2K": 0.14,
+        "4K": 0.21
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.056,
+          "1080P": 0.098,
+          "2K": 0.14,
+          "4K": 0.21
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-2.1",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "720P": 0.056,
+        "1080P": 0.098,
+        "2K": 0.14,
+        "4K": 0.21
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.056,
+          "1080P": 0.098,
+          "2K": 0.14,
+          "4K": 0.21
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-avatar",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "720P": 0.056,
+        "1080P": 0.112,
+        "2K": 0.168,
+        "4K": 0.252
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.056,
+          "1080P": 0.112,
+          "2K": 0.168,
+          "4K": 0.252
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-identifyface",
+      "mode": "default",
+      "unit": "second",
+      "duration_rounding": {
+        "step": 5,
+        "minimum": 5
+      },
+      "prices": {
+        "1080P": 0.014
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1080P": 0.014
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "h2-1.0",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "720P": 0.1385,
+        "1080P": 0.2462,
+        "2K": 0.2954,
+        "4K": 0.3545
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.1385,
+          "1080P": 0.2462,
+          "2K": 0.2954,
+          "4K": 0.3545
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "sv-1.5-pro",
+      "mode": "silent",
+      "unit": "second",
+      "prices": {
+        "540P": 0.0123,
+        "720P": 0.0265,
+        "1080P": 0.0597,
+        "2K": 0.1063,
+        "4K": 0.2388
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.0123,
+          "720P": 0.0265,
+          "1080P": 0.0597,
+          "2K": 0.1063,
+          "4K": 0.2388
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "sv-1.5-pro",
+      "mode": "audio",
+      "unit": "second",
+      "prices": {
+        "540P": 0.0246,
+        "720P": 0.0532,
+        "1080P": 0.1197,
+        "2K": 0.2126,
+        "4K": 0.4785
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.0246,
+          "720P": 0.0532,
+          "1080P": 0.1197,
+          "2K": 0.2126,
+          "4K": 0.4785
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "sv-1.0-pro",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "540P": 0.0225,
+        "720P": 0.0474,
+        "1080P": 0.1129,
+        "2K": 0.1694,
+        "4K": 0.2541
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.0225,
+          "720P": 0.0474,
+          "1080P": 0.1129,
+          "2K": 0.1694,
+          "4K": 0.2541
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "sv-1.0-pro-fast",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "540P": 0.0062,
+        "720P": 0.0132,
+        "1080P": 0.0317,
+        "2K": 0.0475,
+        "4K": 0.0713
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.0062,
+          "720P": 0.0132,
+          "1080P": 0.0317,
+          "2K": 0.0475,
+          "4K": 0.0713
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "sv-1.0-lite-i2v",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "540P": 0.0151,
+        "720P": 0.0317,
+        "1080P": 0.0754,
+        "2K": 0.1131,
+        "4K": 0.1696
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.0151,
+          "720P": 0.0317,
+          "1080P": 0.0754,
+          "2K": 0.1131,
+          "4K": 0.1696
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "jv-3.0-pro",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "1080P": 0.1538,
+        "2K": 0.2308,
+        "4K": 0.3462
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "1080P": 0.1538,
+          "2K": 0.2308,
+          "4K": 0.3462
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "hailuo-02",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "720P": 0.0508,
+        "1080P": 0.0892,
+        "2K": 0.1431,
+        "4K": 0.2292
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.0508,
+          "1080P": 0.0892,
+          "2K": 0.1431,
+          "4K": 0.2292
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "hailuo-2.3",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "720P": 0.0508,
+        "1080P": 0.0892,
+        "2K": 0.1431,
+        "4K": 0.2292
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.0508,
+          "1080P": 0.0892,
+          "2K": 0.1431,
+          "4K": 0.2292
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "hailuo-2.3-fast",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "720P": 0.0346,
+        "1080P": 0.0592,
+        "2K": 0.0892,
+        "4K": 0.1338
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.0346,
+          "1080P": 0.0592,
+          "2K": 0.0892,
+          "4K": 0.1338
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "gv-3.1",
+      "mode": "audio",
+      "unit": "second",
+      "prices": {
+        "720P": 0.4,
+        "1080P": 0.4,
+        "2K": 0.5,
+        "4K": 0.6
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.4,
+          "1080P": 0.4,
+          "2K": 0.5,
+          "4K": 0.6
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "gv-3.1",
+      "mode": "silent",
+      "unit": "second",
+      "prices": {
+        "720P": 0.2,
+        "1080P": 0.2,
+        "2K": 0.3,
+        "4K": 0.4
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.2,
+          "1080P": 0.2,
+          "2K": 0.3,
+          "4K": 0.4
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "gv-3.1-fast",
+      "mode": "audio",
+      "unit": "second",
+      "prices": {
+        "720P": 0.15,
+        "1080P": 0.15,
+        "2K": 0.25,
+        "4K": 0.35
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.15,
+          "1080P": 0.15,
+          "2K": 0.25,
+          "4K": 0.35
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "gv-3.1-fast",
+      "mode": "silent",
+      "unit": "second",
+      "prices": {
+        "720P": 0.1,
+        "1080P": 0.1,
+        "2K": 0.2,
+        "4K": 0.3
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.1,
+          "1080P": 0.1,
+          "2K": 0.2,
+          "4K": 0.3
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "gv-3.1-lite",
+      "mode": "audio",
+      "unit": "second",
+      "prices": {
+        "720P": 0.05,
+        "1080P": 0.08,
+        "2K": 0.12,
+        "4K": 0.15
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.05,
+          "1080P": 0.08,
+          "2K": 0.12,
+          "4K": 0.15
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "gv-3.1-lite",
+      "mode": "silent",
+      "unit": "second",
+      "prices": {
+        "720P": 0.03,
+        "1080P": 0.05,
+        "2K": 0.08,
+        "4K": 0.1
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.03,
+          "1080P": 0.05,
+          "2K": 0.08,
+          "4K": 0.1
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "os-2.0",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "720P": 0.1,
+        "1080P": 0.15,
+        "2K": 0.225,
+        "4K": 0.34
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.1,
+          "1080P": 0.15,
+          "2K": 0.225,
+          "4K": 0.34
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "pixverse-v5.6",
+      "mode": "silent",
+      "unit": "second",
+      "prices": {
+        "540P": 0.0392,
+        "720P": 0.0504,
+        "1080P": 0.084,
+        "2K": 0.1176,
+        "4K": 0.1646
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.0392,
+          "720P": 0.0504,
+          "1080P": 0.084,
+          "2K": 0.1176,
+          "4K": 0.1646
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "pixverse-v6",
+      "mode": "silent",
+      "unit": "second",
+      "prices": {
+        "540P": 0.0311,
+        "720P": 0.04,
+        "1080P": 0.08,
+        "2K": 0.096,
+        "4K": 0.1152
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.0311,
+          "720P": 0.04,
+          "1080P": 0.08,
+          "2K": 0.096,
+          "4K": 0.1152
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "pixverse-v6",
+      "mode": "audio",
+      "unit": "second",
+      "prices": {
+        "540P": 0.04,
+        "720P": 0.0533,
+        "1080P": 0.1022,
+        "2K": 0.1227,
+        "4K": 0.1472
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.04,
+          "720P": 0.0533,
+          "1080P": 0.1022,
+          "2K": 0.1227,
+          "4K": 0.1472
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "pixverse-c1",
+      "mode": "silent",
+      "unit": "second",
+      "prices": {
+        "540P": 0.0356,
+        "720P": 0.0444,
+        "1080P": 0.0844,
+        "2K": 0.1013,
+        "4K": 0.1216
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.0356,
+          "720P": 0.0444,
+          "1080P": 0.0844,
+          "2K": 0.1013,
+          "4K": 0.1216
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "pixverse-c1",
+      "mode": "audio",
+      "unit": "second",
+      "prices": {
+        "540P": 0.0444,
+        "720P": 0.0578,
+        "1080P": 0.1067,
+        "2K": 0.128,
+        "4K": 0.1536
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "540P": 0.0444,
+          "720P": 0.0578,
+          "1080P": 0.1067,
+          "2K": 0.128,
+          "4K": 0.1536
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "mingmou-1.0",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "720P": 0.0462,
+        "1080P": 0.0769,
+        "2K": 0.1154,
+        "4K": 0.1723
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.0462,
+          "1080P": 0.0769,
+          "2K": 0.1154,
+          "4K": 0.1723
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "jimeng-3.0-pro",
+      "mode": "default",
+      "unit": "second",
+      "prices": {
+        "default": 0.1668
+      },
+      "metadata": {
+        "source": "Tencent Cloud international pricing table",
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "default": 0.1668
+        }
+      }
+    },
+    {
+      "model": "kling-o1",
+      "mode": "no_reference",
+      "unit": "second",
+      "prices": {
+        "720P": 0.084,
+        "1080P": 0.112,
+        "2K": 0.168,
+        "4K": 0.252
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.084,
+          "1080P": 0.112,
+          "2K": 0.168,
+          "4K": 0.252
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    },
+    {
+      "model": "kling-o1",
+      "mode": "reference",
+      "unit": "second",
+      "prices": {
+        "720P": 0.126,
+        "1080P": 0.168,
+        "2K": 0.252,
+        "4K": 0.378
+      },
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrices": {
+          "720P": 0.126,
+          "1080P": 0.168,
+          "2K": 0.252,
+          "4K": 0.378
+        },
+        "source": "User supplied Tencent VOD international pricing screenshot"
+      }
+    }
+  ],
+  "task": [
+    {
+      "model": "hunyuan-3d-panorama",
+      "mode": "task",
+      "unit": "task",
+      "price": 0.694444,
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrice": 0.694444
+      }
+    },
+    {
+      "model": "hunyuan-3d-scene",
+      "mode": "task",
+      "unit": "task",
+      "price": 27.777778,
+      "metadata": {
+        "originalCurrency": "USD",
+        "originalPrice": 27.777778
+      }
+    }
+  ],
+  "missing_public_pricing": [
+    "jimeng-4.0",
+    "sv-1.5-pro",
+    "sv-1.0-pro-fast",
+    "jv-3.0-pro",
+    "vidu-q2-pro-fast"
+  ]
+}
