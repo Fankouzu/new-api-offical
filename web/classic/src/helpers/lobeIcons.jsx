@@ -37,6 +37,8 @@ import MinimaxMono from '@lobehub/icons/es/Minimax/components/Mono';
 import MistralColor from '@lobehub/icons/es/Mistral/components/Color';
 import MistralMono from '@lobehub/icons/es/Mistral/components/Mono';
 import MoonshotMono from '@lobehub/icons/es/Moonshot/components/Mono';
+import NanoBananaColor from '@lobehub/icons/es/NanoBanana/components/Color';
+import NanoBananaMono from '@lobehub/icons/es/NanoBanana/components/Mono';
 import OllamaMono from '@lobehub/icons/es/Ollama/components/Mono';
 import OpenAIMono from '@lobehub/icons/es/OpenAI/components/Mono';
 import OpenRouterMono from '@lobehub/icons/es/OpenRouter/components/Mono';
@@ -130,6 +132,7 @@ export const Midjourney = createIcon(MidjourneyMono);
 export const Minimax = createIcon(MinimaxMono, MinimaxColor);
 export const Mistral = createIcon(MistralMono, MistralColor);
 export const Moonshot = createIcon(MoonshotMono);
+export const NanoBanana = createIcon(NanoBananaMono, NanoBananaColor);
 export const Ollama = createIcon(OllamaMono);
 export const OpenAI = createIcon(OpenAIMono);
 export const OpenRouter = createIcon(OpenRouterMono);
@@ -169,6 +172,7 @@ export const LobeIcons = {
   Minimax,
   Mistral,
   Moonshot,
+  NanoBanana,
   Ollama,
   OpenAI,
   OpenRouter,
