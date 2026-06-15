@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -112,11 +111,15 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 		return nil
 	}
 
+	if ratios, ok := estimatePreciseBillingRatios(&req, spec); ok {
+		return ratios
+	}
+
 	ratios := map[string]float64{}
 	resolution := normalizeResolution(firstString(req.Resolution, req.Size, metadataString(req.Metadata, "resolution"), metadataString(req.Metadata, "size"), spec.DefaultResolution))
 	if spec.Kind == modelKindImage {
 		ratios["resolution"] = ratioForResolution(imageResolutionRatios, resolution)
-		ratios["count"] = math.Max(1, float64(metadataInt(req.Metadata, "n", metadataInt(req.Metadata, "count", metadataInt(req.Metadata, "output_image_count", 1)))))
+		ratios["count"] = imageOutputCount(&req)
 	} else {
 		ratios["resolution"] = ratioForResolution(videoResolutionRatios, resolution)
 		ratios["duration"] = float64(resolveDuration(&req, spec))

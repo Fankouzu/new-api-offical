@@ -277,15 +277,59 @@ func TestEstimateBillingUsesResolutionDurationAndCount(t *testing.T) {
 	a := &TaskAdaptor{}
 	c := taskContext(t, `{"model":"vidu-q3-turbo","prompt":"video","resolution":"1080P","duration":5}`)
 	video := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: "vidu-q3-turbo"})
-	if video["duration"] != 5 || video["resolution"] != 1.75 {
+	if video["duration"] != 5 || !floatClose(video["resolution"], 0.438/0.250) {
 		t.Fatalf("video ratios = %#v", video)
 	}
 
 	c = taskContext(t, `{"model":"kling-image-3.0","prompt":"image","resolution":"4K","n":4}`)
 	image := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: "kling-image-3.0"})
-	if image["resolution"] != 1.8 || image["count"] != 4 {
+	if image["resolution"] != 2 || image["count"] != 4 {
 		t.Fatalf("image ratios = %#v", image)
 	}
+}
+
+func TestEstimateBillingUsesTencentVODModeSpecificPrices(t *testing.T) {
+	a := &TaskAdaptor{}
+
+	c := taskContext(t, `{"model":"kling-3.0","prompt":"video","resolution":"1080P","duration":5,"metadata":{"audio_generation":"Enabled","voice_id":"voice-1"}}`)
+	kling := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: "kling-3.0"})
+	if kling["duration"] != 5 || !floatClose(kling["resolution"], 1.400/0.600) {
+		t.Fatalf("kling audio voice ratios = %#v", kling)
+	}
+
+	c = taskContext(t, `{"model":"kling-3.0","prompt":"video","resolution":"1080P","duration":5,"metadata":{"audio_generation":"Disabled"}}`)
+	klingSilent := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: "kling-3.0"})
+	if !floatClose(klingSilent["resolution"], 0.800/0.600) {
+		t.Fatalf("kling disabled audio should use silent ratios = %#v", klingSilent)
+	}
+
+	c = taskContext(t, `{"model":"gv-3.1-fast","prompt":"video","resolution":"2K","duration":8,"metadata":{"audio":true}}`)
+	gv := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: "gv-3.1-fast"})
+	if gv["duration"] != 8 || !floatClose(gv["resolution"], 1.875/0.750) {
+		t.Fatalf("gv audio ratios = %#v", gv)
+	}
+
+	c = taskContext(t, `{"model":"vidu-q2-image","prompt":"image","resolution":"4K","image":["https://example.com/a.png","https://example.com/b.png","https://example.com/c.png","https://example.com/d.png"]}`)
+	viduImage := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: "vidu-q2-image"})
+	if !floatClose(viduImage["resolution"], 0.938/0.188) || viduImage["count"] != 1 {
+		t.Fatalf("vidu image reference ratios = %#v", viduImage)
+	}
+}
+
+func TestEstimateBillingRoundsTencentVODDurationRules(t *testing.T) {
+	a := &TaskAdaptor{}
+	c := taskContext(t, `{"model":"kling-identifyface","prompt":"video","resolution":"720P","duration":6}`)
+	ratios := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: "kling-identifyface"})
+	if ratios["duration"] != 10 || ratios["resolution"] != 1 {
+		t.Fatalf("identifyface ratios = %#v", ratios)
+	}
+}
+
+func floatClose(a, b float64) bool {
+	if a > b {
+		return a-b < 0.000001
+	}
+	return b-a < 0.000001
 }
 
 func containsModel(models []string, target string) bool {
