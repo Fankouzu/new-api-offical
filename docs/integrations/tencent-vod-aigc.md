@@ -119,19 +119,32 @@ Authorization: TC3-HMAC-SHA256 ...
 
 ### FileInfos Mapping
 
-First pass supports URL inputs only.
+First pass supports URL inputs only. Tencent uses different `FileInfos`
+schemas for image and video tasks.
+
+Image task file input:
 
 ```json
 {
   "Type": "Url",
-  "Category": "Image",
+  "Url": "https://example.com/input.png"
+}
+```
+
+Video task file input:
+
+```json
+{
+  "Type": "Url",
   "Url": "https://example.com/input.png",
+  "Category": "Image",
   "Usage": "Reference"
 }
 ```
 
 Usage rules:
 
+- Image tasks must not send video-only fields such as `Category` or `Usage`.
 - One image in image-to-video defaults to `FirstFrame`.
 - Two images in video generation map to first-frame + `LastFrameUrl`, unless
   metadata explicitly sets per-file usage.

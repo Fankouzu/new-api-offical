@@ -304,7 +304,7 @@ func (a *TaskAdaptor) convertToTencentPayload(req *relaycommon.TaskSubmitReq, in
 		ModelName:    spec.TencentModelName,
 		ModelVersion: spec.TencentModelVersion,
 		Prompt:       req.Prompt,
-		FileInfos:    buildFileInfos(req),
+		FileInfos:    buildFileInfos(req, spec.Kind),
 		OutputConfig: output,
 		SceneType:    spec.SceneType,
 		ExtInfo:      metadataMap(req.Metadata, "ext_info"),
@@ -328,42 +328,48 @@ func resolveModelName(requestModel string, info *relaycommon.RelayInfo) string {
 	return requestModel
 }
 
-func buildFileInfos(req *relaycommon.TaskSubmitReq) []fileInfo {
+func buildFileInfos(req *relaycommon.TaskSubmitReq, modelKind string) []fileInfo {
 	files := make([]fileInfo, 0, len(req.Images)+1)
 	if strings.TrimSpace(req.Image) != "" {
-		files = append(files, newURLFileInfo(strings.TrimSpace(req.Image)))
+		files = append(files, newURLFileInfo(strings.TrimSpace(req.Image), modelKind))
 	}
 	for _, image := range req.Images {
 		if strings.TrimSpace(image) != "" {
-			files = append(files, newURLFileInfo(strings.TrimSpace(image)))
+			files = append(files, newURLFileInfo(strings.TrimSpace(image), modelKind))
 		}
 	}
 	if req.InputReference != "" {
 		if parsed, err := url.Parse(req.InputReference); err == nil && parsed.Scheme != "" {
-			files = append(files, newURLFileInfo(req.InputReference))
+			files = append(files, newURLFileInfo(req.InputReference, modelKind))
 		} else {
-			files = append(files, newFileIDInfo(req.InputReference))
+			files = append(files, newFileIDInfo(req.InputReference, modelKind))
 		}
 	}
 	return files
 }
 
-func newURLFileInfo(rawURL string) fileInfo {
-	return fileInfo{
+func newURLFileInfo(rawURL string, modelKind string) fileInfo {
+	info := fileInfo{
 		Type:     "Url",
-		Category: "Image",
 		URL:      rawURL,
-		Usage:    "Reference",
 	}
+	if modelKind == modelKindVideo {
+		info.Category = "Image"
+		info.Usage = "Reference"
+	}
+	return info
 }
 
-func newFileIDInfo(fileID string) fileInfo {
-	return fileInfo{
-		Type:     "FileId",
-		Category: "Image",
-		ID:       fileID,
-		Usage:    "Reference",
+func newFileIDInfo(fileID string, modelKind string) fileInfo {
+	info := fileInfo{
+		Type: "File",
+		ID:   fileID,
 	}
+	if modelKind == modelKindVideo {
+		info.Category = "Image"
+		info.Usage = "Reference"
+	}
+	return info
 }
 
 func resolveDuration(req *relaycommon.TaskSubmitReq, spec modelSpec) int {

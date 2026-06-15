@@ -78,8 +78,8 @@ func TestConvertImageRequestPayload(t *testing.T) {
 	if len(body.FileInfos) != 1 || body.FileInfos[0].URL != "https://example.com/in.png" {
 		t.Fatalf("file infos = %#v", body.FileInfos)
 	}
-	if body.FileInfos[0].Type != "Url" || body.FileInfos[0].Category != "Image" || body.FileInfos[0].Usage != "Reference" {
-		t.Fatalf("file info should force Tencent URL image mode: %#v", body.FileInfos[0])
+	if body.FileInfos[0].Type != "Url" || body.FileInfos[0].Category != "" || body.FileInfos[0].Usage != "" {
+		t.Fatalf("image file info should only use Tencent image input fields: %#v", body.FileInfos[0])
 	}
 }
 
@@ -116,7 +116,7 @@ func TestConvertImageRequestPayloadAcceptsOpenAIImageArray(t *testing.T) {
 		t.Fatalf("file infos = %#v", body.FileInfos)
 	}
 	got := body.FileInfos[0]
-	if got.Type != "Url" || got.Category != "Image" || got.URL != "https://example.com/input.jpg" || got.Usage != "Reference" || got.ID != "" {
+	if got.Type != "Url" || got.Category != "" || got.URL != "https://example.com/input.jpg" || got.Usage != "" || got.ID != "" {
 		t.Fatalf("file info = %#v", got)
 	}
 }
@@ -148,6 +148,12 @@ func TestConvertVideoRequestPayload(t *testing.T) {
 	}
 	if body.OutputConfig["Resolution"] != "1080P" || body.OutputConfig["Duration"] != 5 {
 		t.Fatalf("output config = %#v", body.OutputConfig)
+	}
+	if len(body.FileInfos) != 1 {
+		t.Fatalf("file infos = %#v", body.FileInfos)
+	}
+	if body.FileInfos[0].Type != "Url" || body.FileInfos[0].Category != "Image" || body.FileInfos[0].Usage != "Reference" {
+		t.Fatalf("video file info should include category and usage: %#v", body.FileInfos[0])
 	}
 }
 
