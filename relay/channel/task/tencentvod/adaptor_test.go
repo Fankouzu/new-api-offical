@@ -300,6 +300,31 @@ func TestConvertToOpenAIVideoReturnsNeutralTaskStatus(t *testing.T) {
 	}
 }
 
+func TestConvertToOpenAIVideoSuppressesGatewayProxyURL(t *testing.T) {
+	a := &TaskAdaptor{}
+	data, err := a.ConvertToOpenAIVideo(&model.Task{
+		TaskID:   "task_public",
+		Status:   model.TaskStatusSuccess,
+		Progress: "100%",
+		Properties: model.Properties{
+			OriginModelName: "hailuo-2.3-fast",
+		},
+		PrivateData: model.TaskPrivateData{
+			ResultURL: "https://lizh.ai/v1/videos/task_public/content",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response map[string]any
+	if err := common.Unmarshal(data, &response); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := response["url"]; ok {
+		t.Fatalf("Tencent VOD response must not expose gateway proxy URL: %#v", response)
+	}
+}
+
 func TestParseTaskResultMapsTencentStatesAndURLs(t *testing.T) {
 	a := &TaskAdaptor{}
 	success, err := a.ParseTaskResult([]byte(`{"Response":{"Status":"FINISH","Output":{"VideoUrl":"https://example.com/out.mp4"},"RequestId":"req-1"}}`))

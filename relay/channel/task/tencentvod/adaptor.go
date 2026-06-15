@@ -305,10 +305,19 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	}
 	if originTask.Status == model.TaskStatusFailure {
 		out["error"] = map[string]any{"message": originTask.FailReason}
-	} else if resultURL := originTask.GetResultURL(); resultURL != "" {
+	} else if resultURL := originTask.GetResultURL(); resultURL != "" && !isGatewayVideoContentURL(resultURL, originTask.TaskID) {
 		out["url"] = resultURL
 	}
 	return common.Marshal(out)
+}
+
+func isGatewayVideoContentURL(rawURL string, taskID string) bool {
+	rawURL = strings.TrimSpace(rawURL)
+	return rawURL != "" &&
+		taskID != "" &&
+		strings.Contains(rawURL, "/v1/videos/") &&
+		strings.Contains(rawURL, taskID) &&
+		strings.Contains(rawURL, "/content")
 }
 
 func (a *TaskAdaptor) convertToTencentPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*tencentPayload, string, error) {
