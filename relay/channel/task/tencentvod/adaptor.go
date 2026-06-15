@@ -274,11 +274,7 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 }
 
 func (a *TaskAdaptor) GetModelList() []string {
-	models := make([]string, 0, len(modelSpecs))
-	for modelName := range modelSpecs {
-		models = append(models, modelName)
-	}
-	return models
+	return append([]string(nil), ModelList...)
 }
 
 func (a *TaskAdaptor) GetChannelName() string {

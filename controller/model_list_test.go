@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	taskkie "github.com/QuantumNous/new-api/relay/channel/task/kie"
 	tasksub2apiasync "github.com/QuantumNous/new-api/relay/channel/task/sub2api_async"
+	tasktencentvod "github.com/QuantumNous/new-api/relay/channel/task/tencentvod"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
@@ -222,6 +223,15 @@ func TestKieModelsAppearInGlobalModelRegistry(t *testing.T) {
 
 func TestSub2APIAsyncModelsAppearInChannelModelRegistry(t *testing.T) {
 	require.Equal(t, tasksub2apiasync.ModelList, channelId2Models[constant.ChannelTypeSub2APIAsync])
+}
+
+func TestTencentVODAIGCModelsAppearInModelRegistries(t *testing.T) {
+	require.Equal(t, tasktencentvod.ModelList, channelId2Models[constant.ChannelTypeTencentVODAIGC])
+	for _, modelName := range tasktencentvod.ModelList {
+		aiModel, ok := openAIModelsMap[modelName]
+		require.True(t, ok, "missing Tencent VOD AIGC model %s", modelName)
+		require.Equal(t, tasktencentvod.ChannelName, aiModel.OwnedBy)
+	}
 }
 
 func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {

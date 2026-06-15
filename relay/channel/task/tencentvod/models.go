@@ -90,6 +90,33 @@ var modelSpecs = map[string]modelSpec{
 	ModelViduImage:         {PublicModel: ModelViduImage, Kind: modelKindImage, TencentModelName: "Vidu", TencentModelVersion: "image", DefaultResolution: "1K"},
 }
 
+var ModelList = []string{
+	ModelGV31,
+	ModelGV31Fast,
+	ModelKling30Std,
+	ModelKling30Pro,
+	ModelKling30Omni,
+	ModelKling26,
+	ModelViduQ3Turbo,
+	ModelViduQ3Pro,
+	ModelViduQ3Mix,
+	ModelPixVerseV56,
+	ModelPixVerseV6,
+	ModelPixVerseC1,
+	ModelHailuo02,
+	ModelHailuo23,
+	ModelHailuo23Fast,
+	ModelH210,
+	ModelHunyuan3DScene,
+	ModelHunyuan3DPanorama,
+	ModelOGImage2Low,
+	ModelOGImage2Medium,
+	ModelOGImage2High,
+	ModelKlingImage30,
+	ModelKlingImage30Omni,
+	ModelViduImage,
+}
+
 func lookupModelSpec(model string) (modelSpec, bool) {
 	spec, ok := modelSpecs[strings.TrimSpace(model)]
 	return spec, ok

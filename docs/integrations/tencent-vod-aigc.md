@@ -50,6 +50,28 @@ The region is configured through the normal channel region field, not embedded
 in the API key. This keeps the UI aligned with the requested base URL + region +
 api-key model.
 
+## How Operators Enter Models
+
+On the channel creation page, select channel type `Tencent VOD AIGC`.
+
+Recommended flow:
+
+1. Set Base URL to `https://vod.tencentcloudapi.com`.
+2. Set `X-TC-Region`, for example `ap-guangzhou`.
+3. Set API key as `SecretId|SecretKey|SubAppId`.
+4. Click `Fill Related Models` / `填入相关模型`.
+
+The button fills all built-in Tencent VOD AIGC public model IDs documented in
+the model matrix below. Operators may also manually enter a comma-separated
+subset, for example:
+
+```text
+tencent-vod/gv-3.1,tencent-vod/vidu-q3-turbo,tencent-vod/kling-image-3.0
+```
+
+These public model IDs are the names users call through new-api. The adaptor
+maps them to Tencent's `ModelName` and `ModelVersion` internally.
+
 ## Tencent API Mapping
 
 | new-api operation | Tencent action | Tencent API host |
@@ -319,4 +341,3 @@ Out of scope for first PR:
 - SceneAigcImageTask / SceneAigcVideoTask wrappers.
 - Audio-only `CreateAigcAudioTask`.
 - Tencent account balance query.
-

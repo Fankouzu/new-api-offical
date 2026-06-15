@@ -17,6 +17,7 @@ import (
 	taskkie "github.com/QuantumNous/new-api/relay/channel/task/kie"
 	taskpxsj "github.com/QuantumNous/new-api/relay/channel/task/pingxingshijie"
 	tasksub2apiasync "github.com/QuantumNous/new-api/relay/channel/task/sub2api_async"
+	tasktencentvod "github.com/QuantumNous/new-api/relay/channel/task/tencentvod"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
@@ -90,6 +91,14 @@ func init() {
 			OwnedBy: taskkie.ChannelName,
 		})
 	}
+	for _, modelName := range tasktencentvod.ModelList {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: tasktencentvod.ChannelName,
+		})
+	}
 	for modelName, _ := range constant.MidjourneyModel2Action {
 		openAIModels = append(openAIModels, dto.OpenAIModels{
 			Id:      modelName,
@@ -114,6 +123,10 @@ func init() {
 		}
 		if i == constant.ChannelTypeSub2APIAsync {
 			channelId2Models[i] = append([]string(nil), tasksub2apiasync.ModelList...)
+			continue
+		}
+		if i == constant.ChannelTypeTencentVODAIGC {
+			channelId2Models[i] = append([]string(nil), tasktencentvod.ModelList...)
 			continue
 		}
 		apiType, success := common.ChannelType2APIType(i)
