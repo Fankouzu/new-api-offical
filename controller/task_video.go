@@ -80,8 +80,13 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 	if privateData.Key != "" {
 		key = privateData.Key
 	}
+	upstreamTaskID := task.GetUpstreamTaskID()
+	if upstreamTaskID == "" {
+		upstreamTaskID = taskId
+	}
+	logger.LogInfo(ctx, fmt.Sprintf("Polling async task public=%s upstream=%s channel=%d", shortTaskID(taskId), shortTaskID(upstreamTaskID), channel.Id))
 	resp, err := adaptor.FetchTask(baseURL, key, map[string]any{
-		"task_id": taskId,
+		"task_id": upstreamTaskID,
 		"action":  task.Action,
 	}, proxy)
 	if err != nil {
@@ -276,6 +281,13 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 	}
 
 	return nil
+}
+
+func shortTaskID(taskID string) string {
+	if len(taskID) <= 12 {
+		return taskID
+	}
+	return taskID[:8] + "..." + taskID[len(taskID)-4:]
 }
 
 func redactVideoResponseBody(body []byte) []byte {
