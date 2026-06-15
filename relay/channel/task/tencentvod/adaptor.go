@@ -307,7 +307,6 @@ func (a *TaskAdaptor) convertToTencentPayload(req *relaycommon.TaskSubmitReq, in
 		ExtInfo:      metadataMap(req.Metadata, "ext_info"),
 	}
 	if spec.Kind == modelKindImage {
-		body.OutputConfig["Count"] = metadataInt(req.Metadata, "n", metadataInt(req.Metadata, "count", metadataInt(req.Metadata, "output_image_count", 1)))
 		return body, actionCreateImageTask, nil
 	}
 	body.OutputConfig["Duration"] = resolveDuration(req, spec)

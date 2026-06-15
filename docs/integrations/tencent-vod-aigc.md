@@ -115,7 +115,7 @@ Authorization: TC3-HMAC-SHA256 ...
 | metadata `negative_prompt` | `NegativePrompt` | If Tencent model supports it |
 | metadata `enhance_prompt` | `EnhancePrompt` | `Enabled` / `Disabled` |
 | metadata `seed` | `Seed` | If Tencent model supports it |
-| metadata `output_image_count` / `n` | `OutputConfig.OutputImageCount` | Image only |
+| metadata `output_image_count` / `n` | Local billing multiplier only | Tencent VOD currently rejects `OutputConfig.Count`; SI multi-image generation must be handled through documented `ExtInfo.AdditionalParameters` and prompt instructions. |
 
 ### FileInfos Mapping
 

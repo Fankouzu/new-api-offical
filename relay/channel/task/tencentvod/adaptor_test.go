@@ -69,8 +69,11 @@ func TestConvertImageRequestPayload(t *testing.T) {
 	if body.SubAppID != 1500044236 || body.ModelName != "Kling" || body.ModelVersion != "3.0" || body.Prompt != "make an image" {
 		t.Fatalf("body = %+v", body)
 	}
-	if body.OutputConfig["Resolution"] != "2K" || body.OutputConfig["Count"] != 3 || body.OutputConfig["AspectRatio"] != "16:9" {
+	if body.OutputConfig["Resolution"] != "2K" || body.OutputConfig["AspectRatio"] != "16:9" {
 		t.Fatalf("output config = %#v", body.OutputConfig)
+	}
+	if _, ok := body.OutputConfig["Count"]; ok {
+		t.Fatalf("Tencent VOD does not accept OutputConfig.Count: %#v", body.OutputConfig)
 	}
 	if len(body.FileInfos) != 1 || body.FileInfos[0].URL != "https://example.com/in.png" {
 		t.Fatalf("file infos = %#v", body.FileInfos)
