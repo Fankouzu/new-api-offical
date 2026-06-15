@@ -548,7 +548,7 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		// data: URI — kept in Data, not ResultURL
 	} else if ti.Url != "" {
 		task.PrivateData.ResultURL = ti.Url
-	} else if task.Status == model.TaskStatusSuccess {
+	} else if task.Status == model.TaskStatusSuccess && task.Platform != constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeTencentVODAIGC)) {
 		// No URL from adaptor — construct proxy URL using public task ID
 		task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
 	}

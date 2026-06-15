@@ -196,6 +196,20 @@ func TestTaskGetResultURL_ExtractsVideoHTTPURLFromDataWhenStoredResultMissing(t 
 	assert.Equal(t, videoURL, task.GetResultURL())
 }
 
+func TestTaskGetResultURL_ExtractsVideoHTTPURLFromDataWhenStoredProxyURL(t *testing.T) {
+	videoURL := "https://cdn.example.com/generated/output.mp4?signature=keep"
+	task := &Task{
+		TaskID: "task_url_video_proxy",
+		PrivateData: TaskPrivateData{
+			UpstreamKind: "video",
+			ResultURL:    "https://lizh.ai/v1/videos/task_url_video_proxy/content",
+		},
+		Data: json.RawMessage(`{"Response":{"Status":"FINISH","Output":{"FileInfos":[{"MediaBasicInfo":{"MediaUrl":"` + videoURL + `"}}]}}}`),
+	}
+
+	assert.Equal(t, videoURL, task.GetResultURL())
+}
+
 func TestTaskGetResultURL_IgnoresInputMediaWhenExtractingResultFromData(t *testing.T) {
 	imageURL := "https://cdn.example.com/generated/result.png"
 	task := &Task{
