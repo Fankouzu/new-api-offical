@@ -52,9 +52,9 @@ func TestConvertImageRequestPayload(t *testing.T) {
 			"aspect_ratio": "16:9",
 		},
 	}, &relaycommon.RelayInfo{
-		OriginModelName: "tencent-vod/kling-image-3.0",
+		OriginModelName: "kling-image-3.0",
 		ChannelMeta: &relaycommon.ChannelMeta{
-			UpstreamModelName: "tencent-vod/kling-image-3.0",
+			UpstreamModelName: "kling-image-3.0",
 			ApiVersion:        "ap-guangzhou",
 			ApiKey:            "sid|skey|1500044236",
 		},
@@ -85,9 +85,9 @@ func TestConvertVideoRequestPayload(t *testing.T) {
 		Resolution: "1080P",
 		Duration:   5,
 	}, &relaycommon.RelayInfo{
-		OriginModelName: "tencent-vod/vidu-q3-turbo",
+		OriginModelName: "vidu-q3-turbo",
 		ChannelMeta: &relaycommon.ChannelMeta{
-			UpstreamModelName: "tencent-vod/vidu-q3-turbo",
+			UpstreamModelName: "vidu-q3-turbo",
 			ApiVersion:        "ap-guangzhou",
 			ApiKey:            "sid|skey|1500044236",
 		},
@@ -109,14 +109,14 @@ func TestConvertVideoRequestPayload(t *testing.T) {
 
 func TestEstimateBillingUsesResolutionDurationAndCount(t *testing.T) {
 	a := &TaskAdaptor{}
-	c := taskContext(t, `{"model":"tencent-vod/vidu-q3-turbo","prompt":"video","resolution":"1080P","duration":5}`)
-	video := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: "tencent-vod/vidu-q3-turbo"})
+	c := taskContext(t, `{"model":"vidu-q3-turbo","prompt":"video","resolution":"1080P","duration":5}`)
+	video := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: "vidu-q3-turbo"})
 	if video["duration"] != 5 || video["resolution"] != 1.75 {
 		t.Fatalf("video ratios = %#v", video)
 	}
 
-	c = taskContext(t, `{"model":"tencent-vod/kling-image-3.0","prompt":"image","resolution":"4K","n":4}`)
-	image := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: "tencent-vod/kling-image-3.0"})
+	c = taskContext(t, `{"model":"kling-image-3.0","prompt":"image","resolution":"4K","n":4}`)
+	image := a.EstimateBilling(c, &relaycommon.RelayInfo{OriginModelName: "kling-image-3.0"})
 	if image["resolution"] != 1.8 || image["count"] != 4 {
 		t.Fatalf("image ratios = %#v", image)
 	}
@@ -154,7 +154,7 @@ func TestDoResponseReturnsPublicTaskAndStoresUpstreamID(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(`{"Response":{"TaskId":"vod-task-123","RequestId":"req-1"}}`)),
 	}
 	taskID, rawBody, taskErr := a.DoResponse(c, resp, &relaycommon.RelayInfo{
-		OriginModelName: "tencent-vod/gv-3.1",
+		OriginModelName: "gv-3.1",
 		TaskRelayInfo:   &relaycommon.TaskRelayInfo{PublicTaskID: "task_public"},
 	})
 	if taskErr != nil {

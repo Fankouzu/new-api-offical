@@ -66,7 +66,7 @@ the model matrix below. Operators may also manually enter a comma-separated
 subset, for example:
 
 ```text
-tencent-vod/gv-3.1,tencent-vod/vidu-q3-turbo,tencent-vod/kling-image-3.0
+gv-3.1,vidu-q3-turbo,kling-image-3.0
 ```
 
 These public model IDs are the names users call through new-api. The adaptor
@@ -149,35 +149,35 @@ for the public model in the normal model pricing backend.
 
 | Public model ID | Vendor | Tencent `ModelName` | Tencent `ModelVersion` | Supported modes | Resolution tiers | Billing unit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `tencent-vod/hunyuan-3d-panorama` | Hunyuan | `Hunyuan` | `3d_2.0` | text/image to panorama | `1K`, `2K`, `4K` | per image | Requires `SceneType=3d_panorama`; document notes 5 yuan/task for panorama. |
-| `tencent-vod/og-image2-low` | OG / Image2 | `OG` | `image2_low` | text/image to image | `1K`, `2K`, `4K` | per image | Up to 16 input images in Tencent guide. |
-| `tencent-vod/og-image2-medium` | OG / Image2 | `OG` | `image2_medium` | text/image to image | `1K`, `2K`, `4K` | per image | Same API shape as low. |
-| `tencent-vod/og-image2-high` | OG / Image2 | `OG` | `image2_high` | text/image to image | `1K`, `2K`, `4K` | per image | Same API shape as low. |
-| `tencent-vod/kling-image-3.0` | Kling | `Kling` | `3.0` | text/image/reference image | `1K`, `2K`, `4K` | per image | Supports scene features through `SceneType`. |
-| `tencent-vod/kling-image-3.0-omni` | Kling | `Kling` | `3.0-Omni` | text/image/reference image | `1K`, `2K`, `4K` | per image | Higher tier Kling image model. |
-| `tencent-vod/vidu-image` | Vidu | `Vidu` | provider-specific | text/image/reference image | `1K`, `2K`, `4K` | per image | Vidu 1K uses short-edge semantics in Tencent pricing notes. |
+| `hunyuan-3d-panorama` | Hunyuan | `Hunyuan` | `3d_2.0` | text/image to panorama | `1K`, `2K`, `4K` | per image | Requires `SceneType=3d_panorama`; document notes 5 yuan/task for panorama. |
+| `og-image2-low` | OG / Image2 | `OG` | `image2_low` | text/image to image | `1K`, `2K`, `4K` | per image | Up to 16 input images in Tencent guide. |
+| `og-image2-medium` | OG / Image2 | `OG` | `image2_medium` | text/image to image | `1K`, `2K`, `4K` | per image | Same API shape as low. |
+| `og-image2-high` | OG / Image2 | `OG` | `image2_high` | text/image to image | `1K`, `2K`, `4K` | per image | Same API shape as low. |
+| `kling-image-3.0` | Kling | `Kling` | `3.0` | text/image/reference image | `1K`, `2K`, `4K` | per image | Supports scene features through `SceneType`. |
+| `kling-image-3.0-omni` | Kling | `Kling` | `3.0-Omni` | text/image/reference image | `1K`, `2K`, `4K` | per image | Higher tier Kling image model. |
+| `vidu-image` | Vidu | `Vidu` | provider-specific | text/image/reference image | `1K`, `2K`, `4K` | per image | Vidu 1K uses short-edge semantics in Tencent pricing notes. |
 
 ### Video Models
 
 | Public model ID | Vendor | Tencent `ModelName` | Tencent `ModelVersion` | Supported modes | Resolution tiers | Duration | Billing unit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `tencent-vod/gv-3.1` | Google Veo / GV | `GV` | `3.1` | text/image/first-tail/reference video | `720P`, `1080P`, `2K`, `4K` | model-specific | per second | `ReferenceType=asset/style` supported. |
-| `tencent-vod/gv-3.1-fast` | Google Veo / GV | `GV` | `3.1-fast` | text/image | `720P`, `1080P`, `2K`, `4K` | model-specific | per second | Faster lower-cost variant. |
-| `tencent-vod/kling-3.0-std` | Kling | `Kling` | `3.0` | text/image/reference/scene | `720P` | 3-15s | per second | Standard 720P lane. |
-| `tencent-vod/kling-3.0-pro` | Kling | `Kling` | `3.0` | text/image/reference/scene | `1080P` | 3-15s | per second | Pro 1080P lane. |
-| `tencent-vod/kling-3.0-omni` | Kling | `Kling` | `3.0-Omni` | text/image/reference/scene | `4K` | 3-15s | per second | 4K lane, supports audio parameters in guide. |
-| `tencent-vod/kling-2.6` | Kling | `Kling` | `2.6` | text/image/action/lip-sync/avatar | `720P`, `1080P` | model-specific | per second | Voice ID note: Kling 2.6 only supports voice ID at 1080P. |
-| `tencent-vod/vidu-q3-turbo` | Vidu | `Vidu` | `q3-turbo` | text/image/reference/subject | `480P`, `720P`, `1080P`, `2K`, `4K` | 3-15s | per second | Supports off-peak, interpolation, logo, subject modes. |
-| `tencent-vod/vidu-q3-pro` | Vidu | `Vidu` | `q3-pro` | text/image/reference/subject | `720P`, `1080P`, `2K`, `4K` | 3-15s | per second | Higher-quality q3 lane. |
-| `tencent-vod/vidu-q3-mix` | Vidu | `Vidu` | `q3-mix` | text/image/reference | `720P`, `1080P`, `2K`, `4K` | 3-15s | per second | Guide notes stronger dynamics; no subject library in current guide. |
-| `tencent-vod/pixverse-v5.6` | PixVerse | `PixVerse` | `v5.6` | text/image/reference/video edit | `360P`, `540P`, `720P`, `1080P` | 1-15s | per second | 1080P does not support 10s in guide note. |
-| `tencent-vod/pixverse-v6` | PixVerse | `PixVerse` | `v6` | text/image/reference/video edit | `360P`, `540P`, `720P`, `1080P` | 1-15s | per second | Native audio/video generation. |
-| `tencent-vod/pixverse-c1` | PixVerse | `PixVerse` | `c1` | cinematic reference/video edit | `360P`, `540P`, `720P`, `1080P` | 1-15s | per second | Film/action/effects-oriented model. |
-| `tencent-vod/hailuo-02` | Hailuo | `Hailuo` | `02` | text/image video | `768P`, `1080P` | model-specific | per second | Guide lists Hailuo versions `02`, `2.3`, `2.3-fast`. |
-| `tencent-vod/hailuo-2.3` | Hailuo | `Hailuo` | `2.3` | text/image video | `768P`, `1080P` | model-specific | per second | Higher-quality lane. |
-| `tencent-vod/hailuo-2.3-fast` | Hailuo | `Hailuo` | `2.3-fast` | text/image video | `768P`, `1080P` | model-specific | per second | Faster lane. |
-| `tencent-vod/h2-1.0` | H2 | `H2` | `1.0` | text/first-frame/reference images | `720P`, `1080P`, `2K`, `4K` | 3-15s | per second | Supports audio; reference images 1-9. |
-| `tencent-vod/hunyuan-3d-scene` | Hunyuan | `Hunyuan` | `3d_2.0` | 3D scene video | custom | task-based | per task | Requires `SceneType=3d_scene`; guide notes 200 yuan/task. |
+| `gv-3.1` | Google Veo / GV | `GV` | `3.1` | text/image/first-tail/reference video | `720P`, `1080P`, `2K`, `4K` | model-specific | per second | `ReferenceType=asset/style` supported. |
+| `gv-3.1-fast` | Google Veo / GV | `GV` | `3.1-fast` | text/image | `720P`, `1080P`, `2K`, `4K` | model-specific | per second | Faster lower-cost variant. |
+| `kling-3.0-std` | Kling | `Kling` | `3.0` | text/image/reference/scene | `720P` | 3-15s | per second | Standard 720P lane. |
+| `kling-3.0-pro` | Kling | `Kling` | `3.0` | text/image/reference/scene | `1080P` | 3-15s | per second | Pro 1080P lane. |
+| `kling-3.0-omni` | Kling | `Kling` | `3.0-Omni` | text/image/reference/scene | `4K` | 3-15s | per second | 4K lane, supports audio parameters in guide. |
+| `kling-2.6` | Kling | `Kling` | `2.6` | text/image/action/lip-sync/avatar | `720P`, `1080P` | model-specific | per second | Voice ID note: Kling 2.6 only supports voice ID at 1080P. |
+| `vidu-q3-turbo` | Vidu | `Vidu` | `q3-turbo` | text/image/reference/subject | `480P`, `720P`, `1080P`, `2K`, `4K` | 3-15s | per second | Supports off-peak, interpolation, logo, subject modes. |
+| `vidu-q3-pro` | Vidu | `Vidu` | `q3-pro` | text/image/reference/subject | `720P`, `1080P`, `2K`, `4K` | 3-15s | per second | Higher-quality q3 lane. |
+| `vidu-q3-mix` | Vidu | `Vidu` | `q3-mix` | text/image/reference | `720P`, `1080P`, `2K`, `4K` | 3-15s | per second | Guide notes stronger dynamics; no subject library in current guide. |
+| `pixverse-v5.6` | PixVerse | `PixVerse` | `v5.6` | text/image/reference/video edit | `360P`, `540P`, `720P`, `1080P` | 1-15s | per second | 1080P does not support 10s in guide note. |
+| `pixverse-v6` | PixVerse | `PixVerse` | `v6` | text/image/reference/video edit | `360P`, `540P`, `720P`, `1080P` | 1-15s | per second | Native audio/video generation. |
+| `pixverse-c1` | PixVerse | `PixVerse` | `c1` | cinematic reference/video edit | `360P`, `540P`, `720P`, `1080P` | 1-15s | per second | Film/action/effects-oriented model. |
+| `hailuo-02` | Hailuo | `Hailuo` | `02` | text/image video | `768P`, `1080P` | model-specific | per second | Guide lists Hailuo versions `02`, `2.3`, `2.3-fast`. |
+| `hailuo-2.3` | Hailuo | `Hailuo` | `2.3` | text/image video | `768P`, `1080P` | model-specific | per second | Higher-quality lane. |
+| `hailuo-2.3-fast` | Hailuo | `Hailuo` | `2.3-fast` | text/image video | `768P`, `1080P` | model-specific | per second | Faster lane. |
+| `h2-1.0` | H2 | `H2` | `1.0` | text/first-frame/reference images | `720P`, `1080P`, `2K`, `4K` | 3-15s | per second | Supports audio; reference images 1-9. |
+| `hunyuan-3d-scene` | Hunyuan | `Hunyuan` | `3d_2.0` | 3D scene video | custom | task-based | per task | Requires `SceneType=3d_scene`; guide notes 200 yuan/task. |
 
 ## Billing Model
 
