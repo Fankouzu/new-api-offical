@@ -259,7 +259,14 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		taskInfo.Status = model.TaskStatusInProgress
 	case "FINISH", "FINISHED", "SUCCESS", "SUCCEEDED", "DONE", "COMPLETED":
 		taskInfo.Status = model.TaskStatusSuccess
-		taskInfo.Url = firstString(findString(root, "VideoUrl"), findString(root, "ImageUrl"), findString(root, "MediaUrl"), findString(root, "FileUrl"), findString(root, "Url"))
+		taskInfo.Url = firstString(
+			findString(root, "VideoUrl"),
+			findString(root, "ImageUrl"),
+			findString(root, "MediaUrl"),
+			findString(root, "FileUrl"),
+			findString(root, "Url"),
+			findMediaURL(root),
+		)
 	case "FAIL", "FAILED", "FAILURE", "ERROR":
 		taskInfo.Status = model.TaskStatusFailure
 		taskInfo.Reason = firstString(findString(root, "ErrMsg"), findString(root, "ErrorMessage"), findString(root, "Message"), findString(root, "Reason"))
@@ -517,6 +524,54 @@ func findString(root map[string]any, key string) string {
 		return strings.TrimSpace(fmt.Sprint(value))
 	}
 	return ""
+}
+
+func findMediaURL(root map[string]any) string {
+	return findMediaURLValue(root)
+}
+
+func findMediaURLValue(value any) string {
+	switch v := value.(type) {
+	case string:
+		s := strings.TrimSpace(v)
+		if isTencentVODMediaURL(s) {
+			return s
+		}
+	case map[string]any:
+		for _, key := range []string{"MediaUrl", "VideoUrl", "ImageUrl", "FileUrl", "Url", "URL"} {
+			if found := findMediaURLValue(v[key]); found != "" {
+				return found
+			}
+		}
+		for _, nested := range v {
+			if found := findMediaURLValue(nested); found != "" {
+				return found
+			}
+		}
+	case []any:
+		for _, item := range v {
+			if found := findMediaURLValue(item); found != "" {
+				return found
+			}
+		}
+	}
+	return ""
+}
+
+func isTencentVODMediaURL(value string) bool {
+	if !strings.HasPrefix(value, "http://") && !strings.HasPrefix(value, "https://") {
+		return false
+	}
+	lower := strings.ToLower(value)
+	return strings.Contains(lower, ".mp4") ||
+		strings.Contains(lower, ".mov") ||
+		strings.Contains(lower, ".m3u8") ||
+		strings.Contains(lower, ".webm") ||
+		strings.Contains(lower, ".png") ||
+		strings.Contains(lower, ".jpg") ||
+		strings.Contains(lower, ".jpeg") ||
+		strings.Contains(lower, ".webp") ||
+		strings.Contains(lower, ".gif")
 }
 
 func findAny(root map[string]any, key string) any {
