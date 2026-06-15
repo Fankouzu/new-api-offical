@@ -250,8 +250,9 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		return &relaycommon.TaskInfo{Status: model.TaskStatusFailure, Reason: firstString(metadataString(errObj, "Message"), metadataString(errObj, "Code"))}, nil
 	}
 
-	status := strings.ToUpper(firstString(findString(root, "Status"), findString(root, "TaskStatus"), findString(root, "State")))
-	taskInfo := &relaycommon.TaskInfo{Progress: normalizeProgress(findAny(root, "Progress"))}
+	taskRoot := tencentAIGCTaskRoot(root)
+	status := strings.ToUpper(firstString(findString(taskRoot, "Status"), findString(taskRoot, "TaskStatus"), findString(taskRoot, "State")))
+	taskInfo := &relaycommon.TaskInfo{Progress: normalizeProgress(findAny(taskRoot, "Progress"))}
 	switch status {
 	case "SUBMITTED", "CREATED", "WAITING", "QUEUEING", "QUEUED", "PENDING":
 		taskInfo.Status = model.TaskStatusSubmitted
@@ -260,16 +261,16 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	case "FINISH", "FINISHED", "SUCCESS", "SUCCEEDED", "DONE", "COMPLETED":
 		taskInfo.Status = model.TaskStatusSuccess
 		taskInfo.Url = firstString(
-			findString(root, "VideoUrl"),
-			findString(root, "ImageUrl"),
-			findString(root, "MediaUrl"),
-			findString(root, "FileUrl"),
-			findString(root, "Url"),
-			findMediaURL(root),
+			findString(taskRoot, "VideoUrl"),
+			findString(taskRoot, "ImageUrl"),
+			findString(taskRoot, "MediaUrl"),
+			findString(taskRoot, "FileUrl"),
+			findString(taskRoot, "Url"),
+			findMediaURL(taskRoot),
 		)
 	case "FAIL", "FAILED", "FAILURE", "ERROR":
 		taskInfo.Status = model.TaskStatusFailure
-		taskInfo.Reason = firstString(findString(root, "ErrMsg"), findString(root, "ErrorMessage"), findString(root, "Message"), findString(root, "Reason"))
+		taskInfo.Reason = firstString(findString(taskRoot, "ErrMsg"), findString(taskRoot, "ErrorMessage"), findString(taskRoot, "Message"), findString(taskRoot, "Reason"))
 	default:
 		return nil, fmt.Errorf("unknown Tencent VOD task status: %s", status)
 	}
@@ -283,6 +284,15 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		}
 	}
 	return taskInfo, nil
+}
+
+func tencentAIGCTaskRoot(root map[string]any) map[string]any {
+	for _, key := range []string{"AigcVideoTask", "AigcImageTask", "AigcTask", "AiTask"} {
+		if taskRoot, ok := findMap(root, key); ok {
+			return taskRoot
+		}
+	}
+	return root
 }
 
 func (a *TaskAdaptor) GetModelList() []string {

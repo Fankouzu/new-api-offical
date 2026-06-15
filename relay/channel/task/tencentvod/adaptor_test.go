@@ -401,6 +401,26 @@ func TestParseTaskResultFindsNestedTencentMediaURL(t *testing.T) {
 	}
 }
 
+func TestParseTaskResultPrefersNestedAIGCTaskStatus(t *testing.T) {
+	a := &TaskAdaptor{}
+	info, err := a.ParseTaskResult([]byte(`{
+		"Response": {
+			"Status": "FINISH",
+			"AigcVideoTask": {
+				"TaskStatus": "PROCESSING",
+				"Progress": 35
+			},
+			"RequestId": "req-1"
+		}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Status != model.TaskStatusInProgress || info.Progress != "35%" || info.Url != "" {
+		t.Fatalf("info = %+v", info)
+	}
+}
+
 func taskContext(t *testing.T, raw string) *gin.Context {
 	t.Helper()
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
