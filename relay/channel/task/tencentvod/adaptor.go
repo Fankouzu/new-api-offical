@@ -268,6 +268,12 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 			findString(taskRoot, "Url"),
 			findMediaURL(taskRoot),
 		)
+		if taskInfo.Url == "" {
+			taskInfo.Status = model.TaskStatusInProgress
+			if taskInfo.Progress == "" || taskInfo.Progress == taskcommon.ProgressComplete {
+				taskInfo.Progress = "95%"
+			}
+		}
 	case "FAIL", "FAILED", "FAILURE", "ERROR":
 		taskInfo.Status = model.TaskStatusFailure
 		taskInfo.Reason = firstString(findString(taskRoot, "ErrMsg"), findString(taskRoot, "ErrorMessage"), findString(taskRoot, "Message"), findString(taskRoot, "Reason"))
