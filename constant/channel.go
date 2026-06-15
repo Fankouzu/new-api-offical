@@ -59,6 +59,7 @@ const (
 	ChannelTypeKieAI          = 59
 	ChannelTypeFalAI          = 60
 	ChannelTypeSub2APIAsync   = 61
+	ChannelTypeTencentVODAIGC = 62
 	ChannelTypeDummy          // this one is only for count, do not add any channel after this
 
 )
@@ -126,6 +127,7 @@ var ChannelBaseURLs = []string{
 	"https://api.kie.ai",                        //59 KieAI
 	"https://queue.fal.run",                     //60 FalAI
 	"https://api.sub2api.com",                   //61 Sub2API-async
+	"https://vod.tencentcloudapi.com",           //62 Tencent VOD AIGC
 }
 
 var ChannelTypeNames = map[int]string{
@@ -187,6 +189,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeKieAI:          "KieAI",
 	ChannelTypeFalAI:          "FalAI",
 	ChannelTypeSub2APIAsync:   "Sub2API-async",
+	ChannelTypeTencentVODAIGC: "Tencent VOD AIGC",
 }
 
 func GetChannelTypeName(channelType int) string {

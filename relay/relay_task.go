@@ -510,8 +510,10 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	}
 
 	ft := map[string]any{
-		"task_id": task.GetUpstreamTaskID(),
-		"action":  task.Action,
+		"task_id":     task.GetUpstreamTaskID(),
+		"action":      task.Action,
+		"api_version": channelModel.Other,
+		"region":      channelModel.Other,
 	}
 	if task.PrivateData.UpstreamKind != "" {
 		ft["upstream_kind"] = task.PrivateData.UpstreamKind

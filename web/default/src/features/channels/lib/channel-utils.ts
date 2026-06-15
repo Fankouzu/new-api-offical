@@ -105,6 +105,7 @@ export function getChannelTypeIcon(type: number): string {
 	59: 'https://kie.ai/logo.png', // KieAI
 	60: 'https://icons.lobehub.com/components/fal', // FalAI
     61: 'OpenAI', // Sub2API-async
+    62: 'Hunyuan', // Tencent VOD AIGC
 
     // Tools & Platforms
     37: 'Dify', // Dify

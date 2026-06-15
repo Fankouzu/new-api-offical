@@ -1,0 +1,96 @@
+package tencentvod
+
+import "strings"
+
+const (
+	ModelGV31              = "tencent-vod/gv-3.1"
+	ModelGV31Fast          = "tencent-vod/gv-3.1-fast"
+	ModelKling30Std        = "tencent-vod/kling-3.0-std"
+	ModelKling30Pro        = "tencent-vod/kling-3.0-pro"
+	ModelKling30Omni       = "tencent-vod/kling-3.0-omni"
+	ModelKling26           = "tencent-vod/kling-2.6"
+	ModelViduQ3Turbo       = "tencent-vod/vidu-q3-turbo"
+	ModelViduQ3Pro         = "tencent-vod/vidu-q3-pro"
+	ModelViduQ3Mix         = "tencent-vod/vidu-q3-mix"
+	ModelPixVerseV56       = "tencent-vod/pixverse-v5.6"
+	ModelPixVerseV6        = "tencent-vod/pixverse-v6"
+	ModelPixVerseC1        = "tencent-vod/pixverse-c1"
+	ModelHailuo02          = "tencent-vod/hailuo-02"
+	ModelHailuo23          = "tencent-vod/hailuo-2.3"
+	ModelHailuo23Fast      = "tencent-vod/hailuo-2.3-fast"
+	ModelH210              = "tencent-vod/h2-1.0"
+	ModelHunyuan3DScene    = "tencent-vod/hunyuan-3d-scene"
+	ModelHunyuan3DPanorama = "tencent-vod/hunyuan-3d-panorama"
+	ModelOGImage2Low       = "tencent-vod/og-image2-low"
+	ModelOGImage2Medium    = "tencent-vod/og-image2-medium"
+	ModelOGImage2High      = "tencent-vod/og-image2-high"
+	ModelKlingImage30      = "tencent-vod/kling-image-3.0"
+	ModelKlingImage30Omni  = "tencent-vod/kling-image-3.0-omni"
+	ModelViduImage         = "tencent-vod/vidu-image"
+)
+
+const (
+	modelKindImage = "image"
+	modelKindVideo = "video"
+)
+
+type modelSpec struct {
+	PublicModel         string
+	Kind                string
+	TencentModelName    string
+	TencentModelVersion string
+	SceneType           string
+	DefaultResolution   string
+	DefaultDuration     int
+	TaskMultiplier      float64
+}
+
+var imageResolutionRatios = map[string]float64{
+	"512P": 1,
+	"1K":   1,
+	"2K":   1.4,
+	"4K":   1.8,
+}
+
+var videoResolutionRatios = map[string]float64{
+	"360P":  1,
+	"480P":  1,
+	"540P":  1.1,
+	"720P":  1.5,
+	"768P":  1.5,
+	"1080P": 1.75,
+	"2K":    2.1,
+	"4K":    2.5,
+}
+
+var modelSpecs = map[string]modelSpec{
+	ModelGV31:              {PublicModel: ModelGV31, Kind: modelKindVideo, TencentModelName: "GV", TencentModelVersion: "3.1", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelGV31Fast:          {PublicModel: ModelGV31Fast, Kind: modelKindVideo, TencentModelName: "GV", TencentModelVersion: "3.1-fast", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelKling30Std:        {PublicModel: ModelKling30Std, Kind: modelKindVideo, TencentModelName: "Kling", TencentModelVersion: "3.0-std", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelKling30Pro:        {PublicModel: ModelKling30Pro, Kind: modelKindVideo, TencentModelName: "Kling", TencentModelVersion: "3.0-pro", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelKling30Omni:       {PublicModel: ModelKling30Omni, Kind: modelKindVideo, TencentModelName: "Kling", TencentModelVersion: "3.0-omni", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelKling26:           {PublicModel: ModelKling26, Kind: modelKindVideo, TencentModelName: "Kling", TencentModelVersion: "2.6", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelViduQ3Turbo:       {PublicModel: ModelViduQ3Turbo, Kind: modelKindVideo, TencentModelName: "Vidu", TencentModelVersion: "q3-turbo", DefaultResolution: "480P", DefaultDuration: 5},
+	ModelViduQ3Pro:         {PublicModel: ModelViduQ3Pro, Kind: modelKindVideo, TencentModelName: "Vidu", TencentModelVersion: "q3-pro", DefaultResolution: "480P", DefaultDuration: 5},
+	ModelViduQ3Mix:         {PublicModel: ModelViduQ3Mix, Kind: modelKindVideo, TencentModelName: "Vidu", TencentModelVersion: "q3-mix", DefaultResolution: "480P", DefaultDuration: 5},
+	ModelPixVerseV56:       {PublicModel: ModelPixVerseV56, Kind: modelKindVideo, TencentModelName: "PixVerse", TencentModelVersion: "5.6", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelPixVerseV6:        {PublicModel: ModelPixVerseV6, Kind: modelKindVideo, TencentModelName: "PixVerse", TencentModelVersion: "6", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelPixVerseC1:        {PublicModel: ModelPixVerseC1, Kind: modelKindVideo, TencentModelName: "PixVerse", TencentModelVersion: "c1", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelHailuo02:          {PublicModel: ModelHailuo02, Kind: modelKindVideo, TencentModelName: "Hailuo", TencentModelVersion: "02", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelHailuo23:          {PublicModel: ModelHailuo23, Kind: modelKindVideo, TencentModelName: "Hailuo", TencentModelVersion: "2.3", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelHailuo23Fast:      {PublicModel: ModelHailuo23Fast, Kind: modelKindVideo, TencentModelName: "Hailuo", TencentModelVersion: "2.3-fast", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelH210:              {PublicModel: ModelH210, Kind: modelKindVideo, TencentModelName: "H2", TencentModelVersion: "1.0", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelHunyuan3DScene:    {PublicModel: ModelHunyuan3DScene, Kind: modelKindVideo, TencentModelName: "Hunyuan", TencentModelVersion: "3d_2.0", SceneType: "3d_scene", DefaultResolution: "720P", DefaultDuration: 5},
+	ModelHunyuan3DPanorama: {PublicModel: ModelHunyuan3DPanorama, Kind: modelKindImage, TencentModelName: "Hunyuan", TencentModelVersion: "3d_2.0", SceneType: "3d_panorama", DefaultResolution: "1K"},
+	ModelOGImage2Low:       {PublicModel: ModelOGImage2Low, Kind: modelKindImage, TencentModelName: "OG", TencentModelVersion: "image2_low", DefaultResolution: "1K"},
+	ModelOGImage2Medium:    {PublicModel: ModelOGImage2Medium, Kind: modelKindImage, TencentModelName: "OG", TencentModelVersion: "image2_medium", DefaultResolution: "1K"},
+	ModelOGImage2High:      {PublicModel: ModelOGImage2High, Kind: modelKindImage, TencentModelName: "OG", TencentModelVersion: "image2_high", DefaultResolution: "1K"},
+	ModelKlingImage30:      {PublicModel: ModelKlingImage30, Kind: modelKindImage, TencentModelName: "Kling", TencentModelVersion: "3.0", DefaultResolution: "1K"},
+	ModelKlingImage30Omni:  {PublicModel: ModelKlingImage30Omni, Kind: modelKindImage, TencentModelName: "Kling", TencentModelVersion: "3.0-omni", DefaultResolution: "1K"},
+	ModelViduImage:         {PublicModel: ModelViduImage, Kind: modelKindImage, TencentModelName: "Vidu", TencentModelVersion: "image", DefaultResolution: "1K"},
+}
+
+func lookupModelSpec(model string) (modelSpec, bool) {
+	spec, ok := modelSpecs[strings.TrimSpace(model)]
+	return spec, ok
+}

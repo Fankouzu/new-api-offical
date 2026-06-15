@@ -416,6 +416,7 @@ export function getChannelIcon(channelType) {
     case 60: // Fal.ai
       return <Fal.Color size={iconSize} />;
     case 61: // Sub2API-async
+    case 62: // Tencent VOD AIGC
       return <OpenAI size={iconSize} />;
     case 56: // Replicate
       return <Replicate size={iconSize} />;

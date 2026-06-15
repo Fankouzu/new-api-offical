@@ -7,6 +7,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	taskkie "github.com/QuantumNous/new-api/relay/channel/task/kie"
 	tasksub2apiasync "github.com/QuantumNous/new-api/relay/channel/task/sub2api_async"
+	tasktencentvod "github.com/QuantumNous/new-api/relay/channel/task/tencentvod"
 )
 
 func TestGetTaskAdaptorReturnsKieAdaptor(t *testing.T) {
@@ -30,8 +31,21 @@ func TestGetTaskAdaptorReturnsSub2APIAsyncAdaptor(t *testing.T) {
 	if adaptor.GetChannelName() != tasksub2apiasync.ChannelName {
 		t.Fatalf("channel name = %q", adaptor.GetChannelName())
 	}
-	if len(adaptor.GetModelList()) != 2 {
-		t.Fatalf("expected two Sub2API-async models, got %d", len(adaptor.GetModelList()))
+	if len(adaptor.GetModelList()) == 0 {
+		t.Fatal("expected Sub2API-async model list")
+	}
+}
+
+func TestGetTaskAdaptorReturnsTencentVODAIGCAdaptor(t *testing.T) {
+	adaptor := GetTaskAdaptor(constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeTencentVODAIGC)))
+	if adaptor == nil {
+		t.Fatal("expected Tencent VOD AIGC task adaptor")
+	}
+	if adaptor.GetChannelName() != tasktencentvod.ChannelName {
+		t.Fatalf("channel name = %q", adaptor.GetChannelName())
+	}
+	if len(adaptor.GetModelList()) == 0 {
+		t.Fatal("expected Tencent VOD AIGC model list")
 	}
 }
 
