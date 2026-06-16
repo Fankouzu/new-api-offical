@@ -118,6 +118,9 @@ func (a *TaskAdaptor) EstimateBillingWithError(c *gin.Context, info *relaycommon
 	if !ok {
 		return nil, fmt.Errorf("unsupported Tencent VOD AIGC model %s", resolveModelName(req.Model, info))
 	}
+	if !info.PriceData.UsePrice || info.PriceData.ModelPrice <= 0 {
+		return nil, fmt.Errorf("Tencent VOD pricing requires ModelPrice base price for model %s", spec.PublicModel)
+	}
 
 	return estimatePreciseBillingRatios(&req, spec)
 }
