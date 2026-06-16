@@ -193,7 +193,16 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// 5. 计费估算：让适配器根据用户请求提供 OtherRatios（时长、分辨率等）
 	//    必须在 ModelPriceHelperPerCall 之后调用（它会重建 PriceData）。
 	//    ResolveOriginTask 可能已在 remix 路径中预设了 OtherRatios，此处合并。
-	if estimatedRatios := adaptor.EstimateBilling(c, info); len(estimatedRatios) > 0 {
+	var estimatedRatios map[string]float64
+	if estimator, ok := adaptor.(channel.TaskBillingEstimatorWithError); ok {
+		estimatedRatios, err = estimator.EstimateBillingWithError(c, info)
+		if err != nil {
+			return nil, service.TaskErrorWrapper(err, "model_price_error", http.StatusBadRequest)
+		}
+	} else {
+		estimatedRatios = adaptor.EstimateBilling(c, info)
+	}
+	if len(estimatedRatios) > 0 {
 		for k, v := range estimatedRatios {
 			info.PriceData.AddOtherRatio(k, v)
 		}
@@ -495,7 +504,9 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	if err != nil {
 		return nil
 	}
-	if channelModel.Type != constant.ChannelTypeVertexAi && channelModel.Type != constant.ChannelTypeGemini {
+	if channelModel.Type != constant.ChannelTypeVertexAi &&
+		channelModel.Type != constant.ChannelTypeGemini &&
+		channelModel.Type != constant.ChannelTypeTencentVODAIGC {
 		return nil
 	}
 
@@ -510,8 +521,10 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	}
 
 	ft := map[string]any{
-		"task_id": task.GetUpstreamTaskID(),
-		"action":  task.Action,
+		"task_id":     task.GetUpstreamTaskID(),
+		"action":      task.Action,
+		"api_version": channelModel.Other,
+		"region":      channelModel.Other,
 	}
 	if task.PrivateData.UpstreamKind != "" {
 		ft["upstream_kind"] = task.PrivateData.UpstreamKind
@@ -540,11 +553,14 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	if ti.Progress != "" {
 		task.Progress = ti.Progress
 	}
+	if len(bytes.TrimSpace(body)) > 0 {
+		task.Data = append(task.Data[:0], body...)
+	}
 	if strings.HasPrefix(ti.Url, "data:") {
 		// data: URI — kept in Data, not ResultURL
 	} else if ti.Url != "" {
 		task.PrivateData.ResultURL = ti.Url
-	} else if task.Status == model.TaskStatusSuccess {
+	} else if task.Status == model.TaskStatusSuccess && task.Platform != constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeTencentVODAIGC)) {
 		// No URL from adaptor — construct proxy URL using public task ID
 		task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
 	}

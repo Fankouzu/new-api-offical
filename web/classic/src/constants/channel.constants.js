@@ -209,6 +209,11 @@ export const CHANNEL_OPTIONS = [
     color: 'green',
     label: 'Sub2API-async',
   },
+  {
+    value: 62,
+    color: 'teal',
+    label: 'Tencent VOD AIGC',
+  },
 ];
 
 // Channel types that support upstream model list fetching in UI.

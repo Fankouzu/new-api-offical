@@ -109,6 +109,35 @@ const createIcon = (Mono, Color) => {
   return Icon;
 };
 
+const packageIconModules = import.meta.glob(
+  '/node_modules/@lobehub/icons/es/*/components/{Mono,Color}.js',
+  { eager: true },
+);
+
+const createPackageIconRegistry = () => {
+  const iconComponents = {};
+  Object.entries(packageIconModules).forEach(([path, mod]) => {
+    const match = path.match(/\/([^/]+)\/components\/(Mono|Color)\.js$/);
+    if (!match) return;
+    const [, iconName, variant] = match;
+    const Component = mod?.default;
+    if (!Component) return;
+    iconComponents[iconName] = {
+      ...iconComponents[iconName],
+      [variant]: Component,
+    };
+  });
+
+  return Object.fromEntries(
+    Object.entries(iconComponents)
+      .filter(([, components]) => components.Mono || components.Color)
+      .map(([iconName, components]) => [
+        iconName,
+        createIcon(components.Mono || components.Color, components.Color),
+      ]),
+  );
+};
+
 export const Ai360 = createIcon(Ai360Mono, Ai360Color);
 export const AzureAI = createIcon(AzureAIMono, AzureAIColor);
 export const Claude = createIcon(ClaudeMono, ClaudeColor);
@@ -148,6 +177,7 @@ export const Yi = createIcon(YiMono, YiColor);
 export const Zhipu = createIcon(ZhipuMono, ZhipuColor);
 
 export const LobeIcons = {
+  ...createPackageIconRegistry(),
   Ai360,
   AzureAI,
   Claude,

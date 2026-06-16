@@ -155,6 +155,8 @@ function type2secretPrompt(type) {
       return '按照如下格式输入: AccessKey|SecretAccessKey';
     case 57:
       return '请输入 JSON 格式的 OAuth 凭据（必须包含 access_token 和 account_id）';
+    case 62:
+      return '按照如下格式输入：SecretId|SecretKey|SubAppId';
     default:
       return '请输入渠道对应的鉴权密钥';
   }
@@ -672,6 +674,13 @@ const EditChannelModal = (props) => {
           setInputs((prevInputs) => ({
             ...prevInputs,
             base_url: 'https://ark.cn-beijing.volces.com',
+          }));
+          break;
+        case 62:
+          localModels = getChannelModels(value);
+          setInputs((prevInputs) => ({
+            ...prevInputs,
+            base_url: 'https://vod.tencentcloudapi.com',
           }));
           break;
         default:
@@ -1664,6 +1673,13 @@ const EditChannelModal = (props) => {
       (!localInputs.base_url || localInputs.base_url.trim() === '')
     ) {
       showInfo(t('请输入API地址！'));
+      return;
+    }
+    if (
+      localInputs.type === 62 &&
+      (!localInputs.other || localInputs.other.trim() === '')
+    ) {
+      showInfo(t('请输入 X-TC-Region，例如 ap-guangzhou'));
       return;
     }
     const hasModelMapping =
@@ -3188,6 +3204,25 @@ const EditChannelModal = (props) => {
                         editorType='region'
                         formApi={formApiRef.current}
                         extraText={t('设置默认地区和特定模型的专用地区')}
+                      />
+                    )}
+
+                    {inputs.type === 62 && (
+                      <Form.Input
+                        field='other'
+                        label={'X-TC-Region'}
+                        placeholder={'ap-guangzhou'}
+                        onChange={(value) => handleInputChange('other', value)}
+                        showClear
+                        rules={[
+                          {
+                            required: true,
+                            message: t('请输入 X-TC-Region，例如 ap-guangzhou'),
+                          },
+                        ]}
+                        extraText={t(
+                          '腾讯云 VOD AIGC 请求头区域，保存到渠道其他设置字段',
+                        )}
                       />
                     )}
 

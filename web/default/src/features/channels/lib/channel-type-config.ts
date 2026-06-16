@@ -147,6 +147,19 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       other: t('Task-only channel for POST /v1/images/generations/async'),
     },
   },
+  62: {
+    id: 62,
+    name: CHANNEL_TYPES[62],
+    icon: 'hunyuan',
+    defaultBaseUrl: 'https://vod.tencentcloudapi.com',
+    requiresRegion: true,
+    hints: {
+      baseUrl: t('Default: https://vod.tencentcloudapi.com'),
+      key: t('Format: SecretId|SecretKey|SubAppId'),
+      models: t('Use Tencent VOD AIGC model IDs such as gg-3.1-image, mj-v7-image, os-2.0'),
+      other: t('X-TC-Region, e.g. ap-guangzhou'),
+    },
+  },
 }
 
 /**

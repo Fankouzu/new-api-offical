@@ -93,6 +93,7 @@ func mediaURLKeyHintsResult(key string, value string) bool {
 	return strings.HasPrefix(lowerValue, "http") &&
 		(strings.Contains(lowerKey, "image") ||
 			strings.Contains(lowerKey, "img") ||
+			strings.Contains(lowerKey, "media") ||
 			strings.Contains(lowerKey, "video") ||
 			strings.Contains(lowerKey, "thumbnail") ||
 			strings.Contains(lowerKey, "cover"))

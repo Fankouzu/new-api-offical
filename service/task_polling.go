@@ -360,8 +360,10 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		key = privateData.Key
 	}
 	fetchBody := map[string]any{
-		"task_id": task.GetUpstreamTaskID(),
-		"action":  task.Action,
+		"task_id":     task.GetUpstreamTaskID(),
+		"action":      task.Action,
+		"api_version": ch.Other,
+		"region":      ch.Other,
 	}
 	if task.PrivateData.UpstreamKind != "" {
 		fetchBody["upstream_kind"] = task.PrivateData.UpstreamKind

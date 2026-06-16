@@ -635,6 +635,14 @@ export function ChannelMutateDrawer({
       }
     }
 
+    // Type 62 (Tencent VOD AIGC) - set default base_url
+    if (currentType === 62) {
+      const currentBaseUrlValue = form.getValues('base_url')
+      if (!currentBaseUrlValue || currentBaseUrlValue === '') {
+        form.setValue('base_url', 'https://vod.tencentcloudapi.com')
+      }
+    }
+
     // Type 18 (Xunfei) - set default other (version)
     if (currentType === 18) {
       const currentOther = form.getValues('other')
@@ -1552,140 +1560,168 @@ export function ChannelMutateDrawer({
                   </Alert>
                 )}
 
-                {/* Vertex AI (type 41) */}
-                {currentType === 41 && (
+                {/* Region-required channels */}
+                {(currentType === 41 || currentType === 62) && (
                   <>
-                    <FormField
-                      control={form.control}
-                      name='vertex_key_type'
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t('Vertex AI Key Format')}</FormLabel>
-                          <Select
-                            items={[
-                              { value: 'json', label: t('JSON') },
-                              { value: 'api_key', label: t('API Key') },
-                            ]}
-                            onValueChange={field.onChange}
-                            value={field.value}
-                          >
+                    {currentType === 41 && (
+                      <>
+                        <FormField
+                          control={form.control}
+                          name='vertex_key_type'
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t('Vertex AI Key Format')}</FormLabel>
+                              <Select
+                                items={[
+                                  { value: 'json', label: t('JSON') },
+                                  { value: 'api_key', label: t('API Key') },
+                                ]}
+                                onValueChange={field.onChange}
+                                value={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent alignItemWithTrigger={false}>
+                                  <SelectGroup>
+                                    <SelectItem value='json'>
+                                      {t('JSON')}
+                                    </SelectItem>
+                                    <SelectItem value='api_key'>
+                                      {t('API Key')}
+                                    </SelectItem>
+                                  </SelectGroup>
+                                </SelectContent>
+                              </Select>
+                              <FormDescription>
+                                {field.value === 'json'
+                                  ? t(
+                                      'JSON format supports service account JSON files'
+                                    )
+                                  : t(
+                                      'API Key mode (does not support batch creation)'
+                                    )}
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        {form.watch('vertex_key_type') === 'json' && (
+                          <FormItem>
+                            <FormLabel>
+                              {t('Service account JSON file(s)')}
+                            </FormLabel>
                             <FormControl>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent alignItemWithTrigger={false}>
-                              <SelectGroup>
-                                <SelectItem value='json'>
-                                  {t('JSON')}
-                                </SelectItem>
-                                <SelectItem value='api_key'>
-                                  {t('API Key')}
-                                </SelectItem>
-                              </SelectGroup>
-                            </SelectContent>
-                          </Select>
-                          <FormDescription>
-                            {field.value === 'json'
-                              ? t(
-                                  'JSON format supports service account JSON files'
-                                )
-                              : t(
-                                  'API Key mode (does not support batch creation)'
-                                )}
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    {form.watch('vertex_key_type') === 'json' && (
-                      <FormItem>
-                        <FormLabel>
-                          {t('Service account JSON file(s)')}
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            type='file'
-                            accept='.json,application/json'
-                            multiple={isBatchMode}
-                            onChange={async (e) => {
-                              const fileList = e.target.files
-                              const files = fileList ? Array.from(fileList) : []
-                              // allow re-selecting the same file
-                              e.target.value = ''
+                              <Input
+                                type='file'
+                                accept='.json,application/json'
+                                multiple={isBatchMode}
+                                onChange={async (e) => {
+                                  const fileList = e.target.files
+                                  const files = fileList
+                                    ? Array.from(fileList)
+                                    : []
+                                  // allow re-selecting the same file
+                                  e.target.value = ''
 
-                              if (files.length === 0) {
-                                toast.info(t('Please upload key file(s)'))
-                                return
-                              }
+                                  if (files.length === 0) {
+                                    toast.info(t('Please upload key file(s)'))
+                                    return
+                                  }
 
-                              const keys: unknown[] = []
-                              for (const file of files) {
-                                try {
-                                  const txt = await file.text()
-                                  keys.push(JSON.parse(txt))
-                                } catch {
-                                  toast.error(
-                                    t('Failed to parse JSON file: {{name}}', {
-                                      name: file.name,
-                                    })
+                                  const keys: unknown[] = []
+                                  for (const file of files) {
+                                    try {
+                                      const txt = await file.text()
+                                      keys.push(JSON.parse(txt))
+                                    } catch {
+                                      toast.error(
+                                        t(
+                                          'Failed to parse JSON file: {{name}}',
+                                          {
+                                            name: file.name,
+                                          }
+                                        )
+                                      )
+                                      return
+                                    }
+                                  }
+
+                                  if (keys.length === 0) {
+                                    toast.info(t('Please upload key file(s)'))
+                                    return
+                                  }
+
+                                  const keyValue = isBatchMode
+                                    ? JSON.stringify(keys)
+                                    : JSON.stringify(keys[0])
+
+                                  form.setValue('key', keyValue, {
+                                    shouldDirty: true,
+                                    shouldValidate: true,
+                                  })
+
+                                  toast.success(
+                                    t(
+                                      'Parsed {{count}} service account file(s)',
+                                      {
+                                        count: keys.length,
+                                      }
+                                    )
                                   )
-                                  return
-                                }
-                              }
-
-                              if (keys.length === 0) {
-                                toast.info(t('Please upload key file(s)'))
-                                return
-                              }
-
-                              const keyValue = isBatchMode
-                                ? JSON.stringify(keys)
-                                : JSON.stringify(keys[0])
-
-                              form.setValue('key', keyValue, {
-                                shouldDirty: true,
-                                shouldValidate: true,
-                              })
-
-                              toast.success(
-                                t('Parsed {{count}} service account file(s)', {
-                                  count: keys.length,
-                                })
-                              )
-                            }}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          {isBatchMode
-                            ? t('Upload multiple JSON files in batch modes')
-                            : t('Upload a single service account JSON file')}
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
+                                }}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              {isBatchMode
+                                ? t('Upload multiple JSON files in batch modes')
+                                : t(
+                                    'Upload a single service account JSON file'
+                                  )}
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      </>
                     )}
                     <FormField
                       control={form.control}
                       name='other'
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>{t('Deployment Region *')}</FormLabel>
+                          <FormLabel>
+                            {currentType === 62
+                              ? 'X-TC-Region *'
+                              : t('Deployment Region *')}
+                          </FormLabel>
                           <FormControl>
                             <Textarea
-                              placeholder={t(
-                                'e.g., us-central1 or JSON format for model-specific regions'
-                              )}
+                              placeholder={
+                                currentType === 62
+                                  ? 'ap-guangzhou'
+                                  : t(
+                                      'e.g., us-central1 or JSON format for model-specific regions'
+                                    )
+                              }
                               rows={3}
                               {...field}
                             />
                           </FormControl>
                           <FormDescription>
-                            {t('Enter deployment region or JSON mapping:')}{' '}
-                            {'{'}
-                            {t(
-                              '"default": "us-central1", "claude-3-5-sonnet-20240620": "europe-west1"'
+                            {currentType === 62 ? (
+                              t('Tencent Cloud VOD AIGC request header region')
+                            ) : (
+                              <>
+                                {t('Enter deployment region or JSON mapping:')}{' '}
+                                {'{'}
+                                {t(
+                                  '"default": "us-central1", "claude-3-5-sonnet-20240620": "europe-west1"'
+                                )}
+                                {'}'}
+                              </>
                             )}
-                            {'}'}
                           </FormDescription>
                           <FormMessage />
                         </FormItem>

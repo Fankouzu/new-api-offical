@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relay"
 	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/gemini"
 	"github.com/QuantumNous/new-api/relay/channel/ollama"
@@ -464,6 +465,10 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		if regionMap["default"] == nil {
 			return fmt.Errorf("部署地区必须包含default字段")
 		}
+	}
+
+	if channel.Type == constant.ChannelTypeTencentVODAIGC && channel.Other == "" {
+		return fmt.Errorf("X-TC-Region cannot be empty")
 	}
 
 	// Codex OAuth key validation (optional, only when JSON object is provided)
@@ -1026,6 +1031,14 @@ func FetchModels(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
 			"data":    models,
+		})
+		return
+	}
+
+	if taskAdaptor := relay.GetTaskAdaptor(constant.TaskPlatform(fmt.Sprintf("%d", req.Type))); taskAdaptor != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"data":    taskAdaptor.GetModelList(),
 		})
 		return
 	}

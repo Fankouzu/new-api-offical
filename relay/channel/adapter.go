@@ -78,6 +78,10 @@ type TaskAdaptor interface {
 	ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error)
 }
 
+type TaskBillingEstimatorWithError interface {
+	EstimateBillingWithError(c *gin.Context, info *relaycommon.RelayInfo) (map[string]float64, error)
+}
+
 type OpenAIVideoConverter interface {
 	ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error)
 }

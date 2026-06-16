@@ -144,14 +144,14 @@ func (t *Task) GetResultURL() string {
 	if !isVideoProxyContentURL(u, t.TaskID) && !isTaskResultProxyURL(u) {
 		return u
 	}
-	extracted := extractFirstImageLikeHTTPURLFromJSON(t.Data)
+	extracted := extractFirstMediaLikeURLFromJSON(t.Data)
 	if extracted == "" {
 		return u
 	}
 	if isImageDataURL(extracted) {
 		return extracted
 	}
-	if t.PrivateData.UpstreamKind == "image" {
+	if t.PrivateData.UpstreamKind == "image" || t.PrivateData.UpstreamKind == "video" {
 		return extracted
 	}
 	// Legacy rows without upstream_kind: only override when payload clearly looks like an image task.

@@ -42,6 +42,7 @@ import (
 	tasksora "github.com/QuantumNous/new-api/relay/channel/task/sora"
 	tasksub2apiasync "github.com/QuantumNous/new-api/relay/channel/task/sub2api_async"
 	"github.com/QuantumNous/new-api/relay/channel/task/suno"
+	tasktencentvod "github.com/QuantumNous/new-api/relay/channel/task/tencentvod"
 	taskvertex "github.com/QuantumNous/new-api/relay/channel/task/vertex"
 	taskVidu "github.com/QuantumNous/new-api/relay/channel/task/vidu"
 	"github.com/QuantumNous/new-api/relay/channel/tencent"
@@ -165,6 +166,8 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &taskfal.TaskAdaptor{}
 		case constant.ChannelTypeSub2APIAsync:
 			return &tasksub2apiasync.TaskAdaptor{}
+		case constant.ChannelTypeTencentVODAIGC:
+			return &tasktencentvod.TaskAdaptor{}
 		case constant.ChannelTypeSora, constant.ChannelTypeOpenAI:
 			return &tasksora.TaskAdaptor{}
 		case constant.ChannelTypeGemini:
