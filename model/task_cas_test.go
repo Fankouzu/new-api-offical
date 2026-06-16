@@ -31,7 +31,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic("failed to get sql.DB: " + err.Error())
 	}
-	sqlDB.SetMaxOpenConns(2)
+	sqlDB.SetMaxOpenConns(1)
 
 	if err := db.AutoMigrate(
 		&Task{},

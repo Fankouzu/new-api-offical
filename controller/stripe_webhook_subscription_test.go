@@ -93,6 +93,8 @@ func TestStripeInvoicePaidWebhookCreatesRenewalSubscription(t *testing.T) {
 		"billing_reason": "subscription_cycle",
 		"amount_paid": 1000,
 		"currency": "usd",
+		"customer_email": "billing@example.com",
+		"customer_name": "Billing Person",
 		"lines": {
 			"object": "list",
 			"data": [
@@ -119,6 +121,9 @@ func TestStripeInvoicePaidWebhookCreatesRenewalSubscription(t *testing.T) {
 	assert.Equal(t, model.StripeInvoiceResultProcessed, invoice.Status)
 	assert.Equal(t, 901, invoice.UserId)
 	assert.Equal(t, 902, invoice.PlanId)
+	assert.NotContains(t, invoice.Payload, "billing@example.com")
+	assert.NotContains(t, invoice.Payload, "Billing Person")
+	assert.Contains(t, invoice.Payload, "in_webhook_renewal")
 }
 
 func TestStripeInvoicePaymentFailedWebhookDoesNotCreateSubscription(t *testing.T) {

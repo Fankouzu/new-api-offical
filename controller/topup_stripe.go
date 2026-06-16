@@ -161,7 +161,7 @@ func StripeWebhook(c *gin.Context) {
 	}
 
 	signature := c.GetHeader("Stripe-Signature")
-	logger.LogInfo(ctx, fmt.Sprintf("Stripe webhook 收到请求 path=%q client_ip=%s signature=%q body=%q", c.Request.RequestURI, c.ClientIP(), signature, string(payload)))
+	logger.LogInfo(ctx, fmt.Sprintf("Stripe webhook 收到请求 path=%q client_ip=%s body_bytes=%d", c.Request.RequestURI, c.ClientIP(), len(payload)))
 	event, err := webhook.ConstructEventWithOptions(payload, signature, setting.StripeWebhookSecret, webhook.ConstructEventOptions{
 		IgnoreAPIVersionMismatch: true,
 	})
@@ -258,8 +258,18 @@ func stripeInvoiceToSubscriptionInput(event stripe.Event, invoice *stripe.Invoic
 		BillingReason:  string(invoice.BillingReason),
 		AmountPaid:     invoice.AmountPaid,
 		Currency:       strings.ToUpper(string(invoice.Currency)),
-		Payload:        string(event.Data.Raw),
 	}
+	input.Payload = common.GetJsonString(map[string]any{
+		"event_id":        input.EventId,
+		"event_type":      input.EventType,
+		"invoice_id":      input.InvoiceId,
+		"subscription_id": input.SubscriptionId,
+		"customer_id":     input.CustomerId,
+		"price_id":        input.PriceId,
+		"billing_reason":  input.BillingReason,
+		"amount_paid":     input.AmountPaid,
+		"currency":        input.Currency,
+	})
 	return input
 }
 
