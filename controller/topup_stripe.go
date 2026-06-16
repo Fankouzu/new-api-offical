@@ -354,6 +354,17 @@ func genStripeLink(referenceId string, customerId string, email string, amount i
 		cancelURL = system_setting.ServerAddress + "/console/topup"
 	}
 
+	params := buildStripePaymentCheckoutParams(referenceId, customerId, email, amount, successURL, cancelURL)
+
+	result, err := session.New(params)
+	if err != nil {
+		return "", err
+	}
+
+	return result.URL, nil
+}
+
+func buildStripePaymentCheckoutParams(referenceId string, customerId string, email string, amount int64, successURL string, cancelURL string) *stripe.CheckoutSessionParams {
 	params := &stripe.CheckoutSessionParams{
 		ClientReferenceID: stripe.String(referenceId),
 		SuccessURL:        stripe.String(successURL),
@@ -378,12 +389,7 @@ func genStripeLink(referenceId string, customerId string, email string, amount i
 		params.Customer = stripe.String(customerId)
 	}
 
-	result, err := session.New(params)
-	if err != nil {
-		return "", err
-	}
-
-	return result.URL, nil
+	return params
 }
 
 func GetChargedAmount(count float64, user model.User) float64 {
