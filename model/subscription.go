@@ -38,6 +38,20 @@ var (
 )
 
 const (
+	StripeInvoiceResultProcessed      = "processed"
+	StripeInvoiceResultDuplicate      = "duplicate"
+	StripeInvoiceResultMissingPlan    = "missing_plan"
+	StripeInvoiceResultMissingUser    = "missing_user"
+	StripeInvoiceResultInitialInvoice = "initial_invoice"
+	StripeInvoiceResultIgnored        = "ignored"
+	StripeInvoiceResultFailed         = "failed"
+)
+
+const stripeInvoiceBillingReasonSubscriptionCreate = "subscription_create"
+const stripeInvoiceBillingReasonSubscriptionCycle = "subscription_cycle"
+const stripeInvoiceBillingReasonSubscriptionLegacy = "subscription"
+
+const (
 	subscriptionPlanCacheNamespace     = "new-api:subscription_plan:v1"
 	subscriptionPlanInfoCacheNamespace = "new-api:subscription_plan_info:v1"
 )
@@ -255,6 +269,61 @@ type UserSubscription struct {
 	UpdatedAt int64 `json:"updated_at" gorm:"bigint"`
 }
 
+type StripeSubscriptionInvoice struct {
+	Id             int    `json:"id"`
+	Provider       string `json:"provider" gorm:"type:varchar(32);not null;default:'stripe';uniqueIndex:idx_stripe_invoice_provider_invoice,priority:1"`
+	EventType      string `json:"event_type" gorm:"type:varchar(128);index"`
+	EventId        string `json:"event_id" gorm:"type:varchar(128);index"`
+	InvoiceId      string `json:"invoice_id" gorm:"type:varchar(128);not null;uniqueIndex:idx_stripe_invoice_provider_invoice,priority:2"`
+	SubscriptionId string `json:"subscription_id" gorm:"type:varchar(128);index"`
+	CustomerId     string `json:"customer_id" gorm:"type:varchar(128);index"`
+	UserId         int    `json:"user_id" gorm:"index"`
+	PlanId         int    `json:"plan_id" gorm:"index"`
+	PriceId        string `json:"price_id" gorm:"type:varchar(128);index"`
+	BillingReason  string `json:"billing_reason" gorm:"type:varchar(64)"`
+	AmountPaid     int64  `json:"amount_paid" gorm:"type:bigint;not null;default:0"`
+	Currency       string `json:"currency" gorm:"type:varchar(16)"`
+	Status         string `json:"status" gorm:"type:varchar(64);index"`
+	Payload        string `json:"payload" gorm:"type:text"`
+	CreatedAt      int64  `json:"created_at" gorm:"bigint"`
+	UpdatedAt      int64  `json:"updated_at" gorm:"bigint"`
+}
+
+func (i *StripeSubscriptionInvoice) BeforeCreate(tx *gorm.DB) error {
+	now := common.GetTimestamp()
+	if i.Provider == "" {
+		i.Provider = PaymentProviderStripe
+	}
+	i.CreatedAt = now
+	i.UpdatedAt = now
+	return nil
+}
+
+func (i *StripeSubscriptionInvoice) BeforeUpdate(tx *gorm.DB) error {
+	i.UpdatedAt = common.GetTimestamp()
+	return nil
+}
+
+type StripeSubscriptionInvoiceInput struct {
+	EventType      string
+	EventId        string
+	InvoiceId      string
+	SubscriptionId string
+	CustomerId     string
+	PriceId        string
+	BillingReason  string
+	AmountPaid     int64
+	Currency       string
+	Payload        string
+}
+
+type StripeSubscriptionInvoiceResult struct {
+	Created bool
+	Status  string
+	UserId  int
+	PlanId  int
+}
+
 func (s *UserSubscription) BeforeCreate(tx *gorm.DB) error {
 	now := common.GetTimestamp()
 	s.CreatedAt = now
@@ -351,6 +420,30 @@ func GetSubscriptionPlanById(id int) (*SubscriptionPlan, error) {
 	return getSubscriptionPlanByIdTx(nil, id)
 }
 
+func GetSubscriptionPlanByStripePriceId(priceId string) (*SubscriptionPlan, error) {
+	priceId = strings.TrimSpace(priceId)
+	if priceId == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var plan SubscriptionPlan
+	if err := DB.Where("stripe_price_id = ?", priceId).First(&plan).Error; err != nil {
+		return nil, err
+	}
+	return &plan, nil
+}
+
+func GetUserByStripeCustomer(customerId string) (*User, error) {
+	customerId = strings.TrimSpace(customerId)
+	if customerId == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var user User
+	if err := DB.Where("stripe_customer = ?", customerId).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 func getSubscriptionPlanByIdTx(tx *gorm.DB, id int) (*SubscriptionPlan, error) {
 	if id <= 0 {
 		return nil, errors.New("invalid plan id")
@@ -384,6 +477,121 @@ func CountUserSubscriptionsByPlan(userId int, planId int) (int64, error) {
 		return 0, err
 	}
 	return count, nil
+}
+
+func CompleteStripeSubscriptionInvoice(input StripeSubscriptionInvoiceInput) (StripeSubscriptionInvoiceResult, error) {
+	result := StripeSubscriptionInvoiceResult{Status: StripeInvoiceResultIgnored}
+	input.InvoiceId = strings.TrimSpace(input.InvoiceId)
+	input.CustomerId = strings.TrimSpace(input.CustomerId)
+	input.PriceId = strings.TrimSpace(input.PriceId)
+	input.Currency = strings.ToUpper(strings.TrimSpace(input.Currency))
+	input.BillingReason = strings.TrimSpace(input.BillingReason)
+	input.EventType = strings.TrimSpace(input.EventType)
+	input.EventId = strings.TrimSpace(input.EventId)
+	input.SubscriptionId = strings.TrimSpace(input.SubscriptionId)
+	if input.InvoiceId == "" {
+		return result, errors.New("invoice id is empty")
+	}
+	if input.EventType == "" {
+		input.EventType = "invoice.paid"
+	}
+
+	var duplicateCount int64
+	if err := DB.Model(&StripeSubscriptionInvoice{}).
+		Where("provider = ? AND invoice_id = ?", PaymentProviderStripe, input.InvoiceId).
+		Count(&duplicateCount).Error; err != nil {
+		return result, err
+	}
+	if duplicateCount > 0 {
+		result.Status = StripeInvoiceResultDuplicate
+		return result, nil
+	}
+
+	status := StripeInvoiceResultProcessed
+	var user *User
+	var plan *SubscriptionPlan
+	if input.BillingReason == stripeInvoiceBillingReasonSubscriptionCreate {
+		status = StripeInvoiceResultInitialInvoice
+	} else if input.BillingReason != stripeInvoiceBillingReasonSubscriptionCycle &&
+		input.BillingReason != stripeInvoiceBillingReasonSubscriptionLegacy {
+		status = StripeInvoiceResultIgnored
+	} else {
+		var err error
+		plan, err = GetSubscriptionPlanByStripePriceId(input.PriceId)
+		if err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return result, err
+			}
+			status = StripeInvoiceResultMissingPlan
+		}
+		if status == StripeInvoiceResultProcessed {
+			user, err = GetUserByStripeCustomer(input.CustomerId)
+			if err != nil {
+				if !errors.Is(err, gorm.ErrRecordNotFound) {
+					return result, err
+				}
+				status = StripeInvoiceResultMissingUser
+			}
+		}
+	}
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		record := &StripeSubscriptionInvoice{
+			Provider:       PaymentProviderStripe,
+			EventType:      input.EventType,
+			EventId:        input.EventId,
+			InvoiceId:      input.InvoiceId,
+			SubscriptionId: input.SubscriptionId,
+			CustomerId:     input.CustomerId,
+			PriceId:        input.PriceId,
+			BillingReason:  input.BillingReason,
+			AmountPaid:     input.AmountPaid,
+			Currency:       input.Currency,
+			Status:         status,
+			Payload:        input.Payload,
+		}
+		if user != nil {
+			record.UserId = user.Id
+			result.UserId = user.Id
+		}
+		if plan != nil {
+			record.PlanId = plan.Id
+			result.PlanId = plan.Id
+		}
+		if err := tx.Create(record).Error; err != nil {
+			if isUniqueConstraintError(err) {
+				result.Status = StripeInvoiceResultDuplicate
+				return nil
+			}
+			return err
+		}
+		if status != StripeInvoiceResultProcessed {
+			result.Status = status
+			return nil
+		}
+		_, err := createUserSubscriptionFromPlanTx(tx, user.Id, plan, "stripe_invoice", false)
+		if err != nil {
+			record.Status = StripeInvoiceResultFailed
+			_ = tx.Save(record).Error
+			return err
+		}
+		result.Created = true
+		result.Status = StripeInvoiceResultProcessed
+		return nil
+	})
+	return result, err
+}
+
+func isUniqueConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique constraint") ||
+		strings.Contains(msg, "duplicate key") ||
+		strings.Contains(msg, "duplicated key") ||
+		strings.Contains(msg, "duplicate entry") ||
+		strings.Contains(msg, "constraint failed")
 }
 
 func getUserGroupByIdTx(tx *gorm.DB, userId int) (string, error) {
@@ -436,6 +644,10 @@ func downgradeUserGroupForSubscriptionTx(tx *gorm.DB, sub *UserSubscription, now
 }
 
 func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *SubscriptionPlan, source string) (*UserSubscription, error) {
+	return createUserSubscriptionFromPlanTx(tx, userId, plan, source, true)
+}
+
+func createUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *SubscriptionPlan, source string, enforcePurchaseLimit bool) (*UserSubscription, error) {
 	if tx == nil {
 		return nil, errors.New("tx is nil")
 	}
@@ -445,7 +657,7 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 	if userId <= 0 {
 		return nil, errors.New("invalid user id")
 	}
-	if plan.MaxPurchasePerUser > 0 {
+	if enforcePurchaseLimit && plan.MaxPurchasePerUser > 0 {
 		var count int64
 		if err := tx.Model(&UserSubscription{}).
 			Where("user_id = ? AND plan_id = ?", userId, plan.Id).
@@ -456,7 +668,7 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 			return nil, errors.New("已达到该套餐购买上限")
 		}
 	}
-	nowUnix := GetDBTimestamp()
+	nowUnix := getDBTimestampTx(tx)
 	now := time.Unix(nowUnix, 0)
 	endUnix, err := calcPlanEndTime(now, plan)
 	if err != nil {

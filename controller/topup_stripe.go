@@ -161,7 +161,7 @@ func StripeWebhook(c *gin.Context) {
 	}
 
 	signature := c.GetHeader("Stripe-Signature")
-	logger.LogInfo(ctx, fmt.Sprintf("Stripe webhook 收到请求 path=%q client_ip=%s signature=%q body=%q", c.Request.RequestURI, c.ClientIP(), signature, string(payload)))
+	logger.LogInfo(ctx, fmt.Sprintf("Stripe webhook 收到请求 path=%q client_ip=%s body_bytes=%d", c.Request.RequestURI, c.ClientIP(), len(payload)))
 	event, err := webhook.ConstructEventWithOptions(payload, signature, setting.StripeWebhookSecret, webhook.ConstructEventOptions{
 		IgnoreAPIVersionMismatch: true,
 	})
@@ -183,11 +183,120 @@ func StripeWebhook(c *gin.Context) {
 		sessionAsyncPaymentSucceeded(ctx, event, callerIp)
 	case stripe.EventTypeCheckoutSessionAsyncPaymentFailed:
 		sessionAsyncPaymentFailed(ctx, event, callerIp)
+	case stripe.EventTypeInvoicePaid:
+		handleStripeInvoicePaid(ctx, event, callerIp)
+	case stripe.EventTypeInvoicePaymentFailed:
+		handleStripeInvoicePaymentFailed(ctx, event, callerIp)
+	case stripe.EventTypeCustomerSubscriptionUpdated:
+		handleStripeCustomerSubscriptionUpdated(ctx, event, callerIp)
+	case stripe.EventTypeCustomerSubscriptionDeleted:
+		handleStripeCustomerSubscriptionDeleted(ctx, event, callerIp)
 	default:
 		logger.LogInfo(ctx, fmt.Sprintf("Stripe webhook 忽略事件 event_type=%s client_ip=%s", string(event.Type), callerIp))
 	}
 
 	c.Status(http.StatusOK)
+}
+
+func handleStripeInvoicePaid(ctx context.Context, event stripe.Event, callerIp string) {
+	var invoice stripe.Invoice
+	if err := common.Unmarshal(event.Data.Raw, &invoice); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("Stripe invoice.paid 解析失败 event_id=%s client_ip=%s error=%q", event.ID, callerIp, err.Error()))
+		return
+	}
+	input := stripeInvoiceToSubscriptionInput(event, &invoice)
+	result, err := model.CompleteStripeSubscriptionInvoice(input)
+	if err != nil {
+		logger.LogError(ctx, fmt.Sprintf("Stripe invoice.paid 处理失败 event_id=%s invoice_id=%s customer=%s subscription=%s price_id=%s client_ip=%s error=%q",
+			event.ID, input.InvoiceId, input.CustomerId, input.SubscriptionId, input.PriceId, callerIp, err.Error()))
+		return
+	}
+	logger.LogInfo(ctx, fmt.Sprintf("Stripe invoice.paid 已处理 event_id=%s invoice_id=%s customer=%s subscription=%s price_id=%s status=%s created=%t user_id=%d plan_id=%d amount_paid=%d currency=%s client_ip=%s",
+		event.ID, input.InvoiceId, input.CustomerId, input.SubscriptionId, input.PriceId, result.Status, result.Created, result.UserId, result.PlanId, input.AmountPaid, input.Currency, callerIp))
+}
+
+func handleStripeInvoicePaymentFailed(ctx context.Context, event stripe.Event, callerIp string) {
+	var invoice stripe.Invoice
+	if err := common.Unmarshal(event.Data.Raw, &invoice); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("Stripe invoice.payment_failed 解析失败 event_id=%s client_ip=%s error=%q", event.ID, callerIp, err.Error()))
+		return
+	}
+	customerId := stripeCustomerId(invoice.Customer)
+	subscriptionId := stripeSubscriptionId(invoice.Subscription)
+	logger.LogWarn(ctx, fmt.Sprintf("Stripe invoice.payment_failed 已记录 event_id=%s invoice_id=%s customer=%s subscription=%s billing_reason=%s attempt_count=%d amount_due=%d currency=%s client_ip=%s",
+		event.ID, invoice.ID, customerId, subscriptionId, string(invoice.BillingReason), invoice.AttemptCount, invoice.AmountDue, strings.ToUpper(string(invoice.Currency)), callerIp))
+}
+
+func handleStripeCustomerSubscriptionUpdated(ctx context.Context, event stripe.Event, callerIp string) {
+	var subscription stripe.Subscription
+	if err := common.Unmarshal(event.Data.Raw, &subscription); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("Stripe customer.subscription.updated 解析失败 event_id=%s client_ip=%s error=%q", event.ID, callerIp, err.Error()))
+		return
+	}
+	logger.LogInfo(ctx, fmt.Sprintf("Stripe customer.subscription.updated 已记录 event_id=%s subscription=%s customer=%s status=%s cancel_at_period_end=%t current_period_end=%d client_ip=%s",
+		event.ID, subscription.ID, stripeCustomerId(subscription.Customer), string(subscription.Status), subscription.CancelAtPeriodEnd, subscription.CurrentPeriodEnd, callerIp))
+}
+
+func handleStripeCustomerSubscriptionDeleted(ctx context.Context, event stripe.Event, callerIp string) {
+	var subscription stripe.Subscription
+	if err := common.Unmarshal(event.Data.Raw, &subscription); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("Stripe customer.subscription.deleted 解析失败 event_id=%s client_ip=%s error=%q", event.ID, callerIp, err.Error()))
+		return
+	}
+	logger.LogInfo(ctx, fmt.Sprintf("Stripe customer.subscription.deleted 已记录 event_id=%s subscription=%s customer=%s status=%s ended_at=%d cancel_at=%d client_ip=%s",
+		event.ID, subscription.ID, stripeCustomerId(subscription.Customer), string(subscription.Status), subscription.EndedAt, subscription.CancelAt, callerIp))
+}
+
+func stripeInvoiceToSubscriptionInput(event stripe.Event, invoice *stripe.Invoice) model.StripeSubscriptionInvoiceInput {
+	input := model.StripeSubscriptionInvoiceInput{
+		EventType:      string(event.Type),
+		EventId:        event.ID,
+		InvoiceId:      invoice.ID,
+		SubscriptionId: stripeSubscriptionId(invoice.Subscription),
+		CustomerId:     stripeCustomerId(invoice.Customer),
+		PriceId:        stripeInvoicePriceId(invoice),
+		BillingReason:  string(invoice.BillingReason),
+		AmountPaid:     invoice.AmountPaid,
+		Currency:       strings.ToUpper(string(invoice.Currency)),
+	}
+	input.Payload = common.GetJsonString(map[string]any{
+		"event_id":        input.EventId,
+		"event_type":      input.EventType,
+		"invoice_id":      input.InvoiceId,
+		"subscription_id": input.SubscriptionId,
+		"customer_id":     input.CustomerId,
+		"price_id":        input.PriceId,
+		"billing_reason":  input.BillingReason,
+		"amount_paid":     input.AmountPaid,
+		"currency":        input.Currency,
+	})
+	return input
+}
+
+func stripeInvoicePriceId(invoice *stripe.Invoice) string {
+	if invoice == nil || invoice.Lines == nil {
+		return ""
+	}
+	for _, line := range invoice.Lines.Data {
+		if line != nil && line.Price != nil && strings.TrimSpace(line.Price.ID) != "" {
+			return line.Price.ID
+		}
+	}
+	return ""
+}
+
+func stripeCustomerId(customer *stripe.Customer) string {
+	if customer == nil {
+		return ""
+	}
+	return customer.ID
+}
+
+func stripeSubscriptionId(subscription *stripe.Subscription) string {
+	if subscription == nil {
+		return ""
+	}
+	return subscription.ID
 }
 
 func sessionCompleted(ctx context.Context, event stripe.Event, callerIp string) {
