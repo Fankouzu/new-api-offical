@@ -93,13 +93,32 @@ func TestRechargeWaffoPancake_RejectsMismatchedPaymentMethod(t *testing.T) {
 	insertUserForPaymentGuardTest(t, 101, 0)
 	insertTopUpForPaymentGuardTest(t, "waffo-pancake-guard", 101, PaymentProviderStripe)
 
-	err := RechargeWaffoPancake("waffo-pancake-guard")
+	err := RechargeWaffoPancake("waffo-pancake-guard", "203.0.113.10")
 	require.Error(t, err)
 
 	topUp := GetTopUpByTradeNo("waffo-pancake-guard")
 	require.NotNil(t, topUp)
 	assert.Equal(t, common.TopUpStatusPending, topUp.Status)
 	assert.Equal(t, 0, getUserQuotaForPaymentGuardTest(t, 101))
+}
+
+func TestRechargeWaffoPancake_RecordsTopupAuditInfo(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 102, 0)
+	insertTopUpForPaymentGuardTest(t, "waffo-pancake-audit", 102, PaymentProviderWaffoPancake)
+
+	err := RechargeWaffoPancake("waffo-pancake-audit", "203.0.113.11")
+	require.NoError(t, err)
+
+	var log Log
+	require.NoError(t, LOG_DB.Where("user_id = ? AND type = ?", 102, LogTypeTopup).Order("id desc").First(&log).Error)
+	assert.Equal(t, "203.0.113.11", log.Ip)
+	assert.Contains(t, log.Content, "Waffo Pancake充值成功")
+	assert.Contains(t, log.Other, `"admin_info"`)
+	assert.Contains(t, log.Other, `"caller_ip":"203.0.113.11"`)
+	assert.Contains(t, log.Other, `"payment_method":"waffo_pancake"`)
+	assert.Contains(t, log.Other, `"callback_payment_method":"waffo_pancake"`)
 }
 
 func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T) {
