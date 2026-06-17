@@ -252,6 +252,15 @@ export type BillingSettings = {
   WaffoPancakeCurrency: string
   WaffoPancakeUnitPrice: number
   WaffoPancakeMinTopUp: number
+  BinancePayEnabled: boolean
+  BinancePaySandbox: boolean
+  BinancePayApiKey: string
+  BinancePayApiSecret: string
+  BinancePayWebhookPubKey: string
+  BinancePayReturnURL: string
+  BinancePayCurrency: string
+  BinancePayUnitPrice: number
+  BinancePayMinTopUp: number
   'checkin_setting.enabled': boolean
   'checkin_setting.min_quota': number
   'checkin_setting.max_quota': number

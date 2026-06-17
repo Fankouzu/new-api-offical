@@ -187,6 +187,17 @@ const BILLING_SECTIONS = [
           WaffoPancakeUnitPrice: settings.WaffoPancakeUnitPrice ?? 1,
           WaffoPancakeMinTopUp: settings.WaffoPancakeMinTopUp ?? 1,
         }}
+        binancePayDefaultValues={{
+          BinancePayEnabled: settings.BinancePayEnabled ?? false,
+          BinancePaySandbox: settings.BinancePaySandbox ?? false,
+          BinancePayApiKey: settings.BinancePayApiKey ?? '',
+          BinancePayApiSecret: settings.BinancePayApiSecret ?? '',
+          BinancePayWebhookPubKey: settings.BinancePayWebhookPubKey ?? '',
+          BinancePayReturnURL: settings.BinancePayReturnURL ?? '',
+          BinancePayCurrency: settings.BinancePayCurrency ?? 'USDT',
+          BinancePayUnitPrice: settings.BinancePayUnitPrice ?? 1,
+          BinancePayMinTopUp: settings.BinancePayMinTopUp ?? 1,
+        }}
       />
     ),
   },

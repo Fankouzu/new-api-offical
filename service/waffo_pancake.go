@@ -389,36 +389,9 @@ func resolveWaffoPancakeWebhookPublicKey(environment string) string {
 }
 
 func verifyWaffoPancakeWebhookWithKey(signatureInput string, signaturePart string, rawPublicKey string) error {
-	publicKeyPEM, err := normalizeRSAPublicKey(rawPublicKey)
+	publicKey, err := parseRSAPublicKey(rawPublicKey)
 	if err != nil {
 		return err
-	}
-
-	block, _ := pem.Decode([]byte(publicKeyPEM))
-	if block == nil {
-		return fmt.Errorf("invalid RSA public key PEM")
-	}
-
-	var publicKey *rsa.PublicKey
-	switch block.Type {
-	case "PUBLIC KEY":
-		key, err := x509.ParsePKIXPublicKey(block.Bytes)
-		if err != nil {
-			return fmt.Errorf("parse PKIX public key: %w", err)
-		}
-		parsed, ok := key.(*rsa.PublicKey)
-		if !ok {
-			return fmt.Errorf("public key is not RSA")
-		}
-		publicKey = parsed
-	case "RSA PUBLIC KEY":
-		key, err := x509.ParsePKCS1PublicKey(block.Bytes)
-		if err != nil {
-			return fmt.Errorf("parse PKCS#1 public key: %w", err)
-		}
-		publicKey = key
-	default:
-		return fmt.Errorf("unsupported public key type: %s", block.Type)
 	}
 
 	signature, err := base64.StdEncoding.DecodeString(signaturePart)
@@ -431,4 +404,37 @@ func verifyWaffoPancakeWebhookWithKey(signatureInput string, signaturePart strin
 		return fmt.Errorf("verify webhook signature: %w", err)
 	}
 	return nil
+}
+
+func parseRSAPublicKey(rawPublicKey string) (*rsa.PublicKey, error) {
+	publicKeyPEM, err := normalizeRSAPublicKey(rawPublicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	block, _ := pem.Decode([]byte(publicKeyPEM))
+	if block == nil {
+		return nil, fmt.Errorf("invalid RSA public key PEM")
+	}
+
+	switch block.Type {
+	case "PUBLIC KEY":
+		key, err := x509.ParsePKIXPublicKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("parse PKIX public key: %w", err)
+		}
+		parsed, ok := key.(*rsa.PublicKey)
+		if !ok {
+			return nil, fmt.Errorf("public key is not RSA")
+		}
+		return parsed, nil
+	case "RSA PUBLIC KEY":
+		key, err := x509.ParsePKCS1PublicKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("parse PKCS#1 public key: %w", err)
+		}
+		return key, nil
+	default:
+		return nil, fmt.Errorf("unsupported public key type: %s", block.Type)
+	}
 }

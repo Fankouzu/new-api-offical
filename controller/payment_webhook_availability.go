@@ -85,6 +85,24 @@ func isWaffoPancakeWebhookEnabled() bool {
 	return isWaffoPancakeTopUpEnabled()
 }
 
+func isBinancePayTopUpEnabled() bool {
+	if !setting.BinancePayEnabled {
+		return false
+	}
+
+	return isBinancePayWebhookConfigured() &&
+		strings.TrimSpace(setting.BinancePayApiKey) != "" &&
+		strings.TrimSpace(setting.BinancePayApiSecret) != ""
+}
+
+func isBinancePayWebhookConfigured() bool {
+	return strings.TrimSpace(setting.BinancePayWebhookPubKey) != ""
+}
+
+func isBinancePayWebhookEnabled() bool {
+	return isBinancePayTopUpEnabled()
+}
+
 func isEpayTopUpEnabled() bool {
 	return isEpayWebhookConfigured() && len(operation_setting.PayMethods) > 0
 }

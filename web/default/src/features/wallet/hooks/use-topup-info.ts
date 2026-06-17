@@ -187,6 +187,8 @@ export function useTopupInfo() {
         amount_options: parseAmountOptions(response.data.amount_options),
         discount: parseDiscountMap(response.data.discount),
         creem_products: parseCreemProducts(response.data.creem_products),
+        enable_binance_pay_topup: response.data.enable_binance_pay_topup,
+        binance_pay_min_topup: response.data.binance_pay_min_topup,
         waffo_pay_methods: parseWaffoPayMethods(
           response.data.waffo_pay_methods
         ),

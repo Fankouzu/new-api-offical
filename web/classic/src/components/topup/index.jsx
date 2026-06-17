@@ -75,6 +75,8 @@ const TopUp = () => {
   const [waffoMinTopUp, setWaffoMinTopUp] = useState(1);
   const [enableWaffoPancakeTopUp, setEnableWaffoPancakeTopUp] = useState(false);
   const [waffoPancakeMinTopUp, setWaffoPancakeMinTopUp] = useState(1);
+  const [enableBinancePayTopUp, setEnableBinancePayTopUp] = useState(false);
+  const [binancePayMinTopUp, setBinancePayMinTopUp] = useState(1);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
@@ -139,6 +141,9 @@ const TopUp = () => {
     if (payment === 'waffo_pancake') {
       return getWaffoPancakeAmount(value);
     }
+    if (payment === 'binance_pay') {
+      return getBinancePayAmount(value);
+    }
     if (typeof payment === 'string' && payment.startsWith('waffo:')) {
       return getWaffoAmount(value);
     }
@@ -200,6 +205,11 @@ const TopUp = () => {
         showError(t('管理员未开启 Waffo Pancake 充值！'));
         return;
       }
+    } else if (payment === 'binance_pay') {
+      if (!enableBinancePayTopUp) {
+        showError(t('管理员未开启 Binance Pay 充值！'));
+        return;
+      }
     } else if (payment.startsWith('waffo:')) {
       if (!enableWaffoTopUp) {
         showError(t('管理员未开启 Waffo 充值！'));
@@ -235,6 +245,17 @@ const TopUp = () => {
       setConfirmLoading(true);
       try {
         await waffoPancakeTopUp();
+      } finally {
+        setOpen(false);
+        setConfirmLoading(false);
+      }
+      return;
+    }
+
+    if (payWay === 'binance_pay') {
+      setConfirmLoading(true);
+      try {
+        await binancePayTopUp();
       } finally {
         setOpen(false);
         setConfirmLoading(false);
@@ -499,6 +520,69 @@ const TopUp = () => {
     }
   };
 
+  const binancePayTopUp = async () => {
+    const minTopUpValue = Number(binancePayMinTopUp || 1);
+    if (topUpCount < minTopUpValue) {
+      showError(t('充值数量不能小于') + minTopUpValue);
+      return;
+    }
+
+    setPaymentLoading(true);
+    try {
+      const res = await API.post('/api/user/binance-pay/pay', {
+        amount: parseInt(topUpCount),
+      });
+      if (res !== undefined) {
+        const { message, data } = res.data;
+        if (message === 'success') {
+          const checkoutUrl = data?.checkout_url || '';
+          if (checkoutUrl) {
+            window.open(checkoutUrl, '_blank');
+          } else {
+            showError(t('支付请求失败'));
+          }
+        } else {
+          const errorMsg =
+            typeof data === 'string' ? data : message || t('支付请求失败');
+          showError(errorMsg);
+        }
+      } else {
+        showError(res);
+      }
+    } catch (e) {
+      showError(t('支付请求失败'));
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  const getBinancePayAmount = async (value) => {
+    if (value === undefined) {
+      value = topUpCount;
+    }
+    setAmountLoading(true);
+    try {
+      const res = await API.post('/api/user/binance-pay/amount', {
+        amount: parseInt(value),
+      });
+      if (res !== undefined) {
+        const { message, data } = res.data;
+        if (message === 'success') {
+          setAmount(parseFloat(data));
+        } else {
+          setAmount(0);
+          Toast.error({ content: '错误：' + data, id: 'getAmount' });
+        }
+      } else {
+        showError(res);
+      }
+    } catch (err) {
+      // amount fetch failed silently
+    } finally {
+      setAmountLoading(false);
+    }
+  };
+
   const processCreemCallback = (data) => {
     // 与 Stripe 保持一致的实现方式
     window.open(data.checkout_url, '_blank');
@@ -635,25 +719,31 @@ const TopUp = () => {
           const enableOnlineTopUp = data.enable_online_topup || false;
           const enableCreemTopUp = data.enable_creem_topup || false;
           const enableWaffoTopUp = data.enable_waffo_topup || false;
-          const enableWaffoPancakeTopUp =
-            data.enable_waffo_pancake_topup || false;
-          const minTopUpValue = enableOnlineTopUp
-            ? data.min_topup
-            : enableStripeTopUp
-              ? data.stripe_min_topup
-              : enableWaffoTopUp
-                ? data.waffo_min_topup
-                : enableWaffoPancakeTopUp
-                  ? data.waffo_pancake_min_topup
-                : 1;
+	          const enableWaffoPancakeTopUp =
+	            data.enable_waffo_pancake_topup || false;
+	          const enableBinancePayTopUp =
+	            data.enable_binance_pay_topup || false;
+	          const minTopUpValue = enableOnlineTopUp
+	            ? data.min_topup
+	            : enableStripeTopUp
+	              ? data.stripe_min_topup
+	              : enableWaffoTopUp
+	                ? data.waffo_min_topup
+	                : enableWaffoPancakeTopUp
+	                  ? data.waffo_pancake_min_topup
+	                  : enableBinancePayTopUp
+	                    ? data.binance_pay_min_topup
+	                : 1;
           setEnableOnlineTopUp(enableOnlineTopUp);
           setEnableStripeTopUp(enableStripeTopUp);
           setEnableCreemTopUp(enableCreemTopUp);
           setEnableWaffoTopUp(enableWaffoTopUp);
           setWaffoPayMethods(data.waffo_pay_methods || []);
           setWaffoMinTopUp(data.waffo_min_topup || 1);
-          setEnableWaffoPancakeTopUp(enableWaffoPancakeTopUp);
-          setWaffoPancakeMinTopUp(data.waffo_pancake_min_topup || 1);
+	          setEnableWaffoPancakeTopUp(enableWaffoPancakeTopUp);
+	          setWaffoPancakeMinTopUp(data.waffo_pancake_min_topup || 1);
+	          setEnableBinancePayTopUp(enableBinancePayTopUp);
+	          setBinancePayMinTopUp(data.binance_pay_min_topup || 1);
           setMinTopUp(minTopUpValue);
           setTopUpCount(minTopUpValue);
           setTopUpLink(data.topup_link || '');
@@ -949,6 +1039,7 @@ const TopUp = () => {
           creemPreTopUp={creemPreTopUp}
           enableWaffoTopUp={enableWaffoTopUp}
           enableWaffoPancakeTopUp={enableWaffoPancakeTopUp}
+          enableBinancePayTopUp={enableBinancePayTopUp}
           presetAmounts={presetAmounts}
           selectedPreset={selectedPreset}
           selectPresetAmount={selectPresetAmount}
