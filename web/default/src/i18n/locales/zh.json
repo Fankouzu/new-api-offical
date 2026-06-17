@@ -4419,7 +4419,7 @@
     "Zhipu V4": "智谱 V4",
     "Zoom": "缩放",
     "Binance Pay Payment Gateway": "Binance Pay 支付网关",
-    "Configure Binance Pay merchant checkout for balance top-ups": "配置 Binance Pay 商户收银台用于余额充值",
+    "Configure Binance Pay merchant checkout for balance top-ups": "配置 Binance Pay 商户收银台，用于余额充值",
     "Webhook URL: <ServerAddress>/api/binance-pay/webhook. Binance Pay certificates are fetched automatically from the official certificate API during webhook verification.": "Webhook 地址：<ServerAddress>/api/binance-pay/webhook。验签时会根据证书序列号从 Binance Pay 官方证书接口自动获取证书。",
     "Binance Pay API key is required": "请填写 Binance Pay API Key",
     "Binance Pay API secret is required": "请填写 Binance Pay API Secret",
@@ -4429,6 +4429,11 @@
     "Automatically fetched by certificate serial number": "根据证书序列号自动获取",
     "No manual public key configuration is required": "无需手动配置公钥",
     "Save Binance Pay settings": "保存 Binance Pay 设置",
-    "Unit price (crypto amount / USD)": "单价（加密货币金额 / USD）"
+    "Unit price (crypto amount / USD)": "单价（加密货币金额 / USD）",
+    "Enable Binance Pay": "启用 Binance Pay",
+    "Leave blank to keep the configured Binance Pay API Key": "留空则保留已配置的 Binance Pay API Key",
+    "Leave blank to keep the configured Binance Pay API Secret": "留空则保留已配置的 Binance Pay API Secret",
+    "Existing Binance Pay API Key is configured": "已配置 Binance Pay API Key",
+    "Existing Binance Pay API Secret is configured": "已配置 Binance Pay API Secret"
   }
 }

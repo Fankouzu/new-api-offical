@@ -4429,6 +4429,11 @@
     "Automatically fetched by certificate serial number": "Automatically fetched by certificate serial number",
     "No manual public key configuration is required": "No manual public key configuration is required",
     "Save Binance Pay settings": "Save Binance Pay settings",
-    "Unit price (crypto amount / USD)": "Unit price (crypto amount / USD)"
+    "Unit price (crypto amount / USD)": "Unit price (crypto amount / USD)",
+    "Enable Binance Pay": "Enable Binance Pay",
+    "Leave blank to keep the configured Binance Pay API Key": "Leave blank to keep the configured Binance Pay API Key",
+    "Leave blank to keep the configured Binance Pay API Secret": "Leave blank to keep the configured Binance Pay API Secret",
+    "Existing Binance Pay API Key is configured": "Existing Binance Pay API Key is configured",
+    "Existing Binance Pay API Secret is configured": "Existing Binance Pay API Secret is configured"
   }
 }

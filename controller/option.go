@@ -28,9 +28,20 @@ var completionRatioMetaOptionKeys = []string{
 	"AudioCompletionRatio",
 }
 
+const configuredSensitiveOptionPlaceholder = "__CONFIGURED__"
+
 func isVisiblePublicKeyOption(key string) bool {
 	switch key {
 	case "WaffoPancakeWebhookPublicKey", "WaffoPancakeWebhookTestKey":
+		return true
+	default:
+		return false
+	}
+}
+
+func isSensitiveOptionPlaceholderVisible(key string) bool {
+	switch key {
+	case "BinancePayApiKey", "BinancePayApiSecret":
 		return true
 	default:
 		return false
@@ -82,7 +93,10 @@ func GetOptions(c *gin.Context) {
 			strings.HasSuffix(k, "secret") ||
 			strings.HasSuffix(k, "api_key")
 		if isSensitiveKey && !isVisiblePublicKeyOption(k) {
-			continue
+			if !isSensitiveOptionPlaceholderVisible(k) || strings.TrimSpace(value) == "" {
+				continue
+			}
+			value = configuredSensitiveOptionPlaceholder
 		}
 		options = append(options, &model.Option{
 			Key:   k,

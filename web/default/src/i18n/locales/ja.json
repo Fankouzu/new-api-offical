@@ -4429,6 +4429,11 @@
     "Automatically fetched by certificate serial number": "証明書シリアル番号で自動取得",
     "No manual public key configuration is required": "公開鍵の手動設定は不要です",
     "Save Binance Pay settings": "Binance Pay 設定を保存",
-    "Unit price (crypto amount / USD)": "単価（暗号資産額 / USD）"
+    "Unit price (crypto amount / USD)": "単価（暗号資産額 / USD）",
+    "Enable Binance Pay": "Binance Pay を有効化",
+    "Leave blank to keep the configured Binance Pay API Key": "設定済みの Binance Pay API Key を保持するには空欄のままにします",
+    "Leave blank to keep the configured Binance Pay API Secret": "設定済みの Binance Pay API Secret を保持するには空欄のままにします",
+    "Existing Binance Pay API Key is configured": "Binance Pay API Key は設定済みです",
+    "Existing Binance Pay API Secret is configured": "Binance Pay API Secret は設定済みです"
   }
 }

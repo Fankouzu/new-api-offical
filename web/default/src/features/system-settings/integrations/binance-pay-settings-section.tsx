@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -28,6 +28,8 @@ import { Switch } from '@/components/ui/switch'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 import { removeTrailingSlash } from './utils'
+
+const CONFIGURED_SECRET_PLACEHOLDER = '__CONFIGURED__'
 
 export interface BinancePaySettingsValues {
   BinancePayEnabled: boolean
@@ -48,23 +50,42 @@ export function BinancePaySettingsSection(props: Props) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
   const [loading, setLoading] = useState(false)
+  const hasExistingApiKey =
+    props.defaultValues.BinancePayApiKey === CONFIGURED_SECRET_PLACEHOLDER
+  const hasExistingApiSecret =
+    props.defaultValues.BinancePayApiSecret === CONFIGURED_SECRET_PLACEHOLDER
+  const displayValues = useMemo(
+    () => ({
+      ...props.defaultValues,
+      BinancePayApiKey: hasExistingApiKey
+        ? ''
+        : props.defaultValues.BinancePayApiKey,
+      BinancePayApiSecret: hasExistingApiSecret
+        ? ''
+        : props.defaultValues.BinancePayApiSecret,
+    }),
+    [hasExistingApiKey, hasExistingApiSecret, props.defaultValues]
+  )
   const form = useForm<BinancePaySettingsValues>({
-    defaultValues: props.defaultValues,
+    defaultValues: displayValues,
   })
 
   useEffect(() => {
-    form.reset(props.defaultValues)
-  }, [props.defaultValues, form])
+    form.reset(displayValues)
+  }, [displayValues, form])
 
   const handleSave = async () => {
     const values = form.getValues()
     const enabled = !!values.BinancePayEnabled
 
-    if (enabled && !values.BinancePayApiKey.trim()) {
+    const apiKey = (values.BinancePayApiKey || '').trim()
+    const apiSecret = (values.BinancePayApiSecret || '').trim()
+
+    if (enabled && !apiKey && !hasExistingApiKey) {
       toast.error(t('Binance Pay API key is required'))
       return
     }
-    if (enabled && !values.BinancePayApiSecret.trim()) {
+    if (enabled && !apiSecret && !hasExistingApiSecret) {
       toast.error(t('Binance Pay API secret is required'))
       return
     }
@@ -103,13 +124,13 @@ export function BinancePaySettingsSection(props: Props) {
         },
       ]
 
-      if ((values.BinancePayApiKey || '').trim()) {
-        options.push({ key: 'BinancePayApiKey', value: values.BinancePayApiKey })
+      if (apiKey) {
+        options.push({ key: 'BinancePayApiKey', value: apiKey })
       }
-      if ((values.BinancePayApiSecret || '').trim()) {
+      if (apiSecret) {
         options.push({
           key: 'BinancePayApiSecret',
-          value: values.BinancePayApiSecret,
+          value: apiSecret,
         })
       }
       for (const option of options) {
@@ -161,20 +182,29 @@ export function BinancePaySettingsSection(props: Props) {
         <div className='grid gap-1.5'>
           <Label>{t('Binance Pay API Key')}</Label>
           <Input
-            placeholder={t('Leave blank to keep the existing key')}
+            placeholder={t('Leave blank to keep the configured Binance Pay API Key')}
             {...form.register('BinancePayApiKey')}
           />
           <p className='text-muted-foreground text-xs'>
-            {t('Stored value is not echoed back for security')}
+            {hasExistingApiKey
+              ? t('Existing Binance Pay API Key is configured')
+              : t('Stored value is not echoed back for security')}
           </p>
         </div>
         <div className='grid gap-1.5'>
           <Label>{t('Binance Pay API Secret')}</Label>
           <Input
             type='password'
-            placeholder={t('Leave blank to keep the existing secret')}
+            placeholder={t(
+              'Leave blank to keep the configured Binance Pay API Secret'
+            )}
             {...form.register('BinancePayApiSecret')}
           />
+          <p className='text-muted-foreground text-xs'>
+            {hasExistingApiSecret
+              ? t('Existing Binance Pay API Secret is configured')
+              : t('Stored value is not echoed back for security')}
+          </p>
         </div>
       </div>
 

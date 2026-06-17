@@ -4429,6 +4429,11 @@
     "Automatically fetched by certificate serial number": "Tự động lấy theo số sê-ri chứng chỉ",
     "No manual public key configuration is required": "Không cần cấu hình khóa công khai thủ công",
     "Save Binance Pay settings": "Lưu cài đặt Binance Pay",
-    "Unit price (crypto amount / USD)": "Đơn giá (số tiền crypto / USD)"
+    "Unit price (crypto amount / USD)": "Đơn giá (số tiền crypto / USD)",
+    "Enable Binance Pay": "Bật Binance Pay",
+    "Leave blank to keep the configured Binance Pay API Key": "Để trống để giữ Binance Pay API Key đã cấu hình",
+    "Leave blank to keep the configured Binance Pay API Secret": "Để trống để giữ Binance Pay API Secret đã cấu hình",
+    "Existing Binance Pay API Key is configured": "Binance Pay API Key đã được cấu hình",
+    "Existing Binance Pay API Secret is configured": "Binance Pay API Secret đã được cấu hình"
   }
 }
