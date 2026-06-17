@@ -39,6 +39,7 @@ import {
   getDiscountLabel,
   getPaymentIcon,
   getMinTopupAmount,
+  hasConfigurableTopup,
 } from '../lib'
 import type {
   PaymentMethod,
@@ -74,7 +75,6 @@ interface RechargeFormCardProps {
   waffoPayMethods?: WaffoPayMethod[]
   waffoMinTopup?: number
   onWaffoMethodSelect?: (method: WaffoPayMethod, index: number) => void
-  enableWaffoPancakeTopup?: boolean
 }
 
 export function RechargeFormCard({
@@ -102,7 +102,6 @@ export function RechargeFormCard({
   waffoPayMethods,
   waffoMinTopup,
   onWaffoMethodSelect,
-  enableWaffoPancakeTopup,
 }: RechargeFormCardProps) {
   const { t } = useTranslation()
   const [localAmount, setLocalAmount] = useState(topupAmount.toString())
@@ -119,12 +118,8 @@ export function RechargeFormCard({
     }
   }
 
-  const hasConfigurableTopup =
-    topupInfo?.enable_online_topup ||
-    topupInfo?.enable_stripe_topup ||
-    enableWaffoTopup ||
-    enableWaffoPancakeTopup
-  const hasAnyTopup = hasConfigurableTopup || enableCreemTopup
+  const hasConfigurablePaymentTopup = hasConfigurableTopup(topupInfo)
+  const hasAnyTopup = hasConfigurablePaymentTopup || enableCreemTopup
   const hasStandardPaymentMethods =
     Array.isArray(topupInfo?.pay_methods) && topupInfo.pay_methods.length > 0
   const hasWaffoPaymentMethods =
@@ -203,7 +198,7 @@ export function RechargeFormCard({
       {/* Online Topup Section */}
       {hasAnyTopup ? (
         <div className='space-y-4 sm:space-y-6'>
-          {hasConfigurableTopup && (
+          {hasConfigurablePaymentTopup && (
             <>
               {presetAmounts.length > 0 && (
                 <div className='space-y-2.5 sm:space-y-3'>

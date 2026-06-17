@@ -307,9 +307,6 @@ export function Wallet(props: WalletProps) {
                   waffoPayMethods={topupInfo?.waffo_pay_methods}
                   waffoMinTopup={topupInfo?.waffo_min_topup}
                   onWaffoMethodSelect={handleWaffoMethodSelect}
-                  enableWaffoPancakeTopup={
-                    topupInfo?.enable_waffo_pancake_topup
-                  }
                 />
               </div>
 
