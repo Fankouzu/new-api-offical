@@ -35,7 +35,7 @@ import {
   Tabs,
   TabPane,
 } from '@douyinfe/semi-ui';
-import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si';
+import { SiAlipay, SiBinance, SiWechat, SiStripe } from 'react-icons/si';
 import {
   CreditCard,
   Wallet,
@@ -49,6 +49,45 @@ import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime'
 import SubscriptionPlansCard from './SubscriptionPlansCard';
 
 const { Text } = Typography;
+
+const PaymentMethodIcon = ({ payMethod }) => {
+  if (payMethod.type === 'alipay') {
+    return <SiAlipay size={18} color='#1677FF' />;
+  }
+  if (payMethod.type === 'wxpay') {
+    return <SiWechat size={18} color='#07C160' />;
+  }
+  if (payMethod.type === 'stripe') {
+    return <SiStripe size={18} color='#635BFF' />;
+  }
+  if (payMethod.type === 'binance_pay') {
+    return <SiBinance size={18} color='#F0B90B' />;
+  }
+  if (payMethod.type === 'waffo_pancake') {
+    return (
+      <img
+        src='/waffo-logo.svg'
+        alt={payMethod.name || 'Waffo Pancake'}
+        style={{ width: 18, height: 18, objectFit: 'contain' }}
+      />
+    );
+  }
+  if (payMethod.icon) {
+    return (
+      <img
+        src={payMethod.icon}
+        alt={payMethod.name}
+        style={{ width: 18, height: 18, objectFit: 'contain' }}
+      />
+    );
+  }
+  return (
+    <CreditCard
+      size={18}
+      color={payMethod.color || 'var(--semi-color-text-2)'}
+    />
+  );
+};
 
 const RechargeCard = ({
   t,
@@ -230,7 +269,8 @@ const RechargeCard = ({
           enableStripeTopUp ||
           enableCreemTopUp ||
           enableWaffoTopUp ||
-          enableWaffoPancakeTopUp ? (
+          enableWaffoPancakeTopUp ||
+          enableBinancePayTopUp ? (
           <Form
             getFormApi={(api) => (onlineFormApiRef.current = api)}
             initValues={{ topUpCount: topUpCount }}
@@ -239,7 +279,8 @@ const RechargeCard = ({
               {(enableOnlineTopUp ||
                 enableStripeTopUp ||
                 enableWaffoTopUp ||
-                enableWaffoPancakeTopUp) && (
+                enableWaffoPancakeTopUp ||
+                enableBinancePayTopUp) && (
                 <Row gutter={12}>
                   <Col xs={24} sm={24} md={24} lg={10} xl={10}>
                     <Form.InputNumber
@@ -249,7 +290,8 @@ const RechargeCard = ({
                         !enableOnlineTopUp &&
                         !enableStripeTopUp &&
                         !enableWaffoTopUp &&
-                        !enableWaffoPancakeTopUp
+                        !enableWaffoPancakeTopUp &&
+                        !enableBinancePayTopUp
                       }
                       placeholder={
                         t('充值数量，最低 ') + renderQuotaWithAmount(minTopUp)
@@ -339,38 +381,7 @@ const RechargeCard = ({
                                 loading={
                                   paymentLoading && payWay === payMethod.type
                                 }
-                                icon={
-                                  payMethod.type === 'alipay' ? (
-                                    <SiAlipay size={18} color='#1677FF' />
-                                  ) : payMethod.type === 'wxpay' ? (
-                                    <SiWechat size={18} color='#07C160' />
-                                  ) : payMethod.type === 'stripe' ? (
-                                    <SiStripe size={18} color='#635BFF' />
-                                  ) : payMethod.icon ? (
-                                    <img
-                                      src={payMethod.icon}
-                                      alt={payMethod.name}
-                                      style={{
-                                        width: 18,
-                                        height: 18,
-                                        objectFit: 'contain',
-                                      }}
-                                    />
-                                  ) : payMethod.type === 'waffo_pancake' ? (
-                                    <CreditCard
-                                      size={18}
-                                      color='var(--semi-color-primary)'
-                                    />
-                                  ) : (
-                                    <CreditCard
-                                      size={18}
-                                      color={
-                                        payMethod.color ||
-                                        'var(--semi-color-text-2)'
-                                      }
-                                    />
-                                  )
-                                }
+                                icon={<PaymentMethodIcon payMethod={payMethod} />}
                                 className='!rounded-lg !px-4 !py-2'
                               >
                                 {payMethod.name}

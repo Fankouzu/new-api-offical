@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { type ReactNode } from 'react'
 import { CreditCard, Landmark } from 'lucide-react'
-import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si'
+import { SiAlipay, SiBinance, SiWechat, SiStripe } from 'react-icons/si'
 import { PAYMENT_TYPES, PAYMENT_ICON_COLORS } from '../constants'
 
 // ============================================================================
@@ -122,9 +122,20 @@ export function getPaymentIcon(
       )
     case PAYMENT_TYPES.WAFFO_PANCAKE:
       return (
-        <CreditCard
+        <img
+          src='/waffo-logo.svg'
+          alt={altName || 'Waffo Pancake'}
           className={className}
-          style={{ color: PAYMENT_ICON_COLORS[PAYMENT_TYPES.WAFFO_PANCAKE] }}
+          style={{ objectFit: 'contain' }}
+          loading='lazy'
+          decoding='async'
+        />
+      )
+    case PAYMENT_TYPES.BINANCE_PAY:
+      return (
+        <SiBinance
+          className={className}
+          style={{ color: PAYMENT_ICON_COLORS[PAYMENT_TYPES.BINANCE_PAY] }}
         />
       )
     default:
