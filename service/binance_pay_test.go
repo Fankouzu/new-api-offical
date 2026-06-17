@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -75,12 +76,43 @@ func TestVerifyBinancePayWebhook(t *testing.T) {
 	signatureBytes, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, digest[:])
 	require.NoError(t, err)
 
-	event, err := verifyBinancePayWebhook(body, timestamp, nonce, base64.StdEncoding.EncodeToString(signatureBytes), publicKeyPEM, func() time.Time {
-		return time.UnixMilli(1700000000000)
-	})
+	event, err := verifyBinancePayWebhook(
+		context.Background(),
+		body,
+		timestamp,
+		nonce,
+		base64.StdEncoding.EncodeToString(signatureBytes),
+		"cert-sn-123",
+		func(_ context.Context, certificateSN string) (string, error) {
+			require.Equal(t, "cert-sn-123", certificateSN)
+			return publicKeyPEM, nil
+		},
+		func() time.Time {
+			return time.UnixMilli(1700000000000)
+		},
+	)
 	require.NoError(t, err)
 	require.Equal(t, "PAY_SUCCESS", event.BizStatus)
 	require.Equal(t, "BINANCE_PAY-1-1700000000000-abc123", event.Data.MerchantTradeNo)
+}
+
+func TestBinancePayCertificateResponseParsesCertificateList(t *testing.T) {
+	var result binancePayCertificateResponse
+	err := common.Unmarshal([]byte(`{
+		"status": "SUCCESS",
+		"code": "000000",
+		"data": [
+			{
+				"certSerial": "cert-sn-123",
+				"certPublic": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n-----END PUBLIC KEY-----"
+			}
+		]
+	}`), &result)
+	require.NoError(t, err)
+	require.Equal(t, "SUCCESS", result.Status)
+	require.Len(t, result.Data, 1)
+	require.Equal(t, "cert-sn-123", result.Data[0].CertSerial)
+	require.Contains(t, result.Data[0].CertPublic, "BEGIN PUBLIC KEY")
 }
 
 func TestResolveBinancePayTradeNo(t *testing.T) {

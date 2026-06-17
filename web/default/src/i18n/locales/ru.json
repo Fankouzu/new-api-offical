@@ -4417,6 +4417,18 @@
     "Zero retention": "Без хранения данных",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Binance Pay Payment Gateway": "Платежный шлюз Binance Pay",
+    "Configure Binance Pay merchant checkout for balance top-ups": "Настройка мерчант-чекаута Binance Pay для пополнения баланса",
+    "Webhook URL: <ServerAddress>/api/binance-pay/webhook. Binance Pay certificates are fetched automatically from the official certificate API during webhook verification.": "URL вебхука: <ServerAddress>/api/binance-pay/webhook. Сертификаты Binance Pay автоматически запрашиваются из официального API сертификатов при проверке вебхука.",
+    "Binance Pay API key is required": "Требуется API Key Binance Pay",
+    "Binance Pay API secret is required": "Требуется API Secret Binance Pay",
+    "Binance Pay API Key": "API Key Binance Pay",
+    "Binance Pay API Secret": "API Secret Binance Pay",
+    "Webhook certificate": "Сертификат вебхука",
+    "Automatically fetched by certificate serial number": "Автоматически запрашивается по серийному номеру сертификата",
+    "No manual public key configuration is required": "Ручная настройка публичного ключа не требуется",
+    "Save Binance Pay settings": "Сохранить настройки Binance Pay",
+    "Unit price (crypto amount / USD)": "Цена за единицу (сумма в криптовалюте / USD)"
   }
 }

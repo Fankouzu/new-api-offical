@@ -25,7 +25,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 import { removeTrailingSlash } from './utils'
@@ -35,7 +34,6 @@ export interface BinancePaySettingsValues {
   BinancePaySandbox: boolean
   BinancePayApiKey: string
   BinancePayApiSecret: string
-  BinancePayWebhookPubKey: string
   BinancePayReturnURL: string
   BinancePayCurrency: string
   BinancePayUnitPrice: number
@@ -68,10 +66,6 @@ export function BinancePaySettingsSection(props: Props) {
     }
     if (enabled && !values.BinancePayApiSecret.trim()) {
       toast.error(t('Binance Pay API secret is required'))
-      return
-    }
-    if (enabled && !values.BinancePayWebhookPubKey.trim()) {
-      toast.error(t('Binance Pay webhook public key is required'))
       return
     }
     if (enabled && Number(values.BinancePayUnitPrice) <= 0) {
@@ -118,13 +112,6 @@ export function BinancePaySettingsSection(props: Props) {
           value: values.BinancePayApiSecret,
         })
       }
-      if ((values.BinancePayWebhookPubKey || '').trim()) {
-        options.push({
-          key: 'BinancePayWebhookPubKey',
-          value: values.BinancePayWebhookPubKey,
-        })
-      }
-
       for (const option of options) {
         await updateOption.mutateAsync(option)
       }
@@ -144,7 +131,7 @@ export function BinancePaySettingsSection(props: Props) {
       <Alert>
         <AlertDescription className='text-xs'>
           {t(
-            'Configure the webhook URL in Binance Pay: <ServerAddress>/api/binance-pay/webhook'
+            'Webhook URL: <ServerAddress>/api/binance-pay/webhook. Binance Pay certificates are fetched automatically from the official certificate API during webhook verification.'
           )}
         </AlertDescription>
       </Alert>
@@ -172,7 +159,7 @@ export function BinancePaySettingsSection(props: Props) {
 
       <div className='grid grid-cols-2 gap-4'>
         <div className='grid gap-1.5'>
-          <Label>{t('API key')}</Label>
+          <Label>{t('Binance Pay API Key')}</Label>
           <Input
             placeholder={t('Leave blank to keep the existing key')}
             {...form.register('BinancePayApiKey')}
@@ -182,7 +169,7 @@ export function BinancePaySettingsSection(props: Props) {
           </p>
         </div>
         <div className='grid gap-1.5'>
-          <Label>{t('API secret')}</Label>
+          <Label>{t('Binance Pay API Secret')}</Label>
           <Input
             type='password'
             placeholder={t('Leave blank to keep the existing secret')}
@@ -193,15 +180,6 @@ export function BinancePaySettingsSection(props: Props) {
 
       <div className='grid grid-cols-2 gap-4'>
         <div className='grid gap-1.5'>
-          <Label>{t('Webhook public key')}</Label>
-          <Textarea
-            rows={4}
-            placeholder={t('Leave blank to keep the existing key')}
-            {...form.register('BinancePayWebhookPubKey')}
-            className='font-mono text-xs'
-          />
-        </div>
-        <div className='grid gap-1.5'>
           <Label>{t('Payment return URL')}</Label>
           <Input
             placeholder='https://example.com/console/topup'
@@ -209,6 +187,15 @@ export function BinancePaySettingsSection(props: Props) {
           />
           <p className='text-muted-foreground text-xs'>
             {t('Defaults to the wallet page when empty')}
+          </p>
+        </div>
+        <div className='grid gap-1.5'>
+          <Label>{t('Webhook certificate')}</Label>
+          <div className='border-border bg-muted/30 text-muted-foreground rounded-md border px-3 py-2 text-sm'>
+            {t('Automatically fetched by certificate serial number')}
+          </div>
+          <p className='text-muted-foreground text-xs'>
+            {t('No manual public key configuration is required')}
           </p>
         </div>
       </div>

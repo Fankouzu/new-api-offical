@@ -4417,6 +4417,18 @@
     "Zero retention": "Zero retention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Binance Pay Payment Gateway": "Binance Pay Payment Gateway",
+    "Configure Binance Pay merchant checkout for balance top-ups": "Configure Binance Pay merchant checkout for balance top-ups",
+    "Webhook URL: <ServerAddress>/api/binance-pay/webhook. Binance Pay certificates are fetched automatically from the official certificate API during webhook verification.": "Webhook URL: <ServerAddress>/api/binance-pay/webhook. Binance Pay certificates are fetched automatically from the official certificate API during webhook verification.",
+    "Binance Pay API key is required": "Binance Pay API key is required",
+    "Binance Pay API secret is required": "Binance Pay API secret is required",
+    "Binance Pay API Key": "Binance Pay API Key",
+    "Binance Pay API Secret": "Binance Pay API Secret",
+    "Webhook certificate": "Webhook certificate",
+    "Automatically fetched by certificate serial number": "Automatically fetched by certificate serial number",
+    "No manual public key configuration is required": "No manual public key configuration is required",
+    "Save Binance Pay settings": "Save Binance Pay settings",
+    "Unit price (crypto amount / USD)": "Unit price (crypto amount / USD)"
   }
 }

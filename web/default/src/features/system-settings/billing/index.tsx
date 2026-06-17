@@ -107,7 +107,6 @@ const defaultBillingSettings: BillingSettings = {
   BinancePaySandbox: false,
   BinancePayApiKey: '',
   BinancePayApiSecret: '',
-  BinancePayWebhookPubKey: '',
   BinancePayReturnURL: '',
   BinancePayCurrency: 'USDT',
   BinancePayUnitPrice: 1,

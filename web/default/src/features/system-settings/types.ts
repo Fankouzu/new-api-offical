@@ -256,7 +256,6 @@ export type BillingSettings = {
   BinancePaySandbox: boolean
   BinancePayApiKey: string
   BinancePayApiSecret: string
-  BinancePayWebhookPubKey: string
   BinancePayReturnURL: string
   BinancePayCurrency: string
   BinancePayUnitPrice: number

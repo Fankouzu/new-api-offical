@@ -122,7 +122,6 @@ func InitOptionMap() {
 	common.OptionMap["BinancePaySandbox"] = strconv.FormatBool(setting.BinancePaySandbox)
 	common.OptionMap["BinancePayApiKey"] = setting.BinancePayApiKey
 	common.OptionMap["BinancePayApiSecret"] = setting.BinancePayApiSecret
-	common.OptionMap["BinancePayWebhookPubKey"] = setting.BinancePayWebhookPubKey
 	common.OptionMap["BinancePayReturnURL"] = setting.BinancePayReturnURL
 	common.OptionMap["BinancePayCurrency"] = setting.BinancePayCurrency
 	common.OptionMap["BinancePayUnitPrice"] = strconv.FormatFloat(setting.BinancePayUnitPrice, 'f', -1, 64)
@@ -460,8 +459,6 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.BinancePayApiKey = value
 	case "BinancePayApiSecret":
 		setting.BinancePayApiSecret = value
-	case "BinancePayWebhookPubKey":
-		setting.BinancePayWebhookPubKey = value
 	case "BinancePayReturnURL":
 		setting.BinancePayReturnURL = value
 	case "BinancePayCurrency":

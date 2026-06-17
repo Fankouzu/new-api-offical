@@ -90,13 +90,13 @@ func isBinancePayTopUpEnabled() bool {
 		return false
 	}
 
-	return isBinancePayWebhookConfigured() &&
-		strings.TrimSpace(setting.BinancePayApiKey) != "" &&
+	return strings.TrimSpace(setting.BinancePayApiKey) != "" &&
 		strings.TrimSpace(setting.BinancePayApiSecret) != ""
 }
 
 func isBinancePayWebhookConfigured() bool {
-	return strings.TrimSpace(setting.BinancePayWebhookPubKey) != ""
+	return strings.TrimSpace(setting.BinancePayApiKey) != "" &&
+		strings.TrimSpace(setting.BinancePayApiSecret) != ""
 }
 
 func isBinancePayWebhookEnabled() bool {

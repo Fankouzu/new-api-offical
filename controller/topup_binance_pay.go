@@ -56,8 +56,7 @@ func RequestBinancePay(c *gin.Context) {
 		return
 	}
 	if strings.TrimSpace(setting.BinancePayApiKey) == "" ||
-		strings.TrimSpace(setting.BinancePayApiSecret) == "" ||
-		strings.TrimSpace(setting.BinancePayWebhookPubKey) == "" {
+		strings.TrimSpace(setting.BinancePayApiSecret) == "" {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Binance Pay 配置不完整"})
 		return
 	}
@@ -165,10 +164,12 @@ func BinancePayWebhook(c *gin.Context) {
 	}
 
 	event, err := service.VerifyConfiguredBinancePayWebhook(
+		c.Request.Context(),
 		string(bodyBytes),
 		c.GetHeader("Binancepay-Timestamp"),
 		c.GetHeader("Binancepay-Nonce"),
 		c.GetHeader("Binancepay-Signature"),
+		c.GetHeader("Binancepay-Certificate-SN"),
 	)
 	if err != nil {
 		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Binance Pay webhook 验签失败 path=%q client_ip=%s error=%q", c.Request.RequestURI, c.ClientIP(), err.Error()))

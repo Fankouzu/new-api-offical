@@ -192,7 +192,6 @@ const BILLING_SECTIONS = [
           BinancePaySandbox: settings.BinancePaySandbox ?? false,
           BinancePayApiKey: settings.BinancePayApiKey ?? '',
           BinancePayApiSecret: settings.BinancePayApiSecret ?? '',
-          BinancePayWebhookPubKey: settings.BinancePayWebhookPubKey ?? '',
           BinancePayReturnURL: settings.BinancePayReturnURL ?? '',
           BinancePayCurrency: settings.BinancePayCurrency ?? 'USDT',
           BinancePayUnitPrice: settings.BinancePayUnitPrice ?? 1,

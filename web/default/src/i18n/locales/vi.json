@@ -4417,6 +4417,18 @@
     "Zero retention": "Không lưu dữ liệu",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Binance Pay Payment Gateway": "Cổng thanh toán Binance Pay",
+    "Configure Binance Pay merchant checkout for balance top-ups": "Cấu hình trang thanh toán thương nhân Binance Pay để nạp số dư",
+    "Webhook URL: <ServerAddress>/api/binance-pay/webhook. Binance Pay certificates are fetched automatically from the official certificate API during webhook verification.": "URL webhook: <ServerAddress>/api/binance-pay/webhook. Chứng chỉ Binance Pay được tự động lấy từ API chứng chỉ chính thức khi xác minh webhook.",
+    "Binance Pay API key is required": "Cần nhập Binance Pay API Key",
+    "Binance Pay API secret is required": "Cần nhập Binance Pay API Secret",
+    "Binance Pay API Key": "Binance Pay API Key",
+    "Binance Pay API Secret": "Binance Pay API Secret",
+    "Webhook certificate": "Chứng chỉ webhook",
+    "Automatically fetched by certificate serial number": "Tự động lấy theo số sê-ri chứng chỉ",
+    "No manual public key configuration is required": "Không cần cấu hình khóa công khai thủ công",
+    "Save Binance Pay settings": "Lưu cài đặt Binance Pay",
+    "Unit price (crypto amount / USD)": "Đơn giá (số tiền crypto / USD)"
   }
 }

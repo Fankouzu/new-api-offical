@@ -169,21 +169,18 @@ func TestBinancePayWebhookEnabledRequiresTopUpAndWebhookConfig(t *testing.T) {
 	originalEnabled := setting.BinancePayEnabled
 	originalAPIKey := setting.BinancePayApiKey
 	originalAPISecret := setting.BinancePayApiSecret
-	originalWebhookPubKey := setting.BinancePayWebhookPubKey
 	t.Cleanup(func() {
 		setting.BinancePayEnabled = originalEnabled
 		setting.BinancePayApiKey = originalAPIKey
 		setting.BinancePayApiSecret = originalAPISecret
-		setting.BinancePayWebhookPubKey = originalWebhookPubKey
 	})
 
 	setting.BinancePayEnabled = true
 	setting.BinancePayApiKey = "api_key"
-	setting.BinancePayApiSecret = "api_secret"
-	setting.BinancePayWebhookPubKey = ""
+	setting.BinancePayApiSecret = ""
 	require.False(t, isBinancePayWebhookEnabled())
 
-	setting.BinancePayWebhookPubKey = "public"
+	setting.BinancePayApiSecret = "api_secret"
 	require.True(t, isBinancePayWebhookEnabled())
 
 	setting.BinancePayEnabled = false
