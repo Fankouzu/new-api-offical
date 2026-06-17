@@ -38,7 +38,6 @@ import {
 import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si';
 import {
   CreditCard,
-  Coins,
   Wallet,
   BarChart2,
   TrendingUp,
@@ -419,10 +418,14 @@ const RechargeCard = ({
                               selectedPreset === preset.value
                                 ? '2px solid var(--semi-color-primary)'
                                 : '1px solid var(--semi-color-border)',
+                            borderRadius: 10,
+                            overflow: 'hidden',
                             height: '100%',
                             width: '100%',
+                            backgroundImage:
+                              'linear-gradient(135deg, rgba(255,255,255,0.05), transparent 62%), repeating-linear-gradient(135deg, rgba(255,255,255,0.08) 0, rgba(255,255,255,0.08) 1px, transparent 1px, transparent 12px)',
                           }}
-                          bodyStyle={{ padding: '12px' }}
+                          bodyStyle={{ padding: '18px 16px' }}
                           onClick={() => {
                             selectPresetAmount(preset);
                             onlineFormApiRef.current?.setValue(
@@ -431,16 +434,45 @@ const RechargeCard = ({
                             );
                           }}
                         >
-                          <div style={{ textAlign: 'center' }}>
-                            <Typography.Title
-                              heading={6}
-                              style={{ margin: '0 0 8px 0' }}
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'flex-start',
+                              gap: 10,
+                              minHeight: 56,
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'baseline',
+                                gap: 6,
+                              }}
                             >
-                              <Coins size={18} />
-                              ${formatLargeNumber(preset.value)} USD
-                            </Typography.Title>
+                              <span
+                                style={{
+                                  fontSize: 24,
+                                  fontWeight: 700,
+                                  lineHeight: 1,
+                                  color: 'var(--semi-color-text-0)',
+                                }}
+                              >
+                                ${formatLargeNumber(preset.value)}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  letterSpacing: 0.4,
+                                  color: 'var(--semi-color-text-2)',
+                                }}
+                              >
+                                USD
+                              </span>
+                            </div>
                             {hasDiscount && (
-                              <div style={{ marginTop: 4 }}>
+                              <div>
                                 <Tag color='green'>
                                   {t('折').includes('off')
                                     ? (

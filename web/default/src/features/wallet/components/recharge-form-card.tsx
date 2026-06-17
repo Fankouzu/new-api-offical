@@ -221,20 +221,29 @@ export function RechargeFormCard({
                         <Button
                           key={index}
                           variant='outline'
+                          style={{
+                            backgroundImage:
+                              'linear-gradient(135deg, hsl(var(--muted) / 0.35), transparent 62%), repeating-linear-gradient(135deg, hsl(var(--foreground) / 0.07) 0, hsl(var(--foreground) / 0.07) 1px, transparent 1px, transparent 12px)',
+                          }}
                           className={cn(
-                            'hover:border-foreground flex min-h-16 flex-col items-start rounded-lg px-3 py-2.5 text-left whitespace-normal sm:min-h-[72px] sm:p-4',
+                            'hover:border-foreground relative flex min-h-20 flex-col items-start justify-between overflow-hidden rounded-lg px-4 py-3 text-left whitespace-normal sm:min-h-24 sm:p-4',
                             selectedPreset === preset.value
                               ? 'border-foreground bg-foreground/5'
                               : 'border-muted'
                           )}
                           onClick={() => onSelectPreset(preset)}
                         >
-                          <div className='flex w-full flex-col items-start gap-1'>
-                            <div className='text-base font-semibold sm:text-lg'>
-                              ${formatNumber(preset.value)} USD
+                          <div className='relative z-10 flex w-full flex-col items-start gap-2'>
+                            <div className='flex items-baseline gap-1.5'>
+                              <span className='text-xl font-semibold tracking-normal sm:text-2xl'>
+                                ${formatNumber(preset.value)}
+                              </span>
+                              <span className='text-muted-foreground text-[10px] font-semibold tracking-wider uppercase sm:text-xs'>
+                                USD
+                              </span>
                             </div>
                             {hasDiscount && (
-                              <div className='text-xs font-medium text-green-600'>
+                              <div className='rounded-sm bg-green-500/10 px-1.5 py-0.5 text-xs font-semibold text-green-600'>
                                 {getDiscountLabel(discount)}
                               </div>
                             )}
