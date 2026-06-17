@@ -423,7 +423,7 @@ const RechargeCard = ({
                             height: '100%',
                             width: '100%',
                             backgroundImage:
-                              'linear-gradient(135deg, rgba(255,255,255,0.05), transparent 62%), repeating-linear-gradient(135deg, rgba(255,255,255,0.08) 0, rgba(255,255,255,0.08) 1px, transparent 1px, transparent 12px)',
+                              'linear-gradient(135deg, rgba(255,255,255,0.13) 0%, transparent 42%), radial-gradient(circle at 88% 18%, rgba(99,102,241,0.18), transparent 34%), repeating-linear-gradient(135deg, rgba(255,255,255,0.16) 0, rgba(255,255,255,0.16) 1px, transparent 1px, transparent 10px)',
                           }}
                           bodyStyle={{ padding: '18px 16px' }}
                           onClick={() => {

@@ -223,7 +223,7 @@ export function RechargeFormCard({
                           variant='outline'
                           style={{
                             backgroundImage:
-                              'linear-gradient(135deg, hsl(var(--muted) / 0.35), transparent 62%), repeating-linear-gradient(135deg, hsl(var(--foreground) / 0.07) 0, hsl(var(--foreground) / 0.07) 1px, transparent 1px, transparent 12px)',
+                              'linear-gradient(135deg, hsl(var(--foreground) / 0.12) 0%, transparent 42%), radial-gradient(circle at 88% 18%, hsl(var(--primary) / 0.18), transparent 34%), repeating-linear-gradient(135deg, hsl(var(--foreground) / 0.16) 0, hsl(var(--foreground) / 0.16) 1px, transparent 1px, transparent 10px)',
                           }}
                           className={cn(
                             'hover:border-foreground relative flex min-h-20 flex-col items-start justify-between overflow-hidden rounded-lg px-4 py-3 text-left whitespace-normal sm:min-h-24 sm:p-4',
