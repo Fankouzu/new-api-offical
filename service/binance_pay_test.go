@@ -39,9 +39,9 @@ func setupBinancePayTestDB(t *testing.T) *gorm.DB {
 }
 
 func TestSignBinancePayRequest(t *testing.T) {
-	signature := signBinancePayRequest("1700000000000", "nonce-123", `{"merchantTradeNo":"BINANCE_PAY-1"}`, "secret")
+	signature := signBinancePayRequest("1700000000000", "nonce-123", `{"merchantTradeNo":"BP11700000000000ABC123"}`, "secret")
 
-	require.Equal(t, "DE59E201B5E15EA719442534298212BE8E08389E967F4289BDA053B9072219B19FA9C58A209209BD64D73BC647D62F788EB3940EFAB409854C182B8FD788E442", signature)
+	require.Equal(t, "C29F497DBF4B211FEEE74291398A27AE009AFC86533F11B262FEE7346614F68F6BA50B8B1875654569F37C33822EAD274D60A707F08272CF0DC29D2DF04E6DFB", signature)
 }
 
 func TestBinancePayCreateOrderResponseParsesCheckoutURL(t *testing.T) {
@@ -71,7 +71,7 @@ func TestVerifyBinancePayWebhook(t *testing.T) {
 
 	timestamp := "1700000000000"
 	nonce := "nonce-123"
-	body := `{"bizType":"PAY","bizIdStr":"biz_123","bizStatus":"PAY_SUCCESS","data":"{\"merchantTradeNo\":\"BINANCE_PAY-1-1700000000000-abc123\",\"orderAmount\":\"10.00\",\"currency\":\"USDT\"}"}`
+	body := `{"bizType":"PAY","bizIdStr":"biz_123","bizStatus":"PAY_SUCCESS","data":"{\"merchantTradeNo\":\"BP11700000000000ABC123\",\"orderAmount\":\"10.00\",\"currency\":\"USDT\"}"}`
 	digest := sha256.Sum256([]byte(timestamp + "\n" + nonce + "\n" + body + "\n"))
 	signatureBytes, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, digest[:])
 	require.NoError(t, err)
@@ -93,7 +93,7 @@ func TestVerifyBinancePayWebhook(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, "PAY_SUCCESS", event.BizStatus)
-	require.Equal(t, "BINANCE_PAY-1-1700000000000-abc123", event.Data.MerchantTradeNo)
+	require.Equal(t, "BP11700000000000ABC123", event.Data.MerchantTradeNo)
 }
 
 func TestBinancePayCertificateResponseParsesCertificateList(t *testing.T) {
@@ -122,7 +122,7 @@ func TestResolveBinancePayTradeNo(t *testing.T) {
 		UserId:          1,
 		Amount:          10,
 		Money:           10,
-		TradeNo:         "BINANCE_PAY-1-1700000000000-abc123",
+		TradeNo:         "BP11700000000000ABC123",
 		PaymentMethod:   model.PaymentMethodBinancePay,
 		PaymentProvider: model.PaymentProviderBinancePay,
 		CreateTime:      time.Now().Unix(),

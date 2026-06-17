@@ -16,7 +16,6 @@ import (
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
-	"github.com/thanhpk/randstr"
 )
 
 type BinancePayRequest struct {
@@ -89,7 +88,7 @@ func RequestBinancePay(c *gin.Context) {
 		return
 	}
 
-	tradeNo := fmt.Sprintf("BINANCE_PAY-%d-%d-%s", id, time.Now().UnixMilli(), randstr.String(6))
+	tradeNo := newBinancePayTradeNo(id)
 	topUp := &model.TopUp{
 		UserId:          id,
 		Amount:          normalizeBinancePayTopUpAmount(req.Amount),
@@ -238,6 +237,10 @@ func normalizeBinancePayTopUpAmount(amount int64) int64 {
 		return 1
 	}
 	return normalized
+}
+
+func newBinancePayTradeNo(userId int) string {
+	return fmt.Sprintf("BP%d%d%s", userId, time.Now().UnixMilli(), common.GetRandomString(6))
 }
 
 func getBinancePayReturnURL() string {
