@@ -38,7 +38,6 @@ import {
 import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si';
 import {
   CreditCard,
-  Coins,
   Wallet,
   BarChart2,
   TrendingUp,
@@ -47,7 +46,6 @@ import {
 } from 'lucide-react';
 import { IconGift } from '@douyinfe/semi-icons';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
-import { getCurrencyConfig } from '../../helpers/render';
 import SubscriptionPlansCard from './SubscriptionPlansCard';
 
 const { Text } = Typography;
@@ -401,27 +399,7 @@ const RechargeCard = ({
 
               {(enableOnlineTopUp || enableStripeTopUp || enableWaffoTopUp) && (
                 <Form.Slot
-                  label={
-                    <div className='flex items-center gap-2'>
-                      <span>{t('选择充值额度')}</span>
-                      {(() => {
-                        const { symbol, rate, type } = getCurrencyConfig();
-                        if (type === 'USD') return null;
-
-                        return (
-                          <span
-                            style={{
-                              color: 'var(--semi-color-text-2)',
-                              fontSize: '12px',
-                              fontWeight: 'normal',
-                            }}
-                          >
-                            (1 $ = {rate.toFixed(2)} {symbol})
-                          </span>
-                        );
-                      })()}
-                    </div>
-                  }
+                  label={t('选择充值额度')}
                 >
                   <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2'>
                     {presetAmounts.map((preset, index) => {
@@ -429,40 +407,7 @@ const RechargeCard = ({
                         preset.discount ||
                         topupInfo?.discount?.[preset.value] ||
                         1.0;
-                      const originalPrice = preset.value * priceRatio;
-                      const discountedPrice = originalPrice * discount;
                       const hasDiscount = discount < 1.0;
-                      const actualPay = discountedPrice;
-                      const save = originalPrice - discountedPrice;
-
-                      // 根据当前货币类型换算显示金额和数量
-                      const { symbol, rate, type } = getCurrencyConfig();
-                      const statusStr = localStorage.getItem('status');
-                      let usdRate = 7; // 默认CNY汇率
-                      try {
-                        if (statusStr) {
-                          const s = JSON.parse(statusStr);
-                          usdRate = s?.usd_exchange_rate || 7;
-                        }
-                      } catch (e) {}
-
-                      let displayValue = preset.value; // 显示的数量
-                      let displayActualPay = actualPay;
-                      let displaySave = save;
-
-                      if (type === 'USD') {
-                        // 数量保持USD，价格从CNY转USD
-                        displayActualPay = actualPay / usdRate;
-                        displaySave = save / usdRate;
-                      } else if (type === 'CNY') {
-                        // 数量转CNY，价格已是CNY
-                        displayValue = preset.value * usdRate;
-                      } else if (type === 'CUSTOM') {
-                        // 数量和价格都转自定义货币
-                        displayValue = preset.value * rate;
-                        displayActualPay = (actualPay / usdRate) * rate;
-                        displaySave = (save / usdRate) * rate;
-                      }
 
                       return (
                         <Card
@@ -473,10 +418,14 @@ const RechargeCard = ({
                               selectedPreset === preset.value
                                 ? '2px solid var(--semi-color-primary)'
                                 : '1px solid var(--semi-color-border)',
+                            borderRadius: 10,
+                            overflow: 'hidden',
                             height: '100%',
                             width: '100%',
+                            backgroundImage:
+                              'linear-gradient(135deg, rgba(255,255,255,0.13) 0%, transparent 42%), radial-gradient(circle at 88% 18%, rgba(99,102,241,0.18), transparent 34%), repeating-linear-gradient(135deg, rgba(255,255,255,0.16) 0, rgba(255,255,255,0.16) 1px, transparent 1px, transparent 10px)',
                           }}
-                          bodyStyle={{ padding: '12px' }}
+                          bodyStyle={{ padding: '18px 16px' }}
                           onClick={() => {
                             selectPresetAmount(preset);
                             onlineFormApiRef.current?.setValue(
@@ -485,15 +434,46 @@ const RechargeCard = ({
                             );
                           }}
                         >
-                          <div style={{ textAlign: 'center' }}>
-                            <Typography.Title
-                              heading={6}
-                              style={{ margin: '0 0 8px 0' }}
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'flex-start',
+                              gap: 10,
+                              minHeight: 56,
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'baseline',
+                                gap: 6,
+                              }}
                             >
-                              <Coins size={18} />
-                              {formatLargeNumber(displayValue)} {symbol}
-                              {hasDiscount && (
-                                <Tag style={{ marginLeft: 4 }} color='green'>
+                              <span
+                                style={{
+                                  fontSize: 24,
+                                  fontWeight: 700,
+                                  lineHeight: 1,
+                                  color: 'var(--semi-color-text-0)',
+                                }}
+                              >
+                                ${formatLargeNumber(preset.value)}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  letterSpacing: 0.4,
+                                  color: 'var(--semi-color-text-2)',
+                                }}
+                              >
+                                USD
+                              </span>
+                            </div>
+                            {hasDiscount && (
+                              <div>
+                                <Tag color='green'>
                                   {t('折').includes('off')
                                     ? (
                                         (1 - parseFloat(discount)) *
@@ -502,21 +482,8 @@ const RechargeCard = ({
                                     : (discount * 10).toFixed(1)}
                                   {t('折')}
                                 </Tag>
-                              )}
-                            </Typography.Title>
-                            <div
-                              style={{
-                                color: 'var(--semi-color-text-2)',
-                                fontSize: '12px',
-                                margin: '4px 0',
-                              }}
-                            >
-                              {t('实付')} {symbol}
-                              {displayActualPay.toFixed(2)}，
-                              {hasDiscount
-                                ? `${t('节省')} ${symbol}${displaySave.toFixed(2)}`
-                                : `${t('节省')} ${symbol}0.00`}
-                            </div>
+                              </div>
+                            )}
                           </div>
                         </Card>
                       );
