@@ -438,8 +438,10 @@ const RechargeCard = ({
                             >
                               <Coins size={18} />
                               ${formatLargeNumber(preset.value)} USD
-                              {hasDiscount && (
-                                <Tag style={{ marginLeft: 4 }} color='green'>
+                            </Typography.Title>
+                            {hasDiscount && (
+                              <div style={{ marginTop: 4 }}>
+                                <Tag color='green'>
                                   {t('折').includes('off')
                                     ? (
                                         (1 - parseFloat(discount)) *
@@ -448,8 +450,8 @@ const RechargeCard = ({
                                     : (discount * 10).toFixed(1)}
                                   {t('折')}
                                 </Tag>
-                              )}
-                            </Typography.Title>
+                              </div>
+                            )}
                           </div>
                         </Card>
                       );

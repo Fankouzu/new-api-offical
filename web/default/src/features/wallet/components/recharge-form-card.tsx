@@ -229,7 +229,7 @@ export function RechargeFormCard({
                           )}
                           onClick={() => onSelectPreset(preset)}
                         >
-                          <div className='flex w-full items-center justify-between'>
+                          <div className='flex w-full flex-col items-start gap-1'>
                             <div className='text-base font-semibold sm:text-lg'>
                               ${formatNumber(preset.value)} USD
                             </div>
