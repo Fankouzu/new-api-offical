@@ -1,11 +1,16 @@
 package controller
 
 import (
+	"bytes"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,6 +30,64 @@ func TestFormatWaffoPancakeAmount_UsesDisplayPriceString(t *testing.T) {
 			require.Equal(t, tc.expected, formatWaffoPancakeAmount(tc.amount))
 		})
 	}
+}
+
+func TestWaffoPancakeWebhookDoesNotLogRawPayloadOrSignature(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalEnabled := setting.WaffoPancakeEnabled
+	originalPublicKey := setting.WaffoPancakeWebhookPublicKey
+	originalSandbox := setting.WaffoPancakeSandbox
+	originalTestKey := setting.WaffoPancakeWebhookTestKey
+	originalMerchantID := setting.WaffoPancakeMerchantID
+	originalPrivateKey := setting.WaffoPancakePrivateKey
+	originalStoreID := setting.WaffoPancakeStoreID
+	originalProductID := setting.WaffoPancakeProductID
+	t.Cleanup(func() {
+		setting.WaffoPancakeEnabled = originalEnabled
+		setting.WaffoPancakeWebhookPublicKey = originalPublicKey
+		setting.WaffoPancakeSandbox = originalSandbox
+		setting.WaffoPancakeWebhookTestKey = originalTestKey
+		setting.WaffoPancakeMerchantID = originalMerchantID
+		setting.WaffoPancakePrivateKey = originalPrivateKey
+		setting.WaffoPancakeStoreID = originalStoreID
+		setting.WaffoPancakeProductID = originalProductID
+	})
+
+	setting.WaffoPancakeEnabled = true
+	setting.WaffoPancakeSandbox = false
+	setting.WaffoPancakeMerchantID = "merchant"
+	setting.WaffoPancakePrivateKey = "private"
+	setting.WaffoPancakeStoreID = "store"
+	setting.WaffoPancakeProductID = "product"
+	setting.WaffoPancakeWebhookPublicKey = "invalid-public-key"
+	setting.WaffoPancakeWebhookTestKey = ""
+
+	var logBuffer bytes.Buffer
+	oldWriter := gin.DefaultWriter
+	oldErrorWriter := gin.DefaultErrorWriter
+	gin.DefaultWriter = &logBuffer
+	gin.DefaultErrorWriter = &logBuffer
+	t.Cleanup(func() {
+		gin.DefaultWriter = oldWriter
+		gin.DefaultErrorWriter = oldErrorWriter
+	})
+
+	payload := `{"id":"evt_test","eventType":"order.completed","mode":"prod","data":{"orderId":"WAFFO_PANCAKE-1","buyerEmail":"buyer@example.com"}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/waffo-pancake/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Waffo-Signature", "sensitive-signature")
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = req
+
+	WaffoPancakeWebhook(c)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+	logOutput := logBuffer.String()
+	require.NotContains(t, logOutput, "buyer@example.com")
+	require.NotContains(t, logOutput, payload)
+	require.NotContains(t, logOutput, "sensitive-signature")
+	require.Contains(t, logOutput, "body_bytes=")
 }
 
 func TestGetWaffoPancakePayMoney(t *testing.T) {
