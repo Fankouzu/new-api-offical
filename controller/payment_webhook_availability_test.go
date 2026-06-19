@@ -164,3 +164,25 @@ func TestEpayWebhookEnabledRequiresTopUpAndWebhookConfig(t *testing.T) {
 	operation_setting.PayMethods = nil
 	require.False(t, isEpayWebhookEnabled())
 }
+
+func TestBinancePayWebhookEnabledRequiresTopUpAndWebhookConfig(t *testing.T) {
+	originalEnabled := setting.BinancePayEnabled
+	originalAPIKey := setting.BinancePayApiKey
+	originalAPISecret := setting.BinancePayApiSecret
+	t.Cleanup(func() {
+		setting.BinancePayEnabled = originalEnabled
+		setting.BinancePayApiKey = originalAPIKey
+		setting.BinancePayApiSecret = originalAPISecret
+	})
+
+	setting.BinancePayEnabled = true
+	setting.BinancePayApiKey = "api_key"
+	setting.BinancePayApiSecret = ""
+	require.False(t, isBinancePayWebhookEnabled())
+
+	setting.BinancePayApiSecret = "api_secret"
+	require.True(t, isBinancePayWebhookEnabled())
+
+	setting.BinancePayEnabled = false
+	require.False(t, isBinancePayWebhookEnabled())
+}

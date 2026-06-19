@@ -121,6 +121,38 @@ func TestRechargeWaffoPancake_RecordsTopupAuditInfo(t *testing.T) {
 	assert.Contains(t, log.Other, `"callback_payment_method":"waffo_pancake"`)
 }
 
+func TestRechargeBinancePay_RejectsMismatchedPaymentMethod(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 103, 0)
+	insertTopUpForPaymentGuardTest(t, "binance-pay-guard", 103, PaymentProviderStripe)
+
+	err := RechargeBinancePay("binance-pay-guard", "203.0.113.12")
+	require.Error(t, err)
+
+	topUp := GetTopUpByTradeNo("binance-pay-guard")
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusPending, topUp.Status)
+	assert.Equal(t, 0, getUserQuotaForPaymentGuardTest(t, 103))
+}
+
+func TestRechargeBinancePay_RecordsTopupAuditInfo(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 104, 0)
+	insertTopUpForPaymentGuardTest(t, "binance-pay-audit", 104, PaymentProviderBinancePay)
+
+	err := RechargeBinancePay("binance-pay-audit", "203.0.113.13")
+	require.NoError(t, err)
+
+	var log Log
+	require.NoError(t, LOG_DB.Where("user_id = ? AND type = ?", 104, LogTypeTopup).Order("id desc").First(&log).Error)
+	assert.Equal(t, "203.0.113.13", log.Ip)
+	assert.Contains(t, log.Content, "Binance Pay充值成功")
+	assert.Contains(t, log.Other, `"payment_method":"binance_pay"`)
+	assert.Contains(t, log.Other, `"callback_payment_method":"binance_pay"`)
+}
+
 func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T) {
 	testCases := []struct {
 		name                    string

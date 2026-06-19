@@ -54,6 +54,14 @@ export type WaffoPancakePaymentResponse = ApiResponse<
     }
   | string
 >
+export type BinancePayPaymentResponse = ApiResponse<
+  | {
+      checkout_url?: string
+      prepay_id?: string
+      order_id?: string
+    }
+  | string
+>
 
 /**
  * Creem product configuration
@@ -145,6 +153,10 @@ export interface TopupInfo {
   enable_waffo_pancake_topup?: boolean
   /** Minimum topup amount for Waffo Pancake */
   waffo_pancake_min_topup?: number
+  /** Whether Binance Pay topup is enabled */
+  enable_binance_pay_topup?: boolean
+  /** Minimum topup amount for Binance Pay */
+  binance_pay_min_topup?: number
 }
 
 /**
@@ -189,6 +201,14 @@ export interface WaffoPaymentRequest {
  * Waffo Pancake payment request parameters
  */
 export interface WaffoPancakePaymentRequest {
+  /** Topup amount */
+  amount: number
+}
+
+/**
+ * Binance Pay payment request parameters
+ */
+export interface BinancePayPaymentRequest {
   /** Topup amount */
   amount: number
 }

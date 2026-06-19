@@ -86,6 +86,31 @@ export function isWaffoPancakePayment(paymentType: string): boolean {
   return paymentType === PAYMENT_TYPES.WAFFO_PANCAKE
 }
 
+export function isBinancePayPayment(paymentType: string): boolean {
+  return paymentType === PAYMENT_TYPES.BINANCE_PAY
+}
+
+/**
+ * Check whether at least one admin-configurable top-up method is enabled.
+ *
+ * These methods are rendered from `pay_methods` or feature flags. Keep this in
+ * sync with backend GetTopUpInfo flags so a standalone provider such as
+ * Binance Pay can still show its button when legacy online top-up is disabled.
+ */
+export function hasConfigurableTopup(topupInfo: TopupInfo | null): boolean {
+  if (!topupInfo) {
+    return false
+  }
+
+  return !!(
+    topupInfo.enable_online_topup ||
+    topupInfo.enable_stripe_topup ||
+    topupInfo.enable_waffo_topup ||
+    topupInfo.enable_waffo_pancake_topup ||
+    topupInfo.enable_binance_pay_topup
+  )
+}
+
 /**
  * Get default payment type from topup info
  */
@@ -109,6 +134,10 @@ export function getDefaultPaymentType(topupInfo: TopupInfo | null): string {
 
   if (topupInfo.enable_waffo_pancake_topup) {
     return PAYMENT_TYPES.WAFFO_PANCAKE
+  }
+
+  if (topupInfo.enable_binance_pay_topup) {
+    return PAYMENT_TYPES.BINANCE_PAY
   }
 
   return DEFAULT_PAYMENT_TYPE
@@ -136,6 +165,10 @@ export function getMinTopupAmount(topupInfo: TopupInfo | null): number {
 
   if (topupInfo.enable_waffo_pancake_topup) {
     return topupInfo.waffo_pancake_min_topup || DEFAULT_MIN_TOPUP
+  }
+
+  if (topupInfo.enable_binance_pay_topup) {
+    return topupInfo.binance_pay_min_topup || DEFAULT_MIN_TOPUP
   }
 
   return DEFAULT_MIN_TOPUP

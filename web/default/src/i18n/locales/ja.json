@@ -4417,6 +4417,23 @@
     "Zero retention": "データ保持なし",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム"
+    "Zoom": "ズーム",
+    "Binance Pay Payment Gateway": "Binance Pay 決済ゲートウェイ",
+    "Configure Binance Pay merchant checkout for balance top-ups": "残高チャージ用の Binance Pay マーチャントチェックアウトを設定します",
+    "Webhook URL: <ServerAddress>/api/binance-pay/webhook. Binance Pay certificates are fetched automatically from the official certificate API during webhook verification.": "Webhook URL: <ServerAddress>/api/binance-pay/webhook。Webhook 検証時に Binance Pay の公式証明書 API から証明書を自動取得します。",
+    "Binance Pay API key is required": "Binance Pay API Key は必須です",
+    "Binance Pay API secret is required": "Binance Pay API Secret は必須です",
+    "Binance Pay API Key": "Binance Pay API Key",
+    "Binance Pay API Secret": "Binance Pay API Secret",
+    "Webhook certificate": "Webhook 証明書",
+    "Automatically fetched by certificate serial number": "証明書シリアル番号で自動取得",
+    "No manual public key configuration is required": "公開鍵の手動設定は不要です",
+    "Save Binance Pay settings": "Binance Pay 設定を保存",
+    "Unit price (crypto amount / USD)": "単価（暗号資産額 / USD）",
+    "Enable Binance Pay": "Binance Pay を有効化",
+    "Leave blank to keep the configured Binance Pay API Key": "設定済みの Binance Pay API Key を保持するには空欄のままにします",
+    "Leave blank to keep the configured Binance Pay API Secret": "設定済みの Binance Pay API Secret を保持するには空欄のままにします",
+    "Existing Binance Pay API Key is configured": "Binance Pay API Key は設定済みです",
+    "Existing Binance Pay API Secret is configured": "Binance Pay API Secret は設定済みです"
   }
 }

@@ -19,10 +19,52 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import { Modal, Typography, Card, Skeleton } from '@douyinfe/semi-ui';
-import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si';
+import { SiAlipay, SiBinance, SiWechat, SiStripe } from 'react-icons/si';
 import { CreditCard } from 'lucide-react';
 
 const { Text } = Typography;
+
+const renderPaymentIcon = (payMethod, className = 'mr-2', size = 16) => {
+  if (payMethod.type === 'alipay') {
+    return <SiAlipay className={className} size={size} color='#1677FF' />;
+  }
+  if (payMethod.type === 'wxpay') {
+    return <SiWechat className={className} size={size} color='#07C160' />;
+  }
+  if (payMethod.type === 'stripe') {
+    return <SiStripe className={className} size={size} color='#635BFF' />;
+  }
+  if (payMethod.type === 'binance_pay') {
+    return <SiBinance className={className} size={size} color='#F0B90B' />;
+  }
+  if (payMethod.type === 'waffo_pancake') {
+    return (
+      <img
+        src='/waffo-logo.svg'
+        alt={payMethod.name || 'Waffo Pancake'}
+        className={className}
+        style={{ width: size, height: size, objectFit: 'contain' }}
+      />
+    );
+  }
+  if (payMethod.icon) {
+    return (
+      <img
+        src={payMethod.icon}
+        alt={payMethod.name}
+        className={className}
+        style={{ width: size, height: size, objectFit: 'contain' }}
+      />
+    );
+  }
+  return (
+    <CreditCard
+      className={className}
+      size={size}
+      color={payMethod.color || 'var(--semi-color-text-2)'}
+    />
+  );
+};
 
 const PaymentConfirmModal = ({
   t,
@@ -122,44 +164,7 @@ const PaymentConfirmModal = ({
                   if (payMethod) {
                     return (
                       <>
-                        {payMethod.type === 'alipay' ? (
-                          <SiAlipay
-                            className='mr-2'
-                            size={16}
-                            color='#1677FF'
-                          />
-                        ) : payMethod.type === 'wxpay' ? (
-                          <SiWechat
-                            className='mr-2'
-                            size={16}
-                            color='#07C160'
-                          />
-                        ) : payMethod.type === 'stripe' ? (
-                          <SiStripe
-                            className='mr-2'
-                            size={16}
-                            color='#635BFF'
-                          />
-                        ) : payMethod.icon ? (
-                          <img
-                            src={payMethod.icon}
-                            alt={payMethod.name}
-                            className='mr-2'
-                            style={{
-                              width: 16,
-                              height: 16,
-                              objectFit: 'contain',
-                            }}
-                          />
-                        ) : (
-                          <CreditCard
-                            className='mr-2'
-                            size={16}
-                            color={
-                              payMethod.color || 'var(--semi-color-text-2)'
-                            }
-                          />
-                        )}
+                        {renderPaymentIcon(payMethod)}
                         <Text className='text-slate-900 dark:text-slate-100'>
                           {payMethod.name}
                         </Text>

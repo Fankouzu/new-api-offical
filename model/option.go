@@ -118,6 +118,14 @@ func InitOptionMap() {
 	common.OptionMap["WaffoPancakeCurrency"] = setting.WaffoPancakeCurrency
 	common.OptionMap["WaffoPancakeUnitPrice"] = strconv.FormatFloat(setting.WaffoPancakeUnitPrice, 'f', -1, 64)
 	common.OptionMap["WaffoPancakeMinTopUp"] = strconv.Itoa(setting.WaffoPancakeMinTopUp)
+	common.OptionMap["BinancePayEnabled"] = strconv.FormatBool(setting.BinancePayEnabled)
+	common.OptionMap["BinancePaySandbox"] = strconv.FormatBool(setting.BinancePaySandbox)
+	common.OptionMap["BinancePayApiKey"] = setting.BinancePayApiKey
+	common.OptionMap["BinancePayApiSecret"] = setting.BinancePayApiSecret
+	common.OptionMap["BinancePayReturnURL"] = setting.BinancePayReturnURL
+	common.OptionMap["BinancePayCurrency"] = setting.BinancePayCurrency
+	common.OptionMap["BinancePayUnitPrice"] = strconv.FormatFloat(setting.BinancePayUnitPrice, 'f', -1, 64)
+	common.OptionMap["BinancePayMinTopUp"] = strconv.Itoa(setting.BinancePayMinTopUp)
 	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
 	common.OptionMap["Chats"] = setting.Chats2JsonString()
 	common.OptionMap["AutoGroups"] = setting.AutoGroups2JsonString()
@@ -443,6 +451,22 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.WaffoPancakeUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "WaffoPancakeMinTopUp":
 		setting.WaffoPancakeMinTopUp, _ = strconv.Atoi(value)
+	case "BinancePayEnabled":
+		setting.BinancePayEnabled = value == "true"
+	case "BinancePaySandbox":
+		setting.BinancePaySandbox = value == "true"
+	case "BinancePayApiKey":
+		setting.BinancePayApiKey = value
+	case "BinancePayApiSecret":
+		setting.BinancePayApiSecret = value
+	case "BinancePayReturnURL":
+		setting.BinancePayReturnURL = value
+	case "BinancePayCurrency":
+		setting.BinancePayCurrency = value
+	case "BinancePayUnitPrice":
+		setting.BinancePayUnitPrice, _ = strconv.ParseFloat(value, 64)
+	case "BinancePayMinTopUp":
+		setting.BinancePayMinTopUp, _ = strconv.Atoi(value)
 	case "TopupGroupRatio":
 		err = common.UpdateTopupGroupRatioByJSONString(value)
 	case "GitHubClientId":

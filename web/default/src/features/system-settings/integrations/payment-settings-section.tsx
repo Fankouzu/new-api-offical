@@ -53,6 +53,10 @@ import {
   type WaffoPancakeSettingsValues,
 } from './waffo-pancake-settings-section'
 import {
+  BinancePaySettingsSection,
+  type BinancePaySettingsValues,
+} from './binance-pay-settings-section'
+import {
   WaffoSettingsSection,
   type WaffoSettingsValues,
 } from './waffo-settings-section'
@@ -129,12 +133,14 @@ type PaymentSettingsSectionProps = {
   defaultValues: PaymentFormValues
   waffoDefaultValues: WaffoSettingsValues
   waffoPancakeDefaultValues: WaffoPancakeSettingsValues
+  binancePayDefaultValues: BinancePaySettingsValues
 }
 
 export function PaymentSettingsSection({
   defaultValues,
   waffoDefaultValues,
   waffoPancakeDefaultValues,
+  binancePayDefaultValues,
 }: PaymentSettingsSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
@@ -1309,6 +1315,10 @@ export function PaymentSettingsSection({
       <Separator />
 
       <WaffoPancakeSettingsSection defaultValues={waffoPancakeDefaultValues} />
+
+      <Separator />
+
+      <BinancePaySettingsSection defaultValues={binancePayDefaultValues} />
       {/* eslint-enable react-hooks/refs */}
     </SettingsSection>
   )

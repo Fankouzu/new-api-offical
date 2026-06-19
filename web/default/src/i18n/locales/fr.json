@@ -4417,6 +4417,23 @@
     "Zero retention": "Aucune rétention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Binance Pay Payment Gateway": "Passerelle de paiement Binance Pay",
+    "Configure Binance Pay merchant checkout for balance top-ups": "Configurer le checkout marchand Binance Pay pour les recharges de solde",
+    "Webhook URL: <ServerAddress>/api/binance-pay/webhook. Binance Pay certificates are fetched automatically from the official certificate API during webhook verification.": "URL du webhook : <ServerAddress>/api/binance-pay/webhook. Les certificats Binance Pay sont récupérés automatiquement depuis l’API officielle des certificats lors de la vérification du webhook.",
+    "Binance Pay API key is required": "La clé API Binance Pay est requise",
+    "Binance Pay API secret is required": "Le secret API Binance Pay est requis",
+    "Binance Pay API Key": "Clé API Binance Pay",
+    "Binance Pay API Secret": "Secret API Binance Pay",
+    "Webhook certificate": "Certificat webhook",
+    "Automatically fetched by certificate serial number": "Récupéré automatiquement par numéro de série du certificat",
+    "No manual public key configuration is required": "Aucune configuration manuelle de clé publique n’est requise",
+    "Save Binance Pay settings": "Enregistrer les paramètres Binance Pay",
+    "Unit price (crypto amount / USD)": "Prix unitaire (montant crypto / USD)",
+    "Enable Binance Pay": "Activer Binance Pay",
+    "Leave blank to keep the configured Binance Pay API Key": "Laissez vide pour conserver la clé API Binance Pay configurée",
+    "Leave blank to keep the configured Binance Pay API Secret": "Laissez vide pour conserver le secret API Binance Pay configuré",
+    "Existing Binance Pay API Key is configured": "Une clé API Binance Pay est déjà configurée",
+    "Existing Binance Pay API Secret is configured": "Un secret API Binance Pay est déjà configuré"
   }
 }

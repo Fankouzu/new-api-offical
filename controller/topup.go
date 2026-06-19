@@ -90,12 +90,33 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
+	enableBinancePay := isBinancePayTopUpEnabled()
+	if enableBinancePay {
+		hasBinancePay := false
+		for _, method := range payMethods {
+			if method["type"] == model.PaymentMethodBinancePay {
+				hasBinancePay = true
+				break
+			}
+		}
+
+		if !hasBinancePay {
+			payMethods = append(payMethods, map[string]string{
+				"name":      "Binance Pay",
+				"type":      model.PaymentMethodBinancePay,
+				"color":     "rgba(var(--semi-yellow-5), 1)",
+				"min_topup": strconv.Itoa(setting.BinancePayMinTopUp),
+			})
+		}
+	}
+
 	data := gin.H{
 		"enable_online_topup":        isEpayTopUpEnabled(),
 		"enable_stripe_topup":        isStripeTopUpEnabled(),
 		"enable_creem_topup":         isCreemTopUpEnabled(),
 		"enable_waffo_topup":         enableWaffo,
 		"enable_waffo_pancake_topup": enableWaffoPancake,
+		"enable_binance_pay_topup":   enableBinancePay,
 		"waffo_pay_methods": func() interface{} {
 			if enableWaffo {
 				return setting.GetWaffoPayMethods()
@@ -108,6 +129,7 @@ func GetTopUpInfo(c *gin.Context) {
 		"stripe_min_topup":        setting.StripeMinTopUp,
 		"waffo_min_topup":         setting.WaffoMinTopUp,
 		"waffo_pancake_min_topup": setting.WaffoPancakeMinTopUp,
+		"binance_pay_min_topup":   setting.BinancePayMinTopUp,
 		"amount_options":          operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":                operation_setting.GetPaymentSetting().AmountDiscount,
 		"topup_link":              common.TopUpLink,
