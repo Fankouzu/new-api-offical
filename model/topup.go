@@ -30,6 +30,7 @@ const (
 	PaymentMethodWaffo        = "waffo"
 	PaymentMethodWaffoPancake = "waffo_pancake"
 	PaymentMethodBinancePay   = "binance_pay"
+	PaymentMethodRedemption   = "redemption"
 )
 
 const (

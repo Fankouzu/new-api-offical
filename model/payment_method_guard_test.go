@@ -153,6 +153,35 @@ func TestRechargeBinancePay_RecordsTopupAuditInfo(t *testing.T) {
 	assert.Contains(t, log.Other, `"callback_payment_method":"binance_pay"`)
 }
 
+func TestRedeemWithAudit_RecordsTopupAuditInfo(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 105, 0)
+	redemption := &Redemption{
+		UserId:      1,
+		Key:         "redemption-audit-key",
+		Status:      common.RedemptionCodeStatusEnabled,
+		Name:        "audit-redemption",
+		Quota:       500000,
+		CreatedTime: time.Now().Unix(),
+	}
+	require.NoError(t, redemption.Insert())
+
+	quota, err := RedeemWithAudit("redemption-audit-key", 105, "203.0.113.14")
+	require.NoError(t, err)
+	assert.Equal(t, 500000, quota)
+	assert.Equal(t, 500000, getUserQuotaForPaymentGuardTest(t, 105))
+
+	var log Log
+	require.NoError(t, LOG_DB.Where("user_id = ? AND type = ?", 105, LogTypeTopup).Order("id desc").First(&log).Error)
+	assert.Equal(t, "203.0.113.14", log.Ip)
+	assert.Contains(t, log.Content, "通过兑换码充值")
+	assert.Contains(t, log.Other, `"admin_info"`)
+	assert.Contains(t, log.Other, `"caller_ip":"203.0.113.14"`)
+	assert.Contains(t, log.Other, `"payment_method":"redemption"`)
+	assert.Contains(t, log.Other, `"callback_payment_method":"redemption"`)
+}
+
 func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T) {
 	testCases := []struct {
 		name                    string
