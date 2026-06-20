@@ -24,7 +24,7 @@ func UpdateMidjourneyTaskBulk() {
 	//imageModel := "midjourney"
 	ctx := context.TODO()
 	for {
-		time.Sleep(time.Duration(15) * time.Second)
+		time.Sleep(time.Duration(common.TaskPollInterval) * time.Second)
 
 		tasks := model.GetAllUnFinishTasks()
 		if len(tasks) == 0 {

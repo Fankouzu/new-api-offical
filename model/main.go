@@ -201,8 +201,12 @@ func InitDB() (err error) {
 		if common.UsingMySQL {
 			//_, _ = sqlDB.Exec("ALTER TABLE channels MODIFY model_mapping TEXT;") // TODO: delete this line when most users have upgraded
 		}
-		common.SysLog("database migration started")
-		err = migrateDB()
+		if common.GetEnvOrDefaultBool("AUTO_MIGRATE", true) {
+			common.SysLog("database migration started")
+			err = migrateDB()
+		} else {
+			common.SysLog("AUTO_MIGRATE disabled, skipping database migration")
+		}
 		return err
 	} else {
 		common.FatalLog(err)

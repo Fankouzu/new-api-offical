@@ -142,7 +142,8 @@ var NodeName = ""
 var requestInterval int
 var RequestInterval time.Duration
 
-var SyncFrequency int // unit is second
+var SyncFrequency int    // unit is second
+var TaskPollInterval int // unit is second, interval between async-task (MJ/Suno/video) progress polling
 
 var BatchUpdateEnabled = false
 var BatchUpdateInterval int
