@@ -226,7 +226,11 @@ func LinuxdoOAuth(c *gin.Context) {
 				affCode := session.Get("aff")
 				inviterId := 0
 				if affCode != nil {
-					inviterId, _ = model.GetUserIdByAffCode(affCode.(string))
+					inviterId, err = model.ResolveInviterByAffCode(affCode.(string))
+					if err != nil {
+						common.ApiError(c, err)
+						return
+					}
 				}
 
 				if err := user.Insert(inviterId); err != nil {

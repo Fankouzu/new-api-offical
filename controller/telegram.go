@@ -30,6 +30,7 @@ type telegramAuthRequest struct {
 	AuthDate  string `json:"auth_date"`
 	Hash      string `json:"hash"`
 	Lang      string `json:"lang"`
+	Aff       string `json:"aff"`
 }
 
 func TelegramBind(c *gin.Context) {
@@ -131,9 +132,10 @@ func TelegramLogin(c *gin.Context) {
 		}
 
 		session := sessions.Default(c)
-		inviterId := 0
-		if affCode := session.Get("aff"); affCode != nil {
-			inviterId, _ = model.GetUserIdByAffCode(affCode.(string))
+		inviterId, err := resolveInviterFromRequestAff(c, session)
+		if err != nil {
+			common.ApiError(c, err)
+			return
 		}
 
 		user.Username = getTelegramUsername(params)
@@ -176,6 +178,7 @@ func getTelegramLoginParams(c *gin.Context) (url.Values, bool) {
 	setTelegramParam(params, "auth_date", req.AuthDate)
 	setTelegramParam(params, "hash", req.Hash)
 	setTelegramParam(params, "lang", req.Lang)
+	setTelegramParam(params, "aff", req.Aff)
 	return params, true
 }
 
@@ -262,6 +265,9 @@ func checkTelegramAuthorization(params url.Values, token string, enforceFreshnes
 		}
 		if k == "hash" {
 			hash = v[0]
+			continue
+		}
+		if k == "aff" {
 			continue
 		}
 		strs = append(strs, k+"="+v[0])

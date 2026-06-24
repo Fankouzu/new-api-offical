@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { getAffiliateCode } from './lib/storage'
 import type {
   LoginPayload,
   LoginResponse,
@@ -95,7 +96,8 @@ export async function getOAuthState(): Promise<string> {
 
 // WeChat login by authorization code
 export async function wechatLoginByCode(code: string): Promise<ApiResponse> {
-  const res = await api.get('/api/oauth/wechat', { params: { code } })
+  const aff = getAffiliateCode()
+  const res = await api.get('/api/oauth/wechat', { params: { code, aff } })
   return res.data
 }
 

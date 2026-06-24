@@ -190,8 +190,9 @@ const RegisterForm = () => {
     }
     setWechatCodeSubmitLoading(true);
     try {
+      const affCode = localStorage.getItem('aff') || '';
       const res = await API.get(
-        `/api/oauth/wechat?code=${inputs.wechat_verification_code}`,
+        `/api/oauth/wechat?code=${inputs.wechat_verification_code}&aff=${encodeURIComponent(affCode)}`,
       );
       const { success, message, data } = res.data;
       if (success) {
@@ -378,6 +379,10 @@ const RegisterForm = () => {
         params[field] = response[field];
       }
     });
+    const affCode = localStorage.getItem('aff');
+    if (affCode) {
+      params.aff = affCode;
+    }
     try {
       const res = await API.get(`/api/oauth/telegram/login`, { params });
       const { success, message, data } = res.data;
@@ -786,8 +791,7 @@ const RegisterForm = () => {
         style={{ top: '50%', left: '-120px' }}
       />
       <div className='w-full max-w-sm mt-[60px]'>
-        {showEmailRegister ||
-        !hasOAuthRegisterOptions
+        {showEmailRegister || !hasOAuthRegisterOptions
           ? renderEmailRegisterForm()
           : renderOAuthOptions()}
         {renderWeChatLoginModal()}
