@@ -20,22 +20,21 @@ import { useState, useRef, useEffect } from 'react'
 import type { AxiosRequestConfig } from 'axios'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { useAuthStore } from '@/stores/auth-store'
+import { useAuthStore, type AuthUser } from '@/stores/auth-store'
 import { api } from '@/lib/api'
-import type { AuthUser } from '@/stores/auth-store'
 import { getOAuthState } from '../api'
-import { saveUserId } from '../lib/storage'
+import {
+  loadTelegramWidgetScript,
+  type TelegramAuthPayload,
+} from '../components/telegram-login-widget'
 import {
   buildGitHubOAuthUrl,
   buildDiscordOAuthUrl,
   buildOIDCOAuthUrl,
   buildLinuxDOOAuthUrl,
 } from '../lib/oauth'
+import { getAffiliateCode, saveUserId } from '../lib/storage'
 import type { SystemStatus, CustomOAuthProviderInfo } from '../types'
-import {
-  loadTelegramWidgetScript,
-  type TelegramAuthPayload,
-} from '../components/telegram-login-widget'
 
 type LogoutRequestConfig = AxiosRequestConfig & {
   skipErrorHandler?: boolean
@@ -239,9 +238,13 @@ export function useOAuthLogin(status: SystemStatus | null) {
   const handleTelegramAuth = async (payload: TelegramAuthPayload) => {
     setIsLoading(true)
     try {
-      const res = await api.post('/api/oauth/telegram/login', pickTelegramAuthParams(payload), {
-        disableDuplicate: true,
-      } as Record<string, unknown>)
+      const res = await api.post(
+        '/api/oauth/telegram/login',
+        pickTelegramAuthParams(payload),
+        {
+          disableDuplicate: true,
+        } as Record<string, unknown>
+      )
       if (!res?.data?.success) {
         toast.error(res?.data?.message || t('Telegram login failed'))
         return
@@ -328,6 +331,10 @@ function pickTelegramAuthParams(payload: TelegramAuthPayload) {
     if (value !== undefined && value !== null && value !== '') {
       params[field] = String(value)
     }
+  }
+  const aff = getAffiliateCode()
+  if (aff) {
+    params.aff = aff
   }
   return params
 }

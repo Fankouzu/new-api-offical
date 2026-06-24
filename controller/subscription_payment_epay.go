@@ -162,6 +162,7 @@ func SubscriptionEpayNotify(c *gin.Context) {
 		return
 	}
 
+	trackGA4PurchaseSuccess(c, verifyInfo.ServiceTradeNo)
 	_, _ = c.Writer.Write([]byte("success"))
 }
 
@@ -210,6 +211,7 @@ func SubscriptionEpayReturn(c *gin.Context) {
 			c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/topup?pay=fail")
 			return
 		}
+		trackGA4PurchaseSuccess(c, verifyInfo.ServiceTradeNo)
 		c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/topup?pay=success")
 		return
 	}

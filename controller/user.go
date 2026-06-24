@@ -151,7 +151,7 @@ func Register(c *gin.Context) {
 		return
 	}
 	var req RegisterRequest
-	err := json.NewDecoder(c.Request.Body).Decode(&req)
+	err := common.DecodeJson(c.Request.Body, &req)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -185,7 +185,11 @@ func Register(c *gin.Context) {
 		return
 	}
 	affCode := user.AffCode // this code is the inviter's code, not the user's own code
-	inviterId, _ := model.GetUserIdByAffCode(affCode)
+	inviterId, err := model.ResolveInviterByAffCode(affCode)
+	if err != nil {
+		common.ApiErrorI18n(c, i18n.MsgUserAffCodeInvalid)
+		return
+	}
 	cleanUser := model.User{
 		Username:    user.Username,
 		Password:    user.Password,

@@ -314,6 +314,18 @@ func GetUserIdByAffCode(affCode string) (int, error) {
 	return user.Id, err
 }
 
+func ResolveInviterByAffCode(affCode string) (int, error) {
+	affCode = strings.TrimSpace(affCode)
+	if affCode == "" {
+		return 0, nil
+	}
+	inviterId, err := GetUserIdByAffCode(affCode)
+	if err != nil {
+		return 0, fmt.Errorf("无效的邀请码")
+	}
+	return inviterId, nil
+}
+
 func DeleteUserById(id int) (err error) {
 	if id == 0 {
 		return errors.New("id 为空！")
@@ -331,14 +343,13 @@ func HardDeleteUserById(id int) error {
 }
 
 func inviteUser(inviterId int) (err error) {
-	user, err := GetUserById(inviterId, true)
-	if err != nil {
-		return err
-	}
-	user.AffCount++
-	user.AffQuota += common.QuotaForInviter
-	user.AffHistoryQuota += common.QuotaForInviter
-	return DB.Save(user).Error
+	return DB.Model(&User{}).
+		Where("id = ?", inviterId).
+		Updates(map[string]interface{}{
+			"aff_count":   gorm.Expr("aff_count + ?", 1),
+			"aff_quota":   gorm.Expr("aff_quota + ?", common.QuotaForInviter),
+			"aff_history": gorm.Expr("aff_history + ?", common.QuotaForInviter),
+		}).Error
 }
 
 func (user *User) TransferAffQuotaToQuota(quota int) error {
@@ -387,6 +398,7 @@ func (user *User) Insert(inviterId int) error {
 		}
 	}
 	user.Quota = common.QuotaForNewUser
+	user.InviterId = inviterId
 	//user.SetAccessToken(common.GetUUID())
 	user.AffCode = common.GetRandomString(4)
 
@@ -446,6 +458,7 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 		}
 	}
 	user.Quota = common.QuotaForNewUser
+	user.InviterId = inviterId
 	user.AffCode = common.GetRandomString(4)
 
 	// 初始化用户设置
