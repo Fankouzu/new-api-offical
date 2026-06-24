@@ -26,8 +26,6 @@ const (
 	eventVoucherRedeemSuccess = "voucher_redeem_success"
 	eventAPIKeyCreated        = "api_key_created"
 	eventFirstAPICall         = "first_api_call"
-	eventTopUp                = "top_up"
-	eventPurchase             = "purchase"
 	defaultVoucherSource      = "lizh_ai"
 	defaultTimeoutMS          = 1500
 	developmentHashSalt       = "ga4-development-hash-salt"
@@ -57,16 +55,6 @@ type RedemptionAttribution struct {
 
 type UserAttribution struct {
 	VoucherSource string
-}
-
-type PurchaseAttribution struct {
-	TradeNo         string
-	Value           float64
-	Currency        string
-	PaymentProvider string
-	PaymentMethod   string
-	ItemType        string
-	QuotaAmount     int64
 }
 
 type SignUpAttribution struct {
@@ -280,41 +268,6 @@ func TrackAPIKeyCreated(c *gin.Context, userID int, tokenID int, tokenKey string
 	track(c, cfg, userID, tokenID, eventAPIKeyCreated, params)
 }
 
-func TrackTopUp(c *gin.Context, userID int, attrs PurchaseAttribution) {
-	TrackTopUpWithResult(c, userID, attrs, nil)
-}
-
-func TrackPurchase(c *gin.Context, userID int, attrs PurchaseAttribution) {
-	TrackPurchaseWithResult(c, userID, attrs, nil)
-}
-
-func TrackTopUpWithResult(c *gin.Context, userID int, attrs PurchaseAttribution, onResult func(error)) {
-	trackPurchaseEventWithResult(c, userID, eventTopUp, attrs, onResult)
-}
-
-func TrackPurchaseWithResult(c *gin.Context, userID int, attrs PurchaseAttribution, onResult func(error)) {
-	trackPurchaseEventWithResult(c, userID, eventPurchase, attrs, onResult)
-}
-
-func trackPurchaseEventWithResult(c *gin.Context, userID int, eventName string, attrs PurchaseAttribution, onResult func(error)) {
-	cfg := currentConfig()
-	if !trackingEnabled(cfg) {
-		return
-	}
-	params := EventParams{
-		"transaction_id_hash": HashIdentifier(attrs.TradeNo),
-		"value":               attrs.Value,
-		"currency":            normalizeCurrency(attrs.Currency),
-	}
-	addStringParam(params, "payment_provider", attrs.PaymentProvider)
-	addStringParam(params, "payment_method", attrs.PaymentMethod)
-	addStringParam(params, "item_type", attrs.ItemType)
-	if attrs.QuotaAmount > 0 {
-		params["quota_amount"] = attrs.QuotaAmount
-	}
-	trackWithResult(c, cfg, userID, 0, eventName, params, onResult)
-}
-
 func TrackSignUp(c *gin.Context, userID int, attrs SignUpAttribution) {
 	cfg := currentConfig()
 	if !trackingEnabled(cfg) {
@@ -369,14 +322,6 @@ func addStringParam(params EventParams, key string, value string) {
 	if value != "" {
 		params[key] = value
 	}
-}
-
-func normalizeCurrency(currency string) string {
-	currency = strings.ToUpper(strings.TrimSpace(currency))
-	if currency == "" {
-		return "USD"
-	}
-	return currency
 }
 
 func sanitizeAttributionURL(raw string) string {

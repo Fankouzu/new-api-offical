@@ -18,13 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 type GtagCommand = [command: string, ...args: unknown[]]
-type GtagDataLayerItem = GtagCommand | IArguments
 
 const DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID = 'G-9693VBP1VM'
 
 declare global {
   interface Window {
-    dataLayer?: GtagDataLayerItem[]
+    dataLayer?: GtagCommand[]
     gtag?: (...args: GtagCommand) => void
   }
 }
@@ -59,10 +58,8 @@ export function initGoogleAnalytics(measurementId: string): void {
   initialized = true
 
   window.dataLayer = window.dataLayer || []
-  window.gtag = function gtag() {
-    // Google gtag.js expects the pre-load queue to keep the snippet's arguments object.
-    // eslint-disable-next-line prefer-rest-params
-    window.dataLayer?.push(arguments)
+  window.gtag = (...args: GtagCommand) => {
+    window.dataLayer?.push(args)
   }
 
   if (!document.querySelector('[data-google-analytics-script="true"]')) {
@@ -74,7 +71,7 @@ export function initGoogleAnalytics(measurementId: string): void {
   }
 
   window.gtag('js', new Date())
-  window.gtag('config', normalizedId)
+  window.gtag('config', normalizedId, { send_page_view: false })
 }
 
 export function trackPageView(path: string): void {

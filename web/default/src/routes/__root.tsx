@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { type QueryClient } from '@tanstack/react-query'
 import {
   createRootRouteWithContext,
@@ -44,7 +44,6 @@ function RootComponent() {
   const currentHref = useRouterState({
     select: (state) => state.location.href,
   })
-  const skippedInitialPageViewRef = useRef(false)
 
   useEffect(() => {
     initializeFirstTouchAttribution()
@@ -53,10 +52,6 @@ function RootComponent() {
 
   useEffect(() => {
     syncRouteSEO(currentHref)
-    if (!skippedInitialPageViewRef.current) {
-      skippedInitialPageViewRef.current = true
-      return
-    }
     trackPageView(currentHref)
   }, [currentHref])
 

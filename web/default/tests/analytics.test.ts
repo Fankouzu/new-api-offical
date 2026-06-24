@@ -88,10 +88,6 @@ afterEach(() => {
     .forEach((node) => node.remove())
 })
 
-function dataLayerAsCommands(): unknown[][] {
-  return (window.dataLayer || []).map((item) => Array.from(item as ArrayLike<unknown>))
-}
-
 describe('google analytics runtime', () => {
   test('uses the repository default measurement id when env is not set', () => {
     expect(getGoogleAnalyticsMeasurementId()).toBe('G-9693VBP1VM')
@@ -106,7 +102,7 @@ describe('google analytics runtime', () => {
     ).toBeNull()
   })
 
-  test('injects gtag script and lets GA4 send the initial page_view', () => {
+  test('injects gtag script and initializes GA4 without automatic page_view', () => {
     initGoogleAnalytics('G-TEST123')
 
     const script = document.head.querySelector(
@@ -115,9 +111,9 @@ describe('google analytics runtime', () => {
     expect(script?.getAttribute('src')).toBe(
       'https://www.googletagmanager.com/gtag/js?id=G-TEST123'
     )
-    expect(dataLayerAsCommands()).toEqual([
+    expect(window.dataLayer).toEqual([
       ['js', expect.any(Date)],
-      ['config', 'G-TEST123'],
+      ['config', 'G-TEST123', { send_page_view: false }],
     ])
   })
 
@@ -127,7 +123,7 @@ describe('google analytics runtime', () => {
     trackPageView('/pricing?model=gpt')
     trackAnalyticsEvent('sign_up_click', { method: 'oauth' })
 
-    expect(dataLayerAsCommands().slice(2)).toEqual([
+    expect(window.dataLayer?.slice(2)).toEqual([
       [
         'event',
         'page_view',

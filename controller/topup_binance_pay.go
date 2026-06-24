@@ -198,7 +198,6 @@ func BinancePayWebhook(c *gin.Context) {
 		return
 	}
 
-	trackGA4TopUpSuccessWithCurrency(c, tradeNo, setting.BinancePayCurrency)
 	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Binance Pay 充值成功 trade_no=%s biz_id=%s client_ip=%s", tradeNo, event.BizIDStr, c.ClientIP()))
 	c.JSON(http.StatusOK, gin.H{"returnCode": "SUCCESS", "returnMessage": nil})
 }
