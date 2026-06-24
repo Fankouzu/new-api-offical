@@ -6,6 +6,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -66,6 +68,102 @@ func geminiRelayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewA
 	return err
 }
 
+func handleRelayPanic(c *gin.Context, info *relaycommon.RelayInfo, requestId string, recovered any) *types.NewAPIError {
+	meta := relayTraceMetaFromContext(c, info, requestId)
+
+	logger.LogError(c, fmt.Sprintf(
+		"relay panic recovered: request_id=%s path=%s model=%s upstream_model=%s user_id=%d token_id=%d channel_id=%d channel_type=%d group=%s preconsume=%s panic_type=%T panic_summary=%s stack=%s",
+		meta.requestId,
+		meta.path,
+		meta.modelName,
+		meta.upstreamModel,
+		meta.userId,
+		meta.tokenId,
+		meta.channelId,
+		meta.channelType,
+		meta.group,
+		logger.FormatQuota(meta.preConsumedQuota),
+		recovered,
+		relayPanicSummary(recovered),
+		strings.TrimSpace(strings.ReplaceAll(string(debug.Stack()), "\n", " | ")),
+	))
+
+	if info != nil && info.Billing != nil && info.Billing.NeedsRefund() {
+		info.Billing.Refund(c)
+	}
+
+	return types.NewOpenAIError(fmt.Errorf("relay panic recovered"), types.ErrorCodeBadResponse, http.StatusBadGateway, types.ErrOptionWithSkipRetry())
+}
+
+func relayPanicSummary(recovered any) string {
+	if recovered == nil {
+		return ""
+	}
+	if runtimeErr, ok := recovered.(runtime.Error); ok {
+		return runtimeErr.Error()
+	}
+	return "redacted non-runtime panic value"
+}
+
+type relayTraceMeta struct {
+	requestId        string
+	path             string
+	modelName        string
+	upstreamModel    string
+	userId           int
+	tokenId          int
+	channelId        int
+	channelType      int
+	group            string
+	preConsumedQuota int
+}
+
+func relayTraceMetaFromContext(c *gin.Context, info *relaycommon.RelayInfo, requestId string) relayTraceMeta {
+	meta := relayTraceMeta{requestId: requestId}
+	if c != nil {
+		if meta.requestId == "" {
+			meta.requestId = c.GetString(common.RequestIdKey)
+		}
+		if c.Request != nil && c.Request.URL != nil {
+			meta.path = c.Request.URL.String()
+		}
+		meta.modelName = common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
+		meta.upstreamModel = meta.modelName
+		meta.userId = common.GetContextKeyInt(c, constant.ContextKeyUserId)
+		meta.tokenId = common.GetContextKeyInt(c, constant.ContextKeyTokenId)
+		meta.channelId = common.GetContextKeyInt(c, constant.ContextKeyChannelId)
+		meta.channelType = common.GetContextKeyInt(c, constant.ContextKeyChannelType)
+		meta.group = common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+	}
+	if info != nil {
+		if info.RequestId != "" {
+			meta.requestId = info.RequestId
+		}
+		if info.RequestURLPath != "" {
+			meta.path = info.RequestURLPath
+		}
+		if info.OriginModelName != "" {
+			meta.modelName = info.OriginModelName
+		}
+		if info.UpstreamModelName != "" {
+			meta.upstreamModel = info.UpstreamModelName
+		}
+		if meta.upstreamModel == "" {
+			meta.upstreamModel = meta.modelName
+		}
+		meta.userId = info.UserId
+		meta.tokenId = info.TokenId
+		meta.channelId = info.ChannelId
+		meta.channelType = info.ChannelType
+		meta.group = info.UsingGroup
+		meta.preConsumedQuota = info.FinalPreConsumedQuota
+	}
+	if meta.upstreamModel == "" {
+		meta.upstreamModel = meta.modelName
+	}
+	return meta
+}
+
 func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	requestId := c.GetString(common.RequestIdKey)
@@ -74,6 +172,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	var (
 		newAPIError *types.NewAPIError
+		relayInfo   *relaycommon.RelayInfo
 		ws          *websocket.Conn
 	)
 
@@ -88,6 +187,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 
 	defer func() {
+		if recovered := recover(); recovered != nil {
+			newAPIError = handleRelayPanic(c, relayInfo, requestId, recovered)
+		}
 		if newAPIError != nil {
 			logger.LogError(c, fmt.Sprintf("relay error: %s", newAPIError.Error()))
 			newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
@@ -118,7 +220,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 
-	relayInfo, err := relaycommon.GenRelayInfo(c, relayFormat, request, ws)
+	relayInfo, err = relaycommon.GenRelayInfo(c, relayFormat, request, ws)
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return

@@ -204,14 +204,91 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		service.ResetStatusCode(newApiErr, statusCodeMappingStr)
 		return newApiErr
 	}
+	usageData, newApiErr := validateTextUsage(c, info, usage)
+	if newApiErr != nil {
+		service.ResetStatusCode(newApiErr, statusCodeMappingStr)
+		return newApiErr
+	}
 
-	var containAudioTokens = usage.(*dto.Usage).CompletionTokenDetails.AudioTokens > 0 || usage.(*dto.Usage).PromptTokensDetails.AudioTokens > 0
+	var containAudioTokens = usageData.CompletionTokenDetails.AudioTokens > 0 || usageData.PromptTokensDetails.AudioTokens > 0
 	var containsAudioRatios = ratio_setting.ContainsAudioRatio(info.OriginModelName) || ratio_setting.ContainsAudioCompletionRatio(info.OriginModelName)
 
 	if containAudioTokens && containsAudioRatios {
-		service.PostAudioConsumeQuota(c, info, usage.(*dto.Usage), "")
+		service.PostAudioConsumeQuota(c, info, usageData, "")
 	} else {
-		service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
+		service.PostTextConsumeQuota(c, info, usageData, nil)
 	}
 	return nil
+}
+
+func validateTextUsage(c *gin.Context, info *relaycommon.RelayInfo, usage any) (*dto.Usage, *types.NewAPIError) {
+	usageData, ok := usage.(*dto.Usage)
+	if ok && usageData != nil {
+		return usageData, nil
+	}
+	requestId := ""
+	path := ""
+	modelName := ""
+	upstreamModel := ""
+	userId := 0
+	tokenId := 0
+	channelId := 0
+	channelType := 0
+	group := ""
+	preConsumedQuota := 0
+	if c != nil {
+		requestId = c.GetString(common.RequestIdKey)
+		if c.Request != nil && c.Request.URL != nil {
+			path = c.Request.URL.String()
+		}
+		modelName = common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
+		upstreamModel = modelName
+		userId = common.GetContextKeyInt(c, constant.ContextKeyUserId)
+		tokenId = common.GetContextKeyInt(c, constant.ContextKeyTokenId)
+		channelId = common.GetContextKeyInt(c, constant.ContextKeyChannelId)
+		channelType = common.GetContextKeyInt(c, constant.ContextKeyChannelType)
+		group = common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+	}
+	if info != nil {
+		if info.RequestId != "" {
+			requestId = info.RequestId
+		}
+		if info.RequestURLPath != "" {
+			path = info.RequestURLPath
+		}
+		if info.OriginModelName != "" {
+			modelName = info.OriginModelName
+		}
+		if info.UpstreamModelName != "" {
+			upstreamModel = info.UpstreamModelName
+		}
+		if upstreamModel == "" {
+			upstreamModel = modelName
+		}
+		userId = info.UserId
+		tokenId = info.TokenId
+		channelId = info.ChannelId
+		channelType = info.ChannelType
+		group = info.UsingGroup
+		preConsumedQuota = info.FinalPreConsumedQuota
+	}
+	if upstreamModel == "" {
+		upstreamModel = modelName
+	}
+	err := fmt.Errorf("invalid text relay usage type: %T", usage)
+	logger.LogError(c, fmt.Sprintf(
+		"text relay returned invalid usage: request_id=%s path=%s model=%s upstream_model=%s user_id=%d token_id=%d channel_id=%d channel_type=%d group=%s preconsume=%s usage_type=%T",
+		requestId,
+		path,
+		modelName,
+		upstreamModel,
+		userId,
+		tokenId,
+		channelId,
+		channelType,
+		group,
+		logger.FormatQuota(preConsumedQuota),
+		usage,
+	))
+	return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway, types.ErrOptionWithSkipRetry())
 }

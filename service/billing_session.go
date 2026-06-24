@@ -190,9 +190,9 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 	if s.shouldTrust(c) {
 		s.trusted = true
 		effectiveQuota = 0
-		logger.LogInfo(c, fmt.Sprintf("用户 %d 额度充足, 信任且不需要预扣费 (funding=%s)", s.relayInfo.UserId, s.funding.Source()))
+		logger.LogInfo(c, fmt.Sprintf("用户 %d 额度充足, 信任且不需要预扣费 (funding=%s, %s)", s.relayInfo.UserId, s.funding.Source(), formatBillingTraceMeta(s.relayInfo, effectiveQuota)))
 	} else if effectiveQuota > 0 {
-		logger.LogInfo(c, fmt.Sprintf("用户 %d 需要预扣费 %s (funding=%s)", s.relayInfo.UserId, logger.FormatQuota(effectiveQuota), s.funding.Source()))
+		logger.LogInfo(c, fmt.Sprintf("用户 %d 需要预扣费 %s (funding=%s, %s)", s.relayInfo.UserId, logger.FormatQuota(effectiveQuota), s.funding.Source(), formatBillingTraceMeta(s.relayInfo, effectiveQuota)))
 	}
 
 	// ---- 1) 预扣令牌额度 ----
@@ -227,6 +227,28 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 	s.syncRelayInfo()
 
 	return nil
+}
+
+func formatBillingTraceMeta(info *relaycommon.RelayInfo, preConsumeQuota int) string {
+	if info == nil {
+		return "request_id= path= model= upstream_model= token_id=0 channel_id=0 channel_type=0 group= preconsume=＄0.000000"
+	}
+	upstreamModel := info.UpstreamModelName
+	if upstreamModel == "" {
+		upstreamModel = info.OriginModelName
+	}
+	return fmt.Sprintf(
+		"request_id=%s path=%s model=%s upstream_model=%s token_id=%d channel_id=%d channel_type=%d group=%s preconsume=%s",
+		info.RequestId,
+		info.RequestURLPath,
+		info.OriginModelName,
+		upstreamModel,
+		info.TokenId,
+		info.ChannelId,
+		info.ChannelType,
+		info.UsingGroup,
+		logger.FormatQuota(preConsumeQuota),
+	)
 }
 
 func (s *BillingSession) reserveFunding(delta int) error {
