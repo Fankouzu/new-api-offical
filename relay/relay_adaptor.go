@@ -55,13 +55,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var getAdaptor = getAdaptorDefault
-
 func GetAdaptor(apiType int) channel.Adaptor {
-	return getAdaptor(apiType)
-}
-
-func getAdaptorDefault(apiType int) channel.Adaptor {
 	switch apiType {
 	case constant.APITypeAli:
 		return &ali.Adaptor{}
