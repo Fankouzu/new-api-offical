@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -104,12 +105,12 @@ type binancePayWebhookEvent struct {
 }
 
 type binancePayWebhookData struct {
-	MerchantTradeNo string `json:"merchantTradeNo"`
-	TotalFee        string `json:"totalFee"`
-	OrderAmount     string `json:"orderAmount"`
-	Currency        string `json:"currency"`
-	TransactionID   string `json:"transactionId"`
-	OpenUserID      string `json:"openUserId"`
+	MerchantTradeNo string          `json:"merchantTradeNo"`
+	TotalFee        json.RawMessage `json:"totalFee"`
+	OrderAmount     json.RawMessage `json:"orderAmount"`
+	Currency        string          `json:"currency"`
+	TransactionID   string          `json:"transactionId"`
+	OpenUserID      string          `json:"openUserId"`
 }
 
 type binancePayCertificateResolver func(ctx context.Context, certificateSN string) (string, error)

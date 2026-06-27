@@ -96,6 +96,42 @@ func TestVerifyBinancePayWebhook(t *testing.T) {
 	require.Equal(t, "BP11700000000000ABC123", event.Data.MerchantTradeNo)
 }
 
+func TestVerifyBinancePayWebhookAcceptsNumericFee(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	publicKeyDER, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+	require.NoError(t, err)
+	publicKeyPEM := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyDER}))
+
+	timestamp := "1700000000000"
+	nonce := "nonce-123"
+	body := `{"bizType":"PAY","bizIdStr":"biz_123","bizStatus":"PAY_SUCCESS","data":"{\"merchantTradeNo\":\"BP11700000000000ABC123\",\"totalFee\":10,\"orderAmount\":10,\"currency\":\"USDT\"}"}`
+	digest := sha256.Sum256([]byte(timestamp + "\n" + nonce + "\n" + body + "\n"))
+	signatureBytes, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, digest[:])
+	require.NoError(t, err)
+
+	event, err := verifyBinancePayWebhook(
+		context.Background(),
+		body,
+		timestamp,
+		nonce,
+		base64.StdEncoding.EncodeToString(signatureBytes),
+		"cert-sn-123",
+		func(_ context.Context, certificateSN string) (string, error) {
+			require.Equal(t, "cert-sn-123", certificateSN)
+			return publicKeyPEM, nil
+		},
+		func() time.Time {
+			return time.UnixMilli(1700000000000)
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, "BP11700000000000ABC123", event.Data.MerchantTradeNo)
+	require.Equal(t, "10", string(event.Data.TotalFee))
+	require.Equal(t, "10", string(event.Data.OrderAmount))
+}
+
 func TestBinancePayCertificateResponseParsesCertificateList(t *testing.T) {
 	var result binancePayCertificateResponse
 	err := common.Unmarshal([]byte(`{
