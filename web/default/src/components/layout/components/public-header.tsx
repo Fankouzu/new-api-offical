@@ -32,11 +32,12 @@ import { NotificationDialog } from '@/components/notification-dialog'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { defaultTopNavLinks } from '../config/top-nav.config'
+import { TopNavLinkIconList } from '../lib/top-nav-link-rendering'
 import {
+  getExternalTopNavLinkProps,
   renderTopNavLinkContent,
   shouldRenderTopNavLinkAsIcon,
-  TopNavLinkIconList,
-} from '../lib/top-nav-link-rendering'
+} from '../lib/top-nav-link-utils'
 import type { TopNavLink } from '../types'
 import { HeaderLogo } from './header-logo'
 
@@ -155,15 +156,14 @@ export function PublicHeader(props: PublicHeaderProps) {
                   'text-muted-foreground hover:text-foreground rounded-lg text-[13px] font-medium transition-colors duration-200',
                   iconOnly
                     ? 'inline-flex size-8 items-center justify-center p-0'
-                    : 'px-3 py-1.5'
+                    : 'px-3 py-1.5',
+                  link.disabled && 'pointer-events-none opacity-50'
                 )
                 if (link.external) {
                   return (
                     <a
                       key={i}
-                      href={link.href}
-                      target='_blank'
-                      rel='noopener noreferrer'
+                      {...getExternalTopNavLinkProps(link)}
                       className={className}
                       aria-label={iconOnly ? label : undefined}
                     >
@@ -175,6 +175,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                   <Link
                     key={i}
                     to={link.href}
+                    disabled={link.disabled}
                     className={cn(
                       className,
                       isActive
@@ -309,20 +310,23 @@ export function PublicHeader(props: PublicHeaderProps) {
                 mobileOpen
                   ? 'translate-y-0 opacity-100'
                   : 'translate-y-4 opacity-0',
-                isActive ? 'text-foreground' : 'text-muted-foreground'
+                isActive ? 'text-foreground' : 'text-muted-foreground',
+                link.disabled && 'pointer-events-none opacity-50'
               )
               const style = {
                 transitionDelay: mobileOpen ? `${100 + i * 50}ms` : '0ms',
               }
 
               if (link.external) {
+                const externalLinkProps = getExternalTopNavLinkProps(link)
                 return (
                   <a
                     key={i}
-                    href={link.href}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    onClick={() => setMobileOpen(false)}
+                    {...externalLinkProps}
+                    onClick={(event) => {
+                      externalLinkProps.onClick?.(event)
+                      if (!link.disabled) setMobileOpen(false)
+                    }}
                     className={className}
                     style={style}
                   >
@@ -335,7 +339,10 @@ export function PublicHeader(props: PublicHeaderProps) {
                 <Link
                   key={i}
                   to={link.href}
-                  onClick={() => setMobileOpen(false)}
+                  disabled={link.disabled}
+                  onClick={() => {
+                    if (!link.disabled) setMobileOpen(false)
+                  }}
                   className={className}
                   style={style}
                 >

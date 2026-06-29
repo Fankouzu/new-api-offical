@@ -19,9 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 import { Link } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import {
+  getExternalTopNavLinkProps,
   renderTopNavLinkContent,
   shouldRenderTopNavLinkAsIcon,
-} from '../lib/top-nav-link-rendering'
+} from '../lib/top-nav-link-utils'
 import type { TopNavLink } from '../types'
 
 interface NavLinkItemProps {
@@ -45,11 +46,8 @@ export function NavLinkItem({ link, className }: NavLinkItemProps) {
   if (link.external) {
     return (
       <a
-        href={link.href}
-        target='_blank'
-        rel='noopener noreferrer'
+        {...getExternalTopNavLinkProps(link)}
         className={linkClassName}
-        aria-disabled={link.disabled}
         aria-label={iconOnly ? link.title : undefined}
       >
         {renderTopNavLinkContent(link, link.title, { iconOnly })}

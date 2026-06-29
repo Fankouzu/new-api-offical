@@ -21,9 +21,10 @@ import { cn } from '@/lib/utils'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
 import { defaultTopNavLinks } from '../config/top-nav.config'
 import {
+  getExternalTopNavLinkProps,
   renderTopNavLinkContent,
   shouldRenderTopNavLinkAsIcon,
-} from '../lib/top-nav-link-rendering'
+} from '../lib/top-nav-link-utils'
 import type { TopNavLink } from '../types'
 
 interface PublicNavigationProps {
@@ -65,9 +66,7 @@ export function PublicNavigation({
           return (
             <a
               key={index}
-              href={link.href}
-              target='_blank'
-              rel='noopener noreferrer'
+              {...getExternalTopNavLinkProps(link)}
               className={className}
               aria-label={iconOnly ? link.title : undefined}
             >
@@ -81,6 +80,7 @@ export function PublicNavigation({
             key={index}
             to={link.href}
             className={className}
+            disabled={link.disabled}
             aria-label={iconOnly ? link.title : undefined}
           >
             {renderTopNavLinkContent(link, link.title, { iconOnly })}

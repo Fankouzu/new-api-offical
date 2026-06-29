@@ -29,9 +29,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
+  getExternalTopNavLinkProps,
   renderTopNavLinkContent,
   shouldRenderTopNavLinkAsIcon,
-} from '../lib/top-nav-link-rendering'
+} from '../lib/top-nav-link-utils'
 import { type TopNavLink } from '../types'
 
 type TopNavProps = React.HTMLAttributes<HTMLElement> & {
@@ -92,10 +93,11 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
                       render={
                         external ? (
                           <a
-                            href={href}
-                            target='_blank'
-                            rel='noopener noreferrer'
-                            className={!isActive ? 'text-muted-foreground' : ''}
+                            {...getExternalTopNavLinkProps(dropdownLink)}
+                            className={cn(
+                              !isActive ? 'text-muted-foreground' : '',
+                              disabled && 'pointer-events-none opacity-50'
+                            )}
                           >
                             {renderTopNavLinkContent(dropdownLink, title, {
                               showIconWithText: true,
@@ -136,15 +138,14 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
           const className = cn(
             'hover:text-primary text-sm font-medium transition-colors',
             iconOnly && 'inline-flex size-8 items-center justify-center',
+            disabled && 'pointer-events-none opacity-50',
             isActive ? '' : 'text-muted-foreground'
           )
 
           return external ? (
             <a
               key={`${title}-${href}`}
-              href={href}
-              target='_blank'
-              rel='noopener noreferrer'
+              {...getExternalTopNavLinkProps(link)}
               className={className}
               aria-label={iconOnly ? title : undefined}
             >

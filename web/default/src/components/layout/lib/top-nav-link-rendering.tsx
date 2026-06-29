@@ -16,55 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type ComponentType, type SVGProps } from 'react'
 import { Link } from '@tanstack/react-router'
-import { IconTelegram } from '@/assets/brand-icons'
 import { cn } from '@/lib/utils'
 import type { TopNavLink } from '../types'
-
-type NavLinkIcon = ComponentType<SVGProps<SVGSVGElement>>
-
-const TOP_NAV_LINK_ICONS: Record<string, NavLinkIcon> = {
-  telegram: IconTelegram,
-}
-
-export function getTopNavLinkIcon(link: TopNavLink): NavLinkIcon | null {
-  if (!link.icon) return null
-
-  return TOP_NAV_LINK_ICONS[link.icon.trim().toLowerCase()] ?? null
-}
-
-export function shouldRenderTopNavLinkAsIcon(link: TopNavLink): boolean {
-  return link.display === 'icon' && getTopNavLinkIcon(link) !== null
-}
-
-export function renderTopNavLinkContent(
-  link: TopNavLink,
-  label: string,
-  options: { iconOnly?: boolean; showIconWithText?: boolean } = {}
-) {
-  const Icon = getTopNavLinkIcon(link)
-
-  if (options.iconOnly && Icon) {
-    return (
-      <>
-        <Icon aria-hidden='true' />
-        <span className='sr-only'>{label}</span>
-      </>
-    )
-  }
-
-  if (options.showIconWithText && Icon) {
-    return (
-      <>
-        <Icon aria-hidden='true' />
-        <span>{label}</span>
-      </>
-    )
-  }
-
-  return label
-}
+import {
+  getExternalTopNavLinkProps,
+  renderTopNavLinkContent,
+  shouldRenderTopNavLinkAsIcon,
+} from './top-nav-link-utils'
 
 export function TopNavLinkIconList({
   links,
@@ -83,7 +42,10 @@ export function TopNavLinkIconList({
         const label = getLabel(link)
         const iconOnly = shouldRenderTopNavLinkAsIcon(link)
         const linkClassName = cn(
-          'text-muted-foreground hover:text-foreground inline-flex size-9 items-center justify-center rounded-md transition-colors',
+          'text-muted-foreground hover:text-foreground inline-flex items-center justify-center rounded-md transition-colors',
+          iconOnly
+            ? 'size-9'
+            : 'h-9 whitespace-nowrap px-3 text-sm font-medium',
           link.disabled && 'pointer-events-none opacity-50',
           className
         )
@@ -92,12 +54,9 @@ export function TopNavLinkIconList({
           return (
             <a
               key={`${link.title}-${link.href}`}
-              href={link.href}
-              target='_blank'
-              rel='noopener noreferrer'
+              {...getExternalTopNavLinkProps(link)}
               className={linkClassName}
-              aria-label={label}
-              aria-disabled={link.disabled}
+              aria-label={iconOnly ? label : undefined}
             >
               {renderTopNavLinkContent(link, label, { iconOnly })}
             </a>
@@ -110,7 +69,7 @@ export function TopNavLinkIconList({
             to={link.href}
             className={linkClassName}
             disabled={link.disabled}
-            aria-label={label}
+            aria-label={iconOnly ? label : undefined}
           >
             {renderTopNavLinkContent(link, label, { iconOnly })}
           </Link>

@@ -21,6 +21,7 @@ import { X, User, Wallet, LogOut } from 'lucide-react'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import type { AuthUser } from '@/stores/auth-store'
+import { cn } from '@/lib/utils'
 import useDialogState from '@/hooks/use-dialog'
 import { useUserDisplay } from '@/hooks/use-user-display'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -28,7 +29,10 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SignOutDialog } from '@/components/sign-out-dialog'
 import { MOBILE_DRAWER_ANIMATION, MOBILE_DRAWER_CONFIG } from '../constants'
-import { renderTopNavLinkContent } from '../lib/top-nav-link-rendering'
+import {
+  getExternalTopNavLinkProps,
+  renderTopNavLinkContent,
+} from '../lib/top-nav-link-utils'
 import type { TopNavLink } from '../types'
 
 /**
@@ -261,8 +265,11 @@ export function MobileDrawer({
                 ) : (
                   <AnimatePresence>
                     {mobileLinksList.map((link, index) => {
-                      const className =
-                        'text-primary/60 hover:text-primary/80 inline-flex items-center gap-1.5 transition-colors'
+                      const className = cn(
+                        'text-primary/60 hover:text-primary/80 inline-flex items-center gap-1.5 transition-colors',
+                        link.disabled && 'pointer-events-none opacity-50'
+                      )
+                      const externalLinkProps = getExternalTopNavLinkProps(link)
                       return (
                         <motion.div
                           key={`${link.href}-${index}`}
@@ -273,11 +280,12 @@ export function MobileDrawer({
                         >
                           {link.external ? (
                             <a
-                              href={link.href}
-                              target='_blank'
-                              rel='noopener noreferrer'
+                              {...externalLinkProps}
                               className={className}
-                              onClick={onClose}
+                              onClick={(event) => {
+                                externalLinkProps.onClick?.(event)
+                                if (!link.disabled) onClose()
+                              }}
                             >
                               {renderTopNavLinkContent(link, link.title, {
                                 showIconWithText: true,
@@ -286,8 +294,11 @@ export function MobileDrawer({
                           ) : (
                             <Link
                               to={link.href}
+                              disabled={link.disabled}
                               className={className}
-                              onClick={onClose}
+                              onClick={() => {
+                                if (!link.disabled) onClose()
+                              }}
                             >
                               {renderTopNavLinkContent(link, link.title, {
                                 showIconWithText: true,
