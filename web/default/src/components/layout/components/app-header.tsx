@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useNotifications } from '@/hooks/use-notifications'
-import { useTopNavLinks } from '@/hooks/use-top-nav-links'
+import { useTopNavLinkSlots } from '@/hooks/use-top-nav-links'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { NotificationButton } from '@/components/notification-button'
@@ -25,6 +25,7 @@ import { NotificationDialog } from '@/components/notification-dialog'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { defaultTopNavLinks } from '../config/top-nav.config'
+import { TopNavLinkIconList } from '../lib/top-nav-link-rendering'
 import { type TopNavLink } from '../types'
 import { Header } from './header'
 import { SystemBrand } from './system-brand'
@@ -104,8 +105,9 @@ export function AppHeader({
   showProfileDropdown = true,
 }: AppHeaderProps) {
   // Prioritize dynamically generated links from backend
-  const dynamicLinks = useTopNavLinks()
-  const links = dynamicLinks.length > 0 ? dynamicLinks : navLinks
+  const dynamicLinkSlots = useTopNavLinkSlots()
+  const links =
+    dynamicLinkSlots.primary.length > 0 ? dynamicLinkSlots.primary : navLinks
 
   // Notifications hook
   const notifications = useNotifications()
@@ -126,15 +128,23 @@ export function AppHeader({
                 <TopNav links={links} />
               </div>
             )}
+            <TopNavLinkIconList links={dynamicLinkSlots.before_search} />
             {showSearch && <Search />}
+            <TopNavLinkIconList links={dynamicLinkSlots.after_search} />
+            <TopNavLinkIconList links={dynamicLinkSlots.before_notifications} />
             {showNotifications && (
               <NotificationButton
                 unreadCount={notifications.unreadCount}
                 onClick={() => notifications.openDialog()}
               />
             )}
+            <TopNavLinkIconList links={dynamicLinkSlots.after_notifications} />
+            <TopNavLinkIconList links={dynamicLinkSlots.before_language} />
             <LanguageSwitcher />
+            <TopNavLinkIconList links={dynamicLinkSlots.after_language} />
+            <TopNavLinkIconList links={dynamicLinkSlots.before_theme} />
             {showConfigDrawer && <ConfigDrawer />}
+            <TopNavLinkIconList links={dynamicLinkSlots.after_theme} />
             {showProfileDropdown && <ProfileDropdown />}
           </div>
         )}

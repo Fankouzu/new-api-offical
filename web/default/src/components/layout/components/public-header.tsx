@@ -23,7 +23,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
 import { useNotifications } from '@/hooks/use-notifications'
 import { useSystemConfig } from '@/hooks/use-system-config'
-import { useTopNavLinks } from '@/hooks/use-top-nav-links'
+import { useTopNavLinkSlots } from '@/hooks/use-top-nav-links'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LanguageSwitcher } from '@/components/language-switcher'
@@ -35,6 +35,7 @@ import { defaultTopNavLinks } from '../config/top-nav.config'
 import {
   renderTopNavLinkContent,
   shouldRenderTopNavLinkAsIcon,
+  TopNavLinkIconList,
 } from '../lib/top-nav-link-rendering'
 import type { TopNavLink } from '../types'
 import { HeaderLogo } from './header-logo'
@@ -78,7 +79,7 @@ export function PublicHeader(props: PublicHeaderProps) {
     loading,
     logoLoaded,
   } = useSystemConfig()
-  const dynamicLinks = useTopNavLinks()
+  const dynamicLinkSlots = useTopNavLinkSlots()
   const notifications = useNotifications()
   const routerState = useRouterState()
   const pathname = routerState.location.pathname
@@ -86,7 +87,8 @@ export function PublicHeader(props: PublicHeaderProps) {
   const user = auth.user
   const isAuthenticated = !!user
   const displaySiteName = customSiteName || systemName
-  const links = dynamicLinks.length > 0 ? dynamicLinks : navLinks
+  const links =
+    dynamicLinkSlots.primary.length > 0 ? dynamicLinkSlots.primary : navLinks
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -192,14 +194,38 @@ export function PublicHeader(props: PublicHeaderProps) {
                 <div className='bg-border/40 mx-2 h-4 w-px' />
               )}
 
+              <TopNavLinkIconList
+                links={dynamicLinkSlots.before_language}
+                getLabel={(link) => t(link.title)}
+              />
               {showLanguageSwitcher && <LanguageSwitcher />}
+              <TopNavLinkIconList
+                links={dynamicLinkSlots.after_language}
+                getLabel={(link) => t(link.title)}
+              />
+              <TopNavLinkIconList
+                links={dynamicLinkSlots.before_theme}
+                getLabel={(link) => t(link.title)}
+              />
               {showThemeSwitch && <ThemeSwitch />}
+              <TopNavLinkIconList
+                links={dynamicLinkSlots.after_theme}
+                getLabel={(link) => t(link.title)}
+              />
+              <TopNavLinkIconList
+                links={dynamicLinkSlots.before_notifications}
+                getLabel={(link) => t(link.title)}
+              />
               {showNotifications && (
                 <NotificationButton
                   unreadCount={notifications.unreadCount}
                   onClick={() => notifications.openDialog()}
                 />
               )}
+              <TopNavLinkIconList
+                links={dynamicLinkSlots.after_notifications}
+                getLabel={(link) => t(link.title)}
+              />
 
               {showAuthButtons && (
                 <>

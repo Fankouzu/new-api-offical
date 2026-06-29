@@ -27,6 +27,14 @@ export type HeaderNavCustomLinkPosition =
   | 'after_rankings'
   | 'after_docs'
   | 'end'
+  | 'before_search'
+  | 'after_search'
+  | 'before_notifications'
+  | 'after_notifications'
+  | 'before_theme'
+  | 'after_theme'
+  | 'before_language'
+  | 'after_language'
 
 export type HeaderNavCustomLinkDisplay = 'text' | 'icon'
 
@@ -123,6 +131,14 @@ const HEADER_NAV_CUSTOM_LINK_POSITIONS = new Set<HeaderNavCustomLinkPosition>([
   'after_rankings',
   'after_docs',
   'end',
+  'before_search',
+  'after_search',
+  'before_notifications',
+  'after_notifications',
+  'before_theme',
+  'after_theme',
+  'before_language',
+  'after_language',
 ])
 
 const HEADER_NAV_CUSTOM_LINK_DISPLAYS = new Set<HeaderNavCustomLinkDisplay>([

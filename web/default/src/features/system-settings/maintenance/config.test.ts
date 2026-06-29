@@ -67,6 +67,24 @@ test('parseHeaderNavModules filters custom links without safe absolute or local 
   )
 })
 
+test('parseHeaderNavModules accepts utility custom link positions', () => {
+  const config = parseHeaderNavModules(
+    JSON.stringify({
+      customLinks: [
+        {
+          id: 'telegram',
+          title: 'Telegram',
+          href: 'https://t.me/example_channel',
+          enabled: true,
+          position: 'before_search',
+        },
+      ],
+    })
+  )
+
+  assert.equal(config.customLinks[0]?.position, 'before_search')
+})
+
 test('serializeHeaderNavModules preserves custom links', () => {
   const serialized = serializeHeaderNavModules({
     home: true,

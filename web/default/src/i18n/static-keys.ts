@@ -31,6 +31,14 @@ export const STATIC_I18N_KEYS = [
   'After Rankings',
   'After Docs',
   'After About',
+  'Before Search',
+  'After Search',
+  'Before Notifications',
+  'After Notifications',
+  'Before Theme',
+  'After Theme',
+  'Before Language',
+  'After Language',
 
   // Workspace
   'System Settings',

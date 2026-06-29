@@ -36,6 +36,29 @@ export type TopNavLink = {
   icon?: string
 }
 
+export type TopNavLinkSlots = {
+  primary: TopNavLink[]
+  before_search: TopNavLink[]
+  after_search: TopNavLink[]
+  before_notifications: TopNavLink[]
+  after_notifications: TopNavLink[]
+  before_theme: TopNavLink[]
+  after_theme: TopNavLink[]
+  before_language: TopNavLink[]
+  after_language: TopNavLink[]
+}
+
+const HEADER_NAV_UTILITY_CUSTOM_LINK_POSITIONS = [
+  'before_search',
+  'after_search',
+  'before_notifications',
+  'after_notifications',
+  'before_theme',
+  'after_theme',
+  'before_language',
+  'after_language',
+] as const
+
 /**
  * Generate top navigation links based on HeaderNavModules configuration from backend /api/status
  * Backend format example (stringified JSON):
@@ -71,6 +94,34 @@ function appendCustomLinks(
   customLinks
     .filter((link) => link.enabled && link.position === position)
     .forEach((link) => links.push(customLinkToTopNavLink(link, isAuthed)))
+}
+
+function createEmptyTopNavLinkSlots(): TopNavLinkSlots {
+  return {
+    primary: [],
+    before_search: [],
+    after_search: [],
+    before_notifications: [],
+    after_notifications: [],
+    before_theme: [],
+    after_theme: [],
+    before_language: [],
+    after_language: [],
+  }
+}
+
+function addUtilityCustomLinks(
+  slots: TopNavLinkSlots,
+  customLinks: HeaderNavCustomLinkConfig[],
+  isAuthed: boolean
+) {
+  HEADER_NAV_UTILITY_CUSTOM_LINK_POSITIONS.forEach((position) => {
+    customLinks
+      .filter((link) => link.enabled && link.position === position)
+      .forEach((link) =>
+        slots[position].push(customLinkToTopNavLink(link, isAuthed))
+      )
+  })
 }
 
 export function buildTopNavLinks({
@@ -132,20 +183,53 @@ export function buildTopNavLinks({
   return links
 }
 
-export function useTopNavLinks(): TopNavLink[] {
+export function buildTopNavLinkSlots({
+  modules,
+  docsLink,
+  isAuthed,
+  t,
+}: {
+  modules: HeaderNavModulesConfig
+  docsLink?: string | null
+  isAuthed: boolean
+  t: (key: string) => string
+}): TopNavLinkSlots {
+  const slots = createEmptyTopNavLinkSlots()
+
+  slots.primary = buildTopNavLinks({
+    modules,
+    docsLink,
+    isAuthed,
+    t,
+  })
+  addUtilityCustomLinks(slots, modules.customLinks, isAuthed)
+
+  return slots
+}
+
+function useHeaderNavContext() {
   const { t } = useTranslation()
   const { status } = useStatus()
   const { auth } = useAuthStore()
 
-  // Parse HeaderNavModules
   const modules = useMemo(() => {
     return parseHeaderNavModules(status?.HeaderNavModules as string | undefined)
   }, [status?.HeaderNavModules])
 
-  // Documentation link (may be external)
   const docsLink: string | undefined = status?.docs_link as string | undefined
-
   const isAuthed = !!auth?.user
 
+  return { modules, docsLink, isAuthed, t }
+}
+
+export function useTopNavLinks(): TopNavLink[] {
+  const { modules, docsLink, isAuthed, t } = useHeaderNavContext()
+
   return buildTopNavLinks({ modules, docsLink, isAuthed, t })
+}
+
+export function useTopNavLinkSlots(): TopNavLinkSlots {
+  const { modules, docsLink, isAuthed, t } = useHeaderNavContext()
+
+  return buildTopNavLinkSlots({ modules, docsLink, isAuthed, t })
 }
