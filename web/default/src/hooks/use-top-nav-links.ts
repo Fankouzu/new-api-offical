@@ -20,75 +20,17 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { useStatus } from '@/hooks/use-status'
+import {
+  parseHeaderNavModules,
+  type HeaderNavCustomLinkConfig,
+  type HeaderNavCustomLinkPosition,
+} from '@/features/system-settings/maintenance/config'
 
 export type TopNavLink = {
   title: string
   href: string
   disabled?: boolean
   external?: boolean
-}
-
-// Default navigation configuration
-const DEFAULT_HEADER_NAV_MODULES = {
-  home: true,
-  console: true,
-  pricing: { enabled: true, requireAuth: false },
-  rankings: { enabled: true, requireAuth: false },
-  docs: true,
-  about: true,
-}
-
-function parseAccessModule(
-  raw: unknown,
-  fallback: { enabled: boolean; requireAuth: boolean }
-) {
-  if (
-    typeof raw === 'boolean' ||
-    typeof raw === 'string' ||
-    typeof raw === 'number'
-  ) {
-    return {
-      enabled: raw === true || raw === 'true' || raw === '1' || raw === 1,
-      requireAuth: fallback.requireAuth,
-    }
-  }
-  if (raw && typeof raw === 'object') {
-    const record = raw as Record<string, unknown>
-    return {
-      enabled:
-        typeof record.enabled === 'boolean' ? record.enabled : fallback.enabled,
-      requireAuth:
-        typeof record.requireAuth === 'boolean'
-          ? record.requireAuth
-          : fallback.requireAuth,
-    }
-  }
-  return { ...fallback }
-}
-
-function parseHeaderNavModules(
-  raw: unknown
-): typeof DEFAULT_HEADER_NAV_MODULES {
-  if (!raw || String(raw).trim() === '') {
-    return DEFAULT_HEADER_NAV_MODULES
-  }
-  try {
-    const parsed = JSON.parse(String(raw)) as Record<string, unknown>
-    return {
-      ...DEFAULT_HEADER_NAV_MODULES,
-      ...parsed,
-      pricing: parseAccessModule(
-        parsed.pricing,
-        DEFAULT_HEADER_NAV_MODULES.pricing
-      ),
-      rankings: parseAccessModule(
-        parsed.rankings,
-        DEFAULT_HEADER_NAV_MODULES.rankings
-      ),
-    }
-  } catch {
-    return DEFAULT_HEADER_NAV_MODULES
-  }
 }
 
 /**
@@ -103,6 +45,29 @@ function parseHeaderNavModules(
  *   about: true
  * }
  */
+function customLinkToTopNavLink(
+  link: HeaderNavCustomLinkConfig,
+  isAuthed: boolean
+): TopNavLink {
+  return {
+    title: link.title,
+    href: link.href,
+    disabled: link.requireAuth && !isAuthed,
+    external: link.external,
+  }
+}
+
+function appendCustomLinks(
+  links: TopNavLink[],
+  customLinks: HeaderNavCustomLinkConfig[],
+  position: HeaderNavCustomLinkPosition,
+  isAuthed: boolean
+) {
+  customLinks
+    .filter((link) => link.enabled && link.position === position)
+    .forEach((link) => links.push(customLinkToTopNavLink(link, isAuthed)))
+}
+
 export function useTopNavLinks(): TopNavLink[] {
   const { t } = useTranslation()
   const { status } = useStatus()
@@ -110,7 +75,7 @@ export function useTopNavLinks(): TopNavLink[] {
 
   // Parse HeaderNavModules
   const modules = useMemo(() => {
-    return parseHeaderNavModules(status?.HeaderNavModules)
+    return parseHeaderNavModules(status?.HeaderNavModules as string | undefined)
   }, [status?.HeaderNavModules])
 
   // Documentation link (may be external)
@@ -129,6 +94,7 @@ export function useTopNavLinks(): TopNavLink[] {
   if (modules?.console !== false) {
     links.push({ title: t('Console'), href: '/dashboard' })
   }
+  appendCustomLinks(links, modules.customLinks, 'after_console', isAuthed)
 
   // Pricing
   const pricing = modules?.pricing
@@ -136,6 +102,7 @@ export function useTopNavLinks(): TopNavLink[] {
     const disabled = pricing.requireAuth && !isAuthed
     links.push({ title: t('Model Square'), href: '/pricing', disabled })
   }
+  appendCustomLinks(links, modules.customLinks, 'after_pricing', isAuthed)
 
   // Rankings
   const rankings = modules?.rankings
@@ -143,6 +110,7 @@ export function useTopNavLinks(): TopNavLink[] {
     const disabled = rankings.requireAuth && !isAuthed
     links.push({ title: t('Rankings'), href: '/rankings', disabled })
   }
+  appendCustomLinks(links, modules.customLinks, 'after_rankings', isAuthed)
 
   // Docs (supports external links)
   if (modules?.docs !== false) {
@@ -152,11 +120,13 @@ export function useTopNavLinks(): TopNavLink[] {
       links.push({ title: t('Docs'), href: '/docs' })
     }
   }
+  appendCustomLinks(links, modules.customLinks, 'after_docs', isAuthed)
 
   // About
   if (modules?.about !== false) {
     links.push({ title: t('About'), href: '/about' })
   }
+  appendCustomLinks(links, modules.customLinks, 'end', isAuthed)
 
   return links
 }

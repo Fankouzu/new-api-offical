@@ -26,6 +26,11 @@ export const STATIC_I18N_KEYS = [
   'Rankings',
   'Docs',
   'About',
+  'After Console',
+  'After Model Square',
+  'After Rankings',
+  'After Docs',
+  'At end',
 
   // Workspace
   'System Settings',

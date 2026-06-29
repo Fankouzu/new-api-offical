@@ -21,6 +21,24 @@ export type HeaderNavAccessConfig = {
   requireAuth: boolean
 }
 
+export type HeaderNavCustomLinkPosition =
+  | 'after_console'
+  | 'after_pricing'
+  | 'after_rankings'
+  | 'after_docs'
+  | 'end'
+
+export type HeaderNavCustomLinkConfig = {
+  id: string
+  title: string
+  href: string
+  enabled: boolean
+  external: boolean
+  requireAuth: boolean
+  position: HeaderNavCustomLinkPosition
+  icon?: string
+}
+
 export type HeaderNavModulesConfig = {
   home: boolean
   console: boolean
@@ -28,7 +46,11 @@ export type HeaderNavModulesConfig = {
   rankings: HeaderNavAccessConfig
   docs: boolean
   about: boolean
-  [key: string]: boolean | HeaderNavAccessConfig
+  customLinks: HeaderNavCustomLinkConfig[]
+  [key: string]:
+    | boolean
+    | HeaderNavAccessConfig
+    | HeaderNavCustomLinkConfig[]
 }
 
 export type SidebarSectionConfig = {
@@ -51,6 +73,7 @@ export const HEADER_NAV_DEFAULT: HeaderNavModulesConfig = {
   },
   docs: true,
   about: true,
+  customLinks: [],
 }
 
 export const SIDEBAR_MODULES_DEFAULT: SidebarModulesAdminConfig = {
@@ -94,11 +117,31 @@ const toBoolean = (value: unknown, fallback: boolean): boolean => {
   return fallback
 }
 
+const HEADER_NAV_CUSTOM_LINK_POSITIONS = new Set<HeaderNavCustomLinkPosition>([
+  'after_console',
+  'after_pricing',
+  'after_rankings',
+  'after_docs',
+  'end',
+])
+
 const cloneHeaderNavDefault = (): HeaderNavModulesConfig => ({
   ...HEADER_NAV_DEFAULT,
   pricing: { ...HEADER_NAV_DEFAULT.pricing },
   rankings: { ...HEADER_NAV_DEFAULT.rankings },
+  customLinks: [],
 })
+
+const isSafeHeaderNavUrl = (href: string): boolean => {
+  if (href.startsWith('/')) return !href.startsWith('//')
+
+  try {
+    const url = new URL(href)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 
 const parseAccessModule = (
   raw: unknown,
@@ -122,6 +165,58 @@ const parseAccessModule = (
     }
   }
   return { ...fallback }
+}
+
+const normalizeCustomLinkPosition = (
+  value: unknown
+): HeaderNavCustomLinkPosition => {
+  if (
+    typeof value === 'string' &&
+    HEADER_NAV_CUSTOM_LINK_POSITIONS.has(value as HeaderNavCustomLinkPosition)
+  ) {
+    return value as HeaderNavCustomLinkPosition
+  }
+  return 'end'
+}
+
+const normalizeCustomLink = (
+  raw: unknown,
+  index: number
+): HeaderNavCustomLinkConfig | null => {
+  if (!raw || typeof raw !== 'object') return null
+
+  const record = raw as Record<string, unknown>
+  const title = typeof record.title === 'string' ? record.title.trim() : ''
+  const href = typeof record.href === 'string' ? record.href.trim() : ''
+
+  if (!title || !href || !isSafeHeaderNavUrl(href)) return null
+
+  const id =
+    typeof record.id === 'string' && record.id.trim()
+      ? record.id.trim()
+      : `custom-link-${index + 1}`
+
+  return {
+    id,
+    title,
+    href,
+    enabled: toBoolean(record.enabled, true),
+    external: toBoolean(record.external, !href.startsWith('/')),
+    requireAuth: toBoolean(record.requireAuth, false),
+    position: normalizeCustomLinkPosition(record.position),
+    icon:
+      typeof record.icon === 'string'
+        ? record.icon.trim() || undefined
+        : undefined,
+  }
+}
+
+const parseCustomLinks = (raw: unknown): HeaderNavCustomLinkConfig[] => {
+  if (!Array.isArray(raw)) return []
+
+  return raw
+    .map((item, index) => normalizeCustomLink(item, index))
+    .filter((item): item is HeaderNavCustomLinkConfig => item !== null)
 }
 
 const cloneSidebarDefault = (): SidebarModulesAdminConfig =>
@@ -155,6 +250,10 @@ export function parseHeaderNavModules(
       }
       if (key === 'rankings') {
         result.rankings = parseAccessModule(raw, base.rankings)
+        return
+      }
+      if (key === 'customLinks') {
+        result.customLinks = parseCustomLinks(raw)
         return
       }
 
