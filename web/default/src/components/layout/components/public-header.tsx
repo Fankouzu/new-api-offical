@@ -23,7 +23,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
 import { useNotifications } from '@/hooks/use-notifications'
 import { useSystemConfig } from '@/hooks/use-system-config'
-import { useTopNavLinks } from '@/hooks/use-top-nav-links'
+import { useTopNavLinkSlots } from '@/hooks/use-top-nav-links'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LanguageSwitcher } from '@/components/language-switcher'
@@ -32,6 +32,12 @@ import { NotificationDialog } from '@/components/notification-dialog'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { defaultTopNavLinks } from '../config/top-nav.config'
+import { TopNavLinkIconList } from '../lib/top-nav-link-rendering'
+import {
+  getExternalTopNavLinkProps,
+  renderTopNavLinkContent,
+  shouldRenderTopNavLinkAsIcon,
+} from '../lib/top-nav-link-utils'
 import type { TopNavLink } from '../types'
 import { HeaderLogo } from './header-logo'
 
@@ -74,7 +80,7 @@ export function PublicHeader(props: PublicHeaderProps) {
     loading,
     logoLoaded,
   } = useSystemConfig()
-  const dynamicLinks = useTopNavLinks()
+  const dynamicLinkSlots = useTopNavLinkSlots()
   const notifications = useNotifications()
   const routerState = useRouterState()
   const pathname = routerState.location.pathname
@@ -82,7 +88,8 @@ export function PublicHeader(props: PublicHeaderProps) {
   const user = auth.user
   const isAuthenticated = !!user
   const displaySiteName = customSiteName || systemName
-  const links = dynamicLinks.length > 0 ? dynamicLinks : navLinks
+  const links =
+    dynamicLinkSlots.primary.length > 0 ? dynamicLinkSlots.primary : navLinks
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -143,16 +150,24 @@ export function PublicHeader(props: PublicHeaderProps) {
             <div className='hidden items-center gap-0.5 sm:flex'>
               {links.map((link, i) => {
                 const isActive = pathname === link.href
+                const iconOnly = shouldRenderTopNavLinkAsIcon(link)
+                const label = t(link.title)
+                const className = cn(
+                  'text-muted-foreground hover:text-foreground rounded-lg text-[13px] font-medium transition-colors duration-200',
+                  iconOnly
+                    ? 'inline-flex size-8 items-center justify-center p-0'
+                    : 'px-3 py-1.5',
+                  link.disabled && 'pointer-events-none opacity-50'
+                )
                 if (link.external) {
                   return (
                     <a
                       key={i}
-                      href={link.href}
-                      target='_blank'
-                      rel='noopener noreferrer'
-                      className='text-muted-foreground hover:text-foreground rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-200'
+                      {...getExternalTopNavLinkProps(link)}
+                      className={className}
+                      aria-label={iconOnly ? label : undefined}
                     >
-                      {t(link.title)}
+                      {renderTopNavLinkContent(link, label, { iconOnly })}
                     </a>
                   )
                 }
@@ -160,14 +175,16 @@ export function PublicHeader(props: PublicHeaderProps) {
                   <Link
                     key={i}
                     to={link.href}
+                    disabled={link.disabled}
                     className={cn(
-                      'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-200',
+                      className,
                       isActive
                         ? 'text-foreground'
                         : 'text-muted-foreground hover:text-foreground'
                     )}
+                    aria-label={iconOnly ? label : undefined}
                   >
-                    {t(link.title)}
+                    {renderTopNavLinkContent(link, label, { iconOnly })}
                   </Link>
                 )
               })}
@@ -178,14 +195,38 @@ export function PublicHeader(props: PublicHeaderProps) {
                 <div className='bg-border/40 mx-2 h-4 w-px' />
               )}
 
+              <TopNavLinkIconList
+                links={dynamicLinkSlots.before_language}
+                getLabel={(link) => t(link.title)}
+              />
               {showLanguageSwitcher && <LanguageSwitcher />}
+              <TopNavLinkIconList
+                links={dynamicLinkSlots.after_language}
+                getLabel={(link) => t(link.title)}
+              />
+              <TopNavLinkIconList
+                links={dynamicLinkSlots.before_theme}
+                getLabel={(link) => t(link.title)}
+              />
               {showThemeSwitch && <ThemeSwitch />}
+              <TopNavLinkIconList
+                links={dynamicLinkSlots.after_theme}
+                getLabel={(link) => t(link.title)}
+              />
+              <TopNavLinkIconList
+                links={dynamicLinkSlots.before_notifications}
+                getLabel={(link) => t(link.title)}
+              />
               {showNotifications && (
                 <NotificationButton
                   unreadCount={notifications.unreadCount}
                   onClick={() => notifications.openDialog()}
                 />
               )}
+              <TopNavLinkIconList
+                links={dynamicLinkSlots.after_notifications}
+                getLabel={(link) => t(link.title)}
+              />
 
               {showAuthButtons && (
                 <>
@@ -260,23 +301,52 @@ export function PublicHeader(props: PublicHeaderProps) {
           <nav className='flex flex-col gap-1'>
             {links.map((link, i) => {
               const isActive = pathname === link.href
+              const label = t(link.title)
+              const content = renderTopNavLinkContent(link, label, {
+                showIconWithText: true,
+              })
+              const className = cn(
+                'flex items-center gap-3 py-3 text-base font-medium tracking-tight transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]',
+                mobileOpen
+                  ? 'translate-y-0 opacity-100'
+                  : 'translate-y-4 opacity-0',
+                isActive ? 'text-foreground' : 'text-muted-foreground',
+                link.disabled && 'pointer-events-none opacity-50'
+              )
+              const style = {
+                transitionDelay: mobileOpen ? `${100 + i * 50}ms` : '0ms',
+              }
+
+              if (link.external) {
+                const externalLinkProps = getExternalTopNavLinkProps(link)
+                return (
+                  <a
+                    key={i}
+                    {...externalLinkProps}
+                    onClick={(event) => {
+                      externalLinkProps.onClick?.(event)
+                      if (!link.disabled) setMobileOpen(false)
+                    }}
+                    className={className}
+                    style={style}
+                  >
+                    {content}
+                  </a>
+                )
+              }
+
               return (
                 <Link
                   key={i}
                   to={link.href}
-                  onClick={() => setMobileOpen(false)}
-                  className={cn(
-                    'flex items-center gap-3 py-3 text-base font-medium tracking-tight transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]',
-                    mobileOpen
-                      ? 'translate-y-0 opacity-100'
-                      : 'translate-y-4 opacity-0',
-                    isActive ? 'text-foreground' : 'text-muted-foreground'
-                  )}
-                  style={{
-                    transitionDelay: mobileOpen ? `${100 + i * 50}ms` : '0ms',
+                  disabled={link.disabled}
+                  onClick={() => {
+                    if (!link.disabled) setMobileOpen(false)
                   }}
+                  className={className}
+                  style={style}
                 >
-                  {t(link.title)}
+                  {content}
                 </Link>
               )
             })}

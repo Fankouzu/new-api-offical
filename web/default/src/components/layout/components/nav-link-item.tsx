@@ -18,6 +18,11 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
+import {
+  getExternalTopNavLinkProps,
+  renderTopNavLinkContent,
+  shouldRenderTopNavLinkAsIcon,
+} from '../lib/top-nav-link-utils'
 import type { TopNavLink } from '../types'
 
 interface NavLinkItemProps {
@@ -30,8 +35,10 @@ interface NavLinkItemProps {
  * Handles routing and proper link attributes
  */
 export function NavLinkItem({ link, className }: NavLinkItemProps) {
+  const iconOnly = shouldRenderTopNavLinkAsIcon(link)
   const linkClassName = cn(
-    'text-muted-foreground hover:text-foreground transition-colors',
+    'text-muted-foreground hover:text-foreground inline-flex items-center transition-colors',
+    iconOnly ? 'justify-center' : 'gap-1.5',
     link.disabled && 'pointer-events-none opacity-50',
     className
   )
@@ -39,20 +46,23 @@ export function NavLinkItem({ link, className }: NavLinkItemProps) {
   if (link.external) {
     return (
       <a
-        href={link.href}
-        target='_blank'
-        rel='noopener noreferrer'
+        {...getExternalTopNavLinkProps(link)}
         className={linkClassName}
-        aria-disabled={link.disabled}
+        aria-label={iconOnly ? link.title : undefined}
       >
-        {link.title}
+        {renderTopNavLinkContent(link, link.title, { iconOnly })}
       </a>
     )
   }
 
   return (
-    <Link to={link.href} className={linkClassName} disabled={link.disabled}>
-      {link.title}
+    <Link
+      to={link.href}
+      className={linkClassName}
+      disabled={link.disabled}
+      aria-label={iconOnly ? link.title : undefined}
+    >
+      {renderTopNavLinkContent(link, link.title, { iconOnly })}
     </Link>
   )
 }

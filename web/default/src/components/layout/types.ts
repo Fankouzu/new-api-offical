@@ -98,4 +98,6 @@ export type TopNavLink = {
   isActive?: boolean
   disabled?: boolean
   external?: boolean
+  display?: 'text' | 'icon'
+  icon?: string
 }

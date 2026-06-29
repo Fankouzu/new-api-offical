@@ -20,76 +20,44 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { useStatus } from '@/hooks/use-status'
+import {
+  parseHeaderNavModules,
+  type HeaderNavCustomLinkConfig,
+  type HeaderNavCustomLinkPosition,
+  type HeaderNavModulesConfig,
+} from '@/features/system-settings/maintenance/config'
 
 export type TopNavLink = {
   title: string
   href: string
   disabled?: boolean
   external?: boolean
+  display?: 'text' | 'icon'
+  icon?: string
 }
 
-// Default navigation configuration
-const DEFAULT_HEADER_NAV_MODULES = {
-  home: true,
-  console: true,
-  pricing: { enabled: true, requireAuth: false },
-  rankings: { enabled: true, requireAuth: false },
-  docs: true,
-  about: true,
+export type TopNavLinkSlots = {
+  primary: TopNavLink[]
+  before_search: TopNavLink[]
+  after_search: TopNavLink[]
+  before_notifications: TopNavLink[]
+  after_notifications: TopNavLink[]
+  before_theme: TopNavLink[]
+  after_theme: TopNavLink[]
+  before_language: TopNavLink[]
+  after_language: TopNavLink[]
 }
 
-function parseAccessModule(
-  raw: unknown,
-  fallback: { enabled: boolean; requireAuth: boolean }
-) {
-  if (
-    typeof raw === 'boolean' ||
-    typeof raw === 'string' ||
-    typeof raw === 'number'
-  ) {
-    return {
-      enabled: raw === true || raw === 'true' || raw === '1' || raw === 1,
-      requireAuth: fallback.requireAuth,
-    }
-  }
-  if (raw && typeof raw === 'object') {
-    const record = raw as Record<string, unknown>
-    return {
-      enabled:
-        typeof record.enabled === 'boolean' ? record.enabled : fallback.enabled,
-      requireAuth:
-        typeof record.requireAuth === 'boolean'
-          ? record.requireAuth
-          : fallback.requireAuth,
-    }
-  }
-  return { ...fallback }
-}
-
-function parseHeaderNavModules(
-  raw: unknown
-): typeof DEFAULT_HEADER_NAV_MODULES {
-  if (!raw || String(raw).trim() === '') {
-    return DEFAULT_HEADER_NAV_MODULES
-  }
-  try {
-    const parsed = JSON.parse(String(raw)) as Record<string, unknown>
-    return {
-      ...DEFAULT_HEADER_NAV_MODULES,
-      ...parsed,
-      pricing: parseAccessModule(
-        parsed.pricing,
-        DEFAULT_HEADER_NAV_MODULES.pricing
-      ),
-      rankings: parseAccessModule(
-        parsed.rankings,
-        DEFAULT_HEADER_NAV_MODULES.rankings
-      ),
-    }
-  } catch {
-    return DEFAULT_HEADER_NAV_MODULES
-  }
-}
+const HEADER_NAV_UTILITY_CUSTOM_LINK_POSITIONS = [
+  'before_search',
+  'after_search',
+  'before_notifications',
+  'after_notifications',
+  'before_theme',
+  'after_theme',
+  'before_language',
+  'after_language',
+] as const
 
 /**
  * Generate top navigation links based on HeaderNavModules configuration from backend /api/status
@@ -103,21 +71,70 @@ function parseHeaderNavModules(
  *   about: true
  * }
  */
-export function useTopNavLinks(): TopNavLink[] {
-  const { t } = useTranslation()
-  const { status } = useStatus()
-  const { auth } = useAuthStore()
+function customLinkToTopNavLink(
+  link: HeaderNavCustomLinkConfig,
+  isAuthed: boolean
+): TopNavLink {
+  return {
+    title: link.title,
+    href: link.href,
+    disabled: link.requireAuth && !isAuthed,
+    external: link.external,
+    display: link.display,
+    icon: link.icon,
+  }
+}
 
-  // Parse HeaderNavModules
-  const modules = useMemo(() => {
-    return parseHeaderNavModules(status?.HeaderNavModules)
-  }, [status?.HeaderNavModules])
+function appendCustomLinks(
+  links: TopNavLink[],
+  customLinks: HeaderNavCustomLinkConfig[],
+  position: HeaderNavCustomLinkPosition,
+  isAuthed: boolean
+) {
+  customLinks
+    .filter((link) => link.enabled && link.position === position)
+    .forEach((link) => links.push(customLinkToTopNavLink(link, isAuthed)))
+}
 
-  // Documentation link (may be external)
-  const docsLink: string | undefined = status?.docs_link as string | undefined
+function createEmptyTopNavLinkSlots(): TopNavLinkSlots {
+  return {
+    primary: [],
+    before_search: [],
+    after_search: [],
+    before_notifications: [],
+    after_notifications: [],
+    before_theme: [],
+    after_theme: [],
+    before_language: [],
+    after_language: [],
+  }
+}
 
-  const isAuthed = !!auth?.user
+function addUtilityCustomLinks(
+  slots: TopNavLinkSlots,
+  customLinks: HeaderNavCustomLinkConfig[],
+  isAuthed: boolean
+) {
+  HEADER_NAV_UTILITY_CUSTOM_LINK_POSITIONS.forEach((position) => {
+    customLinks
+      .filter((link) => link.enabled && link.position === position)
+      .forEach((link) =>
+        slots[position].push(customLinkToTopNavLink(link, isAuthed))
+      )
+  })
+}
 
+export function buildTopNavLinks({
+  modules,
+  docsLink,
+  isAuthed,
+  t,
+}: {
+  modules: HeaderNavModulesConfig
+  docsLink?: string | null
+  isAuthed: boolean
+  t: (key: string) => string
+}): TopNavLink[] {
   const links: TopNavLink[] = []
 
   // Home
@@ -129,6 +146,7 @@ export function useTopNavLinks(): TopNavLink[] {
   if (modules?.console !== false) {
     links.push({ title: t('Console'), href: '/dashboard' })
   }
+  appendCustomLinks(links, modules.customLinks, 'after_console', isAuthed)
 
   // Pricing
   const pricing = modules?.pricing
@@ -136,6 +154,7 @@ export function useTopNavLinks(): TopNavLink[] {
     const disabled = pricing.requireAuth && !isAuthed
     links.push({ title: t('Model Square'), href: '/pricing', disabled })
   }
+  appendCustomLinks(links, modules.customLinks, 'after_pricing', isAuthed)
 
   // Rankings
   const rankings = modules?.rankings
@@ -143,6 +162,7 @@ export function useTopNavLinks(): TopNavLink[] {
     const disabled = rankings.requireAuth && !isAuthed
     links.push({ title: t('Rankings'), href: '/rankings', disabled })
   }
+  appendCustomLinks(links, modules.customLinks, 'after_rankings', isAuthed)
 
   // Docs (supports external links)
   if (modules?.docs !== false) {
@@ -152,11 +172,64 @@ export function useTopNavLinks(): TopNavLink[] {
       links.push({ title: t('Docs'), href: '/docs' })
     }
   }
+  appendCustomLinks(links, modules.customLinks, 'after_docs', isAuthed)
 
   // About
   if (modules?.about !== false) {
     links.push({ title: t('About'), href: '/about' })
   }
+  appendCustomLinks(links, modules.customLinks, 'end', isAuthed)
 
   return links
+}
+
+export function buildTopNavLinkSlots({
+  modules,
+  docsLink,
+  isAuthed,
+  t,
+}: {
+  modules: HeaderNavModulesConfig
+  docsLink?: string | null
+  isAuthed: boolean
+  t: (key: string) => string
+}): TopNavLinkSlots {
+  const slots = createEmptyTopNavLinkSlots()
+
+  slots.primary = buildTopNavLinks({
+    modules,
+    docsLink,
+    isAuthed,
+    t,
+  })
+  addUtilityCustomLinks(slots, modules.customLinks, isAuthed)
+
+  return slots
+}
+
+function useHeaderNavContext() {
+  const { t } = useTranslation()
+  const { status } = useStatus()
+  const { auth } = useAuthStore()
+
+  const modules = useMemo(() => {
+    return parseHeaderNavModules(status?.HeaderNavModules as string | undefined)
+  }, [status?.HeaderNavModules])
+
+  const docsLink: string | undefined = status?.docs_link as string | undefined
+  const isAuthed = !!auth?.user
+
+  return { modules, docsLink, isAuthed, t }
+}
+
+export function useTopNavLinks(): TopNavLink[] {
+  const { modules, docsLink, isAuthed, t } = useHeaderNavContext()
+
+  return buildTopNavLinks({ modules, docsLink, isAuthed, t })
+}
+
+export function useTopNavLinkSlots(): TopNavLinkSlots {
+  const { modules, docsLink, isAuthed, t } = useHeaderNavContext()
+
+  return buildTopNavLinkSlots({ modules, docsLink, isAuthed, t })
 }

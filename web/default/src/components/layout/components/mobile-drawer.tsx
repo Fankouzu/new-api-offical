@@ -21,6 +21,7 @@ import { X, User, Wallet, LogOut } from 'lucide-react'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import type { AuthUser } from '@/stores/auth-store'
+import { cn } from '@/lib/utils'
 import useDialogState from '@/hooks/use-dialog'
 import { useUserDisplay } from '@/hooks/use-user-display'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -28,6 +29,10 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SignOutDialog } from '@/components/sign-out-dialog'
 import { MOBILE_DRAWER_ANIMATION, MOBILE_DRAWER_CONFIG } from '../constants'
+import {
+  getExternalTopNavLinkProps,
+  renderTopNavLinkContent,
+} from '../lib/top-nav-link-utils'
 import type { TopNavLink } from '../types'
 
 /**
@@ -259,21 +264,50 @@ export function MobileDrawer({
                   </div>
                 ) : (
                   <AnimatePresence>
-                    {mobileLinksList.map((link, index) => (
-                      <motion.div
-                        key={`${link.href}-${index}`}
-                        className='border-border border-b p-2.5 last:border-b-0'
-                        variants={MOBILE_DRAWER_ANIMATION.menuItem as Variants}
-                      >
-                        <Link
-                          to={link.href}
-                          className='text-primary/60 hover:text-primary/80 transition-colors'
-                          onClick={onClose}
+                    {mobileLinksList.map((link, index) => {
+                      const className = cn(
+                        'text-primary/60 hover:text-primary/80 inline-flex items-center gap-1.5 transition-colors',
+                        link.disabled && 'pointer-events-none opacity-50'
+                      )
+                      const externalLinkProps = getExternalTopNavLinkProps(link)
+                      return (
+                        <motion.div
+                          key={`${link.href}-${index}`}
+                          className='border-border border-b p-2.5 last:border-b-0'
+                          variants={
+                            MOBILE_DRAWER_ANIMATION.menuItem as Variants
+                          }
                         >
-                          {link.title}
-                        </Link>
-                      </motion.div>
-                    ))}
+                          {link.external ? (
+                            <a
+                              {...externalLinkProps}
+                              className={className}
+                              onClick={(event) => {
+                                externalLinkProps.onClick?.(event)
+                                if (!link.disabled) onClose()
+                              }}
+                            >
+                              {renderTopNavLinkContent(link, link.title, {
+                                showIconWithText: true,
+                              })}
+                            </a>
+                          ) : (
+                            <Link
+                              to={link.href}
+                              disabled={link.disabled}
+                              className={className}
+                              onClick={() => {
+                                if (!link.disabled) onClose()
+                              }}
+                            >
+                              {renderTopNavLinkContent(link, link.title, {
+                                showIconWithText: true,
+                              })}
+                            </Link>
+                          )}
+                        </motion.div>
+                      )
+                    })}
                   </AnimatePresence>
                 )}
               </motion.div>
