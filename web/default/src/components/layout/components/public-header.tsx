@@ -32,6 +32,10 @@ import { NotificationDialog } from '@/components/notification-dialog'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { defaultTopNavLinks } from '../config/top-nav.config'
+import {
+  renderTopNavLinkContent,
+  shouldRenderTopNavLinkAsIcon,
+} from '../lib/top-nav-link-rendering'
 import type { TopNavLink } from '../types'
 import { HeaderLogo } from './header-logo'
 
@@ -143,6 +147,14 @@ export function PublicHeader(props: PublicHeaderProps) {
             <div className='hidden items-center gap-0.5 sm:flex'>
               {links.map((link, i) => {
                 const isActive = pathname === link.href
+                const iconOnly = shouldRenderTopNavLinkAsIcon(link)
+                const label = t(link.title)
+                const className = cn(
+                  'text-muted-foreground hover:text-foreground rounded-lg text-[13px] font-medium transition-colors duration-200',
+                  iconOnly
+                    ? 'inline-flex size-8 items-center justify-center p-0'
+                    : 'px-3 py-1.5'
+                )
                 if (link.external) {
                   return (
                     <a
@@ -150,9 +162,10 @@ export function PublicHeader(props: PublicHeaderProps) {
                       href={link.href}
                       target='_blank'
                       rel='noopener noreferrer'
-                      className='text-muted-foreground hover:text-foreground rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-200'
+                      className={className}
+                      aria-label={iconOnly ? label : undefined}
                     >
-                      {t(link.title)}
+                      {renderTopNavLinkContent(link, label, { iconOnly })}
                     </a>
                   )
                 }
@@ -161,13 +174,14 @@ export function PublicHeader(props: PublicHeaderProps) {
                     key={i}
                     to={link.href}
                     className={cn(
-                      'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors duration-200',
+                      className,
                       isActive
                         ? 'text-foreground'
                         : 'text-muted-foreground hover:text-foreground'
                     )}
+                    aria-label={iconOnly ? label : undefined}
                   >
-                    {t(link.title)}
+                    {renderTopNavLinkContent(link, label, { iconOnly })}
                   </Link>
                 )
               })}
@@ -260,23 +274,46 @@ export function PublicHeader(props: PublicHeaderProps) {
           <nav className='flex flex-col gap-1'>
             {links.map((link, i) => {
               const isActive = pathname === link.href
+              const label = t(link.title)
+              const content = renderTopNavLinkContent(link, label, {
+                showIconWithText: true,
+              })
+              const className = cn(
+                'flex items-center gap-3 py-3 text-base font-medium tracking-tight transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]',
+                mobileOpen
+                  ? 'translate-y-0 opacity-100'
+                  : 'translate-y-4 opacity-0',
+                isActive ? 'text-foreground' : 'text-muted-foreground'
+              )
+              const style = {
+                transitionDelay: mobileOpen ? `${100 + i * 50}ms` : '0ms',
+              }
+
+              if (link.external) {
+                return (
+                  <a
+                    key={i}
+                    href={link.href}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    onClick={() => setMobileOpen(false)}
+                    className={className}
+                    style={style}
+                  >
+                    {content}
+                  </a>
+                )
+              }
+
               return (
                 <Link
                   key={i}
                   to={link.href}
                   onClick={() => setMobileOpen(false)}
-                  className={cn(
-                    'flex items-center gap-3 py-3 text-base font-medium tracking-tight transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]',
-                    mobileOpen
-                      ? 'translate-y-0 opacity-100'
-                      : 'translate-y-4 opacity-0',
-                    isActive ? 'text-foreground' : 'text-muted-foreground'
-                  )}
-                  style={{
-                    transitionDelay: mobileOpen ? `${100 + i * 50}ms` : '0ms',
-                  }}
+                  className={className}
+                  style={style}
                 >
-                  {t(link.title)}
+                  {content}
                 </Link>
               )
             })}

@@ -28,6 +28,8 @@ export type HeaderNavCustomLinkPosition =
   | 'after_docs'
   | 'end'
 
+export type HeaderNavCustomLinkDisplay = 'text' | 'icon'
+
 export type HeaderNavCustomLinkConfig = {
   id: string
   title: string
@@ -36,6 +38,7 @@ export type HeaderNavCustomLinkConfig = {
   external: boolean
   requireAuth: boolean
   position: HeaderNavCustomLinkPosition
+  display: HeaderNavCustomLinkDisplay
   icon?: string
 }
 
@@ -47,10 +50,7 @@ export type HeaderNavModulesConfig = {
   docs: boolean
   about: boolean
   customLinks: HeaderNavCustomLinkConfig[]
-  [key: string]:
-    | boolean
-    | HeaderNavAccessConfig
-    | HeaderNavCustomLinkConfig[]
+  [key: string]: boolean | HeaderNavAccessConfig | HeaderNavCustomLinkConfig[]
 }
 
 export type SidebarSectionConfig = {
@@ -125,6 +125,11 @@ const HEADER_NAV_CUSTOM_LINK_POSITIONS = new Set<HeaderNavCustomLinkPosition>([
   'end',
 ])
 
+const HEADER_NAV_CUSTOM_LINK_DISPLAYS = new Set<HeaderNavCustomLinkDisplay>([
+  'text',
+  'icon',
+])
+
 const cloneHeaderNavDefault = (): HeaderNavModulesConfig => ({
   ...HEADER_NAV_DEFAULT,
   pricing: { ...HEADER_NAV_DEFAULT.pricing },
@@ -179,6 +184,19 @@ const normalizeCustomLinkPosition = (
   return 'end'
 }
 
+const normalizeCustomLinkDisplay = (
+  value: unknown,
+  fallback: HeaderNavCustomLinkDisplay
+): HeaderNavCustomLinkDisplay => {
+  if (
+    typeof value === 'string' &&
+    HEADER_NAV_CUSTOM_LINK_DISPLAYS.has(value as HeaderNavCustomLinkDisplay)
+  ) {
+    return value as HeaderNavCustomLinkDisplay
+  }
+  return fallback
+}
+
 const normalizeCustomLink = (
   raw: unknown,
   index: number
@@ -188,6 +206,10 @@ const normalizeCustomLink = (
   const record = raw as Record<string, unknown>
   const title = typeof record.title === 'string' ? record.title.trim() : ''
   const href = typeof record.href === 'string' ? record.href.trim() : ''
+  const icon =
+    typeof record.icon === 'string'
+      ? record.icon.trim() || undefined
+      : undefined
 
   if (!title || !href || !isSafeHeaderNavUrl(href)) return null
 
@@ -204,10 +226,8 @@ const normalizeCustomLink = (
     external: toBoolean(record.external, !href.startsWith('/')),
     requireAuth: toBoolean(record.requireAuth, false),
     position: normalizeCustomLinkPosition(record.position),
-    icon:
-      typeof record.icon === 'string'
-        ? record.icon.trim() || undefined
-        : undefined,
+    display: normalizeCustomLinkDisplay(record.display, icon ? 'icon' : 'text'),
+    icon,
   }
 }
 

@@ -20,6 +20,10 @@ import { Link } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
 import { defaultTopNavLinks } from '../config/top-nav.config'
+import {
+  renderTopNavLinkContent,
+  shouldRenderTopNavLinkAsIcon,
+} from '../lib/top-nav-link-rendering'
 import type { TopNavLink } from '../types'
 
 interface PublicNavigationProps {
@@ -50,6 +54,12 @@ export function PublicNavigation({
   return (
     <nav className={cn('hidden items-center gap-1 md:flex', className)}>
       {links.map((link, index) => {
+        const iconOnly = shouldRenderTopNavLinkAsIcon(link)
+        const className = cn(
+          'text-muted-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground inline-flex h-9 items-center justify-center rounded-md bg-transparent text-sm font-medium transition-colors focus:outline-none',
+          iconOnly ? 'w-9 px-0 py-0' : 'w-max px-4 py-2',
+          link.disabled && 'pointer-events-none opacity-50'
+        )
         // Handle external links
         if (link.external) {
           return (
@@ -58,12 +68,10 @@ export function PublicNavigation({
               href={link.href}
               target='_blank'
               rel='noopener noreferrer'
-              className={cn(
-                'text-muted-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground inline-flex h-9 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors focus:outline-none',
-                link.disabled && 'pointer-events-none opacity-50'
-              )}
+              className={className}
+              aria-label={iconOnly ? link.title : undefined}
             >
-              {link.title}
+              {renderTopNavLinkContent(link, link.title, { iconOnly })}
             </a>
           )
         }
@@ -72,12 +80,10 @@ export function PublicNavigation({
           <Link
             key={index}
             to={link.href}
-            className={cn(
-              'text-muted-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground inline-flex h-9 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors focus:outline-none',
-              link.disabled && 'pointer-events-none opacity-50'
-            )}
+            className={className}
+            aria-label={iconOnly ? link.title : undefined}
           >
-            {link.title}
+            {renderTopNavLinkContent(link, link.title, { iconOnly })}
           </Link>
         )
       })}

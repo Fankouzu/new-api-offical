@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SignOutDialog } from '@/components/sign-out-dialog'
 import { MOBILE_DRAWER_ANIMATION, MOBILE_DRAWER_CONFIG } from '../constants'
+import { renderTopNavLinkContent } from '../lib/top-nav-link-rendering'
 import type { TopNavLink } from '../types'
 
 /**
@@ -259,21 +260,43 @@ export function MobileDrawer({
                   </div>
                 ) : (
                   <AnimatePresence>
-                    {mobileLinksList.map((link, index) => (
-                      <motion.div
-                        key={`${link.href}-${index}`}
-                        className='border-border border-b p-2.5 last:border-b-0'
-                        variants={MOBILE_DRAWER_ANIMATION.menuItem as Variants}
-                      >
-                        <Link
-                          to={link.href}
-                          className='text-primary/60 hover:text-primary/80 transition-colors'
-                          onClick={onClose}
+                    {mobileLinksList.map((link, index) => {
+                      const className =
+                        'text-primary/60 hover:text-primary/80 inline-flex items-center gap-1.5 transition-colors'
+                      return (
+                        <motion.div
+                          key={`${link.href}-${index}`}
+                          className='border-border border-b p-2.5 last:border-b-0'
+                          variants={
+                            MOBILE_DRAWER_ANIMATION.menuItem as Variants
+                          }
                         >
-                          {link.title}
-                        </Link>
-                      </motion.div>
-                    ))}
+                          {link.external ? (
+                            <a
+                              href={link.href}
+                              target='_blank'
+                              rel='noopener noreferrer'
+                              className={className}
+                              onClick={onClose}
+                            >
+                              {renderTopNavLinkContent(link, link.title, {
+                                showIconWithText: true,
+                              })}
+                            </a>
+                          ) : (
+                            <Link
+                              to={link.href}
+                              className={className}
+                              onClick={onClose}
+                            >
+                              {renderTopNavLinkContent(link, link.title, {
+                                showIconWithText: true,
+                              })}
+                            </Link>
+                          )}
+                        </motion.div>
+                      )
+                    })}
                   </AnimatePresence>
                 )}
               </motion.div>

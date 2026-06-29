@@ -24,6 +24,7 @@ import {
   parseHeaderNavModules,
   type HeaderNavCustomLinkConfig,
   type HeaderNavCustomLinkPosition,
+  type HeaderNavModulesConfig,
 } from '@/features/system-settings/maintenance/config'
 
 export type TopNavLink = {
@@ -31,6 +32,8 @@ export type TopNavLink = {
   href: string
   disabled?: boolean
   external?: boolean
+  display?: 'text' | 'icon'
+  icon?: string
 }
 
 /**
@@ -54,6 +57,8 @@ function customLinkToTopNavLink(
     href: link.href,
     disabled: link.requireAuth && !isAuthed,
     external: link.external,
+    display: link.display,
+    icon: link.icon,
   }
 }
 
@@ -68,21 +73,17 @@ function appendCustomLinks(
     .forEach((link) => links.push(customLinkToTopNavLink(link, isAuthed)))
 }
 
-export function useTopNavLinks(): TopNavLink[] {
-  const { t } = useTranslation()
-  const { status } = useStatus()
-  const { auth } = useAuthStore()
-
-  // Parse HeaderNavModules
-  const modules = useMemo(() => {
-    return parseHeaderNavModules(status?.HeaderNavModules as string | undefined)
-  }, [status?.HeaderNavModules])
-
-  // Documentation link (may be external)
-  const docsLink: string | undefined = status?.docs_link as string | undefined
-
-  const isAuthed = !!auth?.user
-
+export function buildTopNavLinks({
+  modules,
+  docsLink,
+  isAuthed,
+  t,
+}: {
+  modules: HeaderNavModulesConfig
+  docsLink?: string | null
+  isAuthed: boolean
+  t: (key: string) => string
+}): TopNavLink[] {
   const links: TopNavLink[] = []
 
   // Home
@@ -129,4 +130,22 @@ export function useTopNavLinks(): TopNavLink[] {
   appendCustomLinks(links, modules.customLinks, 'end', isAuthed)
 
   return links
+}
+
+export function useTopNavLinks(): TopNavLink[] {
+  const { t } = useTranslation()
+  const { status } = useStatus()
+  const { auth } = useAuthStore()
+
+  // Parse HeaderNavModules
+  const modules = useMemo(() => {
+    return parseHeaderNavModules(status?.HeaderNavModules as string | undefined)
+  }, [status?.HeaderNavModules])
+
+  // Documentation link (may be external)
+  const docsLink: string | undefined = status?.docs_link as string | undefined
+
+  const isAuthed = !!auth?.user
+
+  return buildTopNavLinks({ modules, docsLink, isAuthed, t })
 }

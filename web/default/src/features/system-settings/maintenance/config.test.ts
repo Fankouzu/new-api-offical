@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import {
-  parseHeaderNavModules,
-  serializeHeaderNavModules,
-} from './config'
+import { parseHeaderNavModules, serializeHeaderNavModules } from './config'
 
 test('parseHeaderNavModules keeps enabled custom external links', () => {
   const config = parseHeaderNavModules(
@@ -17,6 +14,7 @@ test('parseHeaderNavModules keeps enabled custom external links', () => {
           external: true,
           requireAuth: false,
           position: 'after_docs',
+          display: 'icon',
           icon: 'telegram',
         },
       ],
@@ -32,6 +30,7 @@ test('parseHeaderNavModules keeps enabled custom external links', () => {
     external: true,
     requireAuth: false,
     position: 'after_docs',
+    display: 'icon',
     icon: 'telegram',
   })
 })
@@ -85,6 +84,7 @@ test('serializeHeaderNavModules preserves custom links', () => {
         external: true,
         requireAuth: false,
         position: 'after_docs',
+        display: 'icon',
         icon: 'telegram',
       },
     ],
@@ -99,6 +99,7 @@ test('serializeHeaderNavModules preserves custom links', () => {
       external: true,
       requireAuth: false,
       position: 'after_docs',
+      display: 'icon',
       icon: 'telegram',
     },
   ])

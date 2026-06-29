@@ -24,9 +24,14 @@ import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  renderTopNavLinkContent,
+  shouldRenderTopNavLinkAsIcon,
+} from '../lib/top-nav-link-rendering'
 import { type TopNavLink } from '../types'
 
 type TopNavProps = React.HTMLAttributes<HTMLElement> & {
@@ -61,33 +66,58 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
             <Menu />
           </DropdownMenuTrigger>
           <DropdownMenuContent side='bottom' align='start'>
-            {normalizedLinks.map(
-              ({ title, href, isActive, disabled, external }) => (
-                <DropdownMenuItem
-                  key={`${title}-${href}`}
-                  render={
-                    external ? (
-                      <a
-                        href={href}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                        className={!isActive ? 'text-muted-foreground' : ''}
-                      >
-                        {title}
-                      </a>
-                    ) : (
-                      <Link
-                        to={href}
-                        className={!isActive ? 'text-muted-foreground' : ''}
-                        disabled={disabled}
-                      >
-                        {title}
-                      </Link>
-                    )
+            <DropdownMenuGroup>
+              {normalizedLinks.map(
+                ({
+                  title,
+                  href,
+                  isActive,
+                  disabled,
+                  external,
+                  display,
+                  icon,
+                }) => {
+                  const dropdownLink = {
+                    title,
+                    href,
+                    disabled,
+                    external,
+                    display,
+                    icon,
                   }
-                ></DropdownMenuItem>
-              )
-            )}
+
+                  return (
+                    <DropdownMenuItem
+                      key={`${title}-${href}`}
+                      render={
+                        external ? (
+                          <a
+                            href={href}
+                            target='_blank'
+                            rel='noopener noreferrer'
+                            className={!isActive ? 'text-muted-foreground' : ''}
+                          >
+                            {renderTopNavLinkContent(dropdownLink, title, {
+                              showIconWithText: true,
+                            })}
+                          </a>
+                        ) : (
+                          <Link
+                            to={href}
+                            className={!isActive ? 'text-muted-foreground' : ''}
+                            disabled={disabled}
+                          >
+                            {renderTopNavLinkContent(dropdownLink, title, {
+                              showIconWithText: true,
+                            })}
+                          </Link>
+                        )
+                      }
+                    ></DropdownMenuItem>
+                  )
+                }
+              )}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -100,28 +130,38 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
         )}
         {...props}
       >
-        {normalizedLinks.map(({ title, href, isActive, disabled, external }) =>
-          external ? (
+        {normalizedLinks.map((link) => {
+          const { title, href, isActive, disabled, external } = link
+          const iconOnly = shouldRenderTopNavLinkAsIcon(link)
+          const className = cn(
+            'hover:text-primary text-sm font-medium transition-colors',
+            iconOnly && 'inline-flex size-8 items-center justify-center',
+            isActive ? '' : 'text-muted-foreground'
+          )
+
+          return external ? (
             <a
               key={`${title}-${href}`}
               href={href}
               target='_blank'
               rel='noopener noreferrer'
-              className={`hover:text-primary text-sm font-medium transition-colors ${isActive ? '' : 'text-muted-foreground'}`}
+              className={className}
+              aria-label={iconOnly ? title : undefined}
             >
-              {title}
+              {renderTopNavLinkContent(link, title, { iconOnly })}
             </a>
           ) : (
             <Link
               key={`${title}-${href}`}
               to={href}
               disabled={disabled}
-              className={`hover:text-primary text-sm font-medium transition-colors ${isActive ? '' : 'text-muted-foreground'}`}
+              className={className}
+              aria-label={iconOnly ? title : undefined}
             >
-              {title}
+              {renderTopNavLinkContent(link, title, { iconOnly })}
             </Link>
           )
-        )}
+        })}
       </nav>
     </>
   )

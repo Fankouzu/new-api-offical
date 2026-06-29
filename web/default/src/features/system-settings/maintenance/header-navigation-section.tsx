@@ -80,6 +80,7 @@ const customLinkSchema = z.object({
     'after_docs',
     'end',
   ]),
+  display: z.enum(['text', 'icon']),
   icon: z.string().optional(),
 })
 
@@ -154,8 +155,15 @@ const customLinkPositions: Array<{
   { value: 'after_pricing', label: 'After Model Square' },
   { value: 'after_rankings', label: 'After Rankings' },
   { value: 'after_docs', label: 'After Docs' },
-  { value: 'end', label: 'At end' },
+  { value: 'end', label: 'After About' },
 ]
+
+const customLinkDisplays = [
+  { value: 'text', label: 'Text' },
+  { value: 'icon', label: 'Icon' },
+]
+
+const customLinkIcons = [{ value: 'telegram', label: 'Telegram' }]
 
 export function HeaderNavigationSection({
   config,
@@ -200,7 +208,9 @@ export function HeaderNavigationSection({
         id: link.id.trim(),
         title: link.title.trim(),
         href: link.href.trim(),
-        icon: link.icon?.trim() || undefined,
+        icon:
+          link.icon?.trim() ||
+          (link.display === 'icon' ? 'telegram' : undefined),
       })),
     }
 
@@ -227,7 +237,8 @@ export function HeaderNavigationSection({
       enabled: true,
       external: true,
       requireAuth: false,
-      position: 'after_docs',
+      position: 'end',
+      display: 'icon',
       icon: 'telegram',
     })
   }
@@ -386,12 +397,14 @@ export function HeaderNavigationSection({
                   {t('Custom navigation links')}
                 </h3>
                 <p className='text-muted-foreground text-sm'>
-                  {t('Add optional links such as Telegram, status pages, or community channels per site.')}
+                  {t(
+                    'Add optional links such as Telegram, status pages, or community channels per site.'
+                  )}
                 </p>
               </div>
               <Button type='button' variant='outline' onClick={addTelegramLink}>
                 <Plus data-icon='inline-start' />
-                {t('Add link')}
+                {t('Add social link')}
               </Button>
             </div>
 
@@ -403,7 +416,7 @@ export function HeaderNavigationSection({
               <div className='space-y-3'>
                 {customLinksFieldArray.fields.map((field, index) => (
                   <div key={field.id} className='rounded-lg border p-4'>
-                    <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_180px_auto]'>
+                    <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_180px_140px_140px_auto]'>
                       <FormField
                         control={form.control}
                         name={`customLinks.${index}.title`}
@@ -458,6 +471,72 @@ export function HeaderNavigationSection({
                                       value={position.value}
                                     >
                                       {t(position.label)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`customLinks.${index}.display`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('Display')}</FormLabel>
+                            <Select
+                              value={field.value}
+                              onValueChange={field.onChange}
+                            >
+                              <FormControl>
+                                <SelectTrigger className='w-full'>
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectGroup>
+                                  {customLinkDisplays.map((display) => (
+                                    <SelectItem
+                                      key={display.value}
+                                      value={display.value}
+                                    >
+                                      {t(display.label)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`customLinks.${index}.icon`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('Icon')}</FormLabel>
+                            <Select
+                              value={field.value || 'telegram'}
+                              onValueChange={field.onChange}
+                            >
+                              <FormControl>
+                                <SelectTrigger className='w-full'>
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectGroup>
+                                  {customLinkIcons.map((icon) => (
+                                    <SelectItem
+                                      key={icon.value}
+                                      value={icon.value}
+                                    >
+                                      {t(icon.label)}
                                     </SelectItem>
                                   ))}
                                 </SelectGroup>
