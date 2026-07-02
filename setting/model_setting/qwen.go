@@ -42,8 +42,9 @@ func GetQwenSettings() *QwenSettings {
 
 // IsSyncImageModel
 func IsSyncImageModel(model string) bool {
+	model = strings.ToLower(model)
 	for _, m := range qwenSettings.SyncImageModels {
-		if strings.Contains(model, m) {
+		if strings.Contains(model, strings.ToLower(m)) {
 			return true
 		}
 	}
