@@ -41,6 +41,11 @@ func ResolveMetaForTheme(requestURI string, baseURL string, pricings []model.Pri
 		meta.Description = "Compare Lizh AI model API pricing for GPT, Gemini, DeepSeek, Qwen, GLM, Doubao, MiniMax, Kimi, and 50+ models with text, image, tool, and structured-output support."
 		meta.Robots = indexRobots
 		meta.JSONLD = pricingJSONLD(base, catalog)
+	case path == "/compare/ai-api-pricing":
+		meta.Title = "AI API Pricing Comparison | GPT, Gemini, DeepSeek, Qwen - Lizh AI"
+		meta.Description = "Compare AI API pricing across GPT, Gemini, DeepSeek, Qwen, GLM, Doubao, MiniMax, Kimi, and other OpenAI-compatible models on Lizh AI."
+		meta.Robots = indexRobots
+		meta.JSONLD = pricingJSONLD(base, catalog)
 	case strings.HasPrefix(path, "/pricing/"):
 		modelID, err := url.PathUnescape(strings.TrimPrefix(path, "/pricing/"))
 		if err != nil {

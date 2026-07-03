@@ -67,6 +67,17 @@ func TestResolveMetaForIndexablePublicRoutes(t *testing.T) {
 	if len(pricing.JSONLD) == 0 {
 		t.Fatalf("pricing page should include JSON-LD")
 	}
+
+	compare := ResolveMeta("/compare/ai-api-pricing", "https://lizh.ai", testCatalog)
+	if compare.Robots != "index,follow" {
+		t.Fatalf("compare pricing page should be indexable, got %q", compare.Robots)
+	}
+	if compare.CanonicalURL != "https://lizh.ai/compare/ai-api-pricing" {
+		t.Fatalf("unexpected compare canonical URL: %q", compare.CanonicalURL)
+	}
+	if !strings.Contains(compare.Title, "AI API Pricing Comparison") {
+		t.Fatalf("unexpected compare title: %q", compare.Title)
+	}
 }
 
 func TestResolveMetaForModelDetail(t *testing.T) {
@@ -208,6 +219,7 @@ func TestBuildRobotsAndSitemap(t *testing.T) {
 	required := []string{
 		"<loc>https://lizh.ai/</loc>",
 		"<loc>https://lizh.ai/pricing</loc>",
+		"<loc>https://lizh.ai/compare/ai-api-pricing</loc>",
 		"<loc>https://lizh.ai/pricing/deepseek-v4-flash</loc>",
 		"<loc>https://lizh.ai/pricing/gpt-5.4</loc>",
 		"<loc>https://lizh.ai/pricing/openai%2Fgpt-4o-mini</loc>",
@@ -219,5 +231,36 @@ func TestBuildRobotsAndSitemap(t *testing.T) {
 	}
 	if strings.Contains(sitemap, "/login") || strings.Contains(sitemap, "/console/") {
 		t.Fatalf("sitemap should not include utility/auth pages:\n%s", sitemap)
+	}
+}
+
+func TestBuildSitemapOnlyIncludesIndexableURLs(t *testing.T) {
+	sitemap := BuildSitemapXML("https://lizh.ai", testCatalog)
+	for _, url := range sitemapURLs(t, sitemap) {
+		path := strings.TrimPrefix(url, "https://lizh.ai")
+		meta := ResolveMeta(path, "https://lizh.ai", testCatalog)
+		if strings.Contains(meta.Robots, "noindex") {
+			t.Fatalf("sitemap includes noindex URL %s with robots %q", url, meta.Robots)
+		}
+	}
+}
+
+func sitemapURLs(t *testing.T, sitemap string) []string {
+	t.Helper()
+
+	var urls []string
+	remaining := sitemap
+	for {
+		start := strings.Index(remaining, "<loc>")
+		if start < 0 {
+			return urls
+		}
+		remaining = remaining[start+len("<loc>"):]
+		end := strings.Index(remaining, "</loc>")
+		if end < 0 {
+			t.Fatalf("malformed sitemap loc: %s", remaining)
+		}
+		urls = append(urls, remaining[:end])
+		remaining = remaining[end+len("</loc>"):]
 	}
 }
