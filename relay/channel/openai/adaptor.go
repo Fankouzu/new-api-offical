@@ -427,7 +427,7 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 	switch info.RelayMode {
 	case relayconstant.RelayModeImagesEdits:
 		if isJSONRequest(c) {
-			return openAIImageEditPayload(request)
+			return openAIImageJSONPayload(request, true)
 		}
 
 		if !strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") {
@@ -468,11 +468,11 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 		return &requestBody, nil
 
 	default:
-		return request, nil
+		return openAIImageJSONPayload(request, false)
 	}
 }
 
-func openAIImageEditPayload(request dto.ImageRequest) (map[string]json.RawMessage, error) {
+func openAIImageJSONPayload(request dto.ImageRequest, includeExtra bool) (map[string]json.RawMessage, error) {
 	type Alias dto.ImageRequest
 	alias := Alias(request)
 	base, err := common.Marshal(alias)
@@ -484,9 +484,22 @@ func openAIImageEditPayload(request dto.ImageRequest) (map[string]json.RawMessag
 	if err := common.Unmarshal(base, &payload); err != nil {
 		return nil, err
 	}
-	for key, value := range request.Extra {
-		if _, exists := payload[key]; !exists {
-			payload[key] = value
+	if len(request.ExtraFields) > 0 {
+		var extraFields map[string]json.RawMessage
+		if err := common.Unmarshal(request.ExtraFields, &extraFields); err == nil {
+			for key, value := range extraFields {
+				if _, exists := payload[key]; !exists {
+					payload[key] = value
+				}
+			}
+		}
+	}
+	delete(payload, "extra_fields")
+	if includeExtra {
+		for key, value := range request.Extra {
+			if _, exists := payload[key]; !exists {
+				payload[key] = value
+			}
 		}
 	}
 	return payload, nil

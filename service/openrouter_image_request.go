@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -106,11 +107,15 @@ func ConvertOpenRouterImageRequest(req OpenRouterImageRequest) (*dto.ImageReques
 		return nil, "", errors.New("OpenRouter image streaming is not supported for these models")
 	}
 
+	size, err := normalizeOpenRouterSize(req.Model, req.Size, req.Resolution, req.AspectRatio)
+	if err != nil {
+		return nil, "", err
+	}
+
 	imageReq := &dto.ImageRequest{
 		Model:             req.Model,
 		Prompt:            req.Prompt,
-		N:                 common.GetPointer(uint(1)),
-		Size:              normalizeOpenRouterSize(req.Model, req.Size, req.Resolution, req.AspectRatio),
+		Size:              size,
 		Quality:           req.Quality,
 		OutputFormat:      req.OutputFormat,
 		Background:        req.Background,
@@ -122,7 +127,6 @@ func ConvertOpenRouterImageRequest(req OpenRouterImageRequest) (*dto.ImageReques
 		imageReq.Extra["seed"] = cloneRawMessage(req.Seed)
 	}
 	mergeOpenRouterProviderOptions(imageReq.Extra, req.Provider)
-	mergeOpenRouterExtraFields(imageReq, req)
 
 	if isOpenRouterEditImageModel(req.Model) {
 		imageURL := firstOpenRouterInputReferenceURL(req.InputReferences)
@@ -133,9 +137,11 @@ func ConvertOpenRouterImageRequest(req OpenRouterImageRequest) (*dto.ImageReques
 		if err != nil {
 			return nil, "", fmt.Errorf("marshal image reference: %w", err)
 		}
-		imageReq.Image = raw
+		imageReq.Extra["image_url"] = raw
+		mergeOpenRouterExtraFields(imageReq, req)
 		return imageReq, OpenRouterImageEditMode, nil
 	}
+	mergeOpenRouterExtraFields(imageReq, req)
 	return imageReq, OpenRouterImageGenerationMode, nil
 }
 
@@ -165,7 +171,10 @@ func sizeFromOpenRouterDimensions(model, resolution, aspectRatio string) string 
 	}
 
 	maxSide := 1024
-	if strings.Contains(model, "2k") || strings.Contains(resolution, "2k") || strings.Contains(resolution, "2048") {
+	if resolution == "" && strings.Contains(model, "2k") {
+		maxSide = 2048
+	}
+	if strings.Contains(resolution, "2k") || strings.Contains(resolution, "2048") {
 		maxSide = 2048
 	}
 
@@ -174,24 +183,44 @@ func sizeFromOpenRouterDimensions(model, resolution, aspectRatio string) string 
 		return fmt.Sprintf("%dx%d", maxSide, maxSide)
 	case "16:9":
 		if maxSide == 2048 {
-			return "1536x864"
+			return "2048x1152"
 		}
 		return "1024x576"
 	case "9:16":
 		if maxSide == 2048 {
-			return "864x1536"
+			return "1152x2048"
 		}
 		return "576x1024"
+	case "16:10":
+		if maxSide == 2048 {
+			return "2048x1280"
+		}
+		return "1024x640"
+	case "10:16":
+		if maxSide == 2048 {
+			return "1280x2048"
+		}
+		return "640x1024"
 	case "4:3":
 		if maxSide == 2048 {
-			return "1536x1152"
+			return "2048x1536"
 		}
 		return "1024x768"
 	case "3:4":
 		if maxSide == 2048 {
-			return "1152x1536"
+			return "1536x2048"
 		}
 		return "768x1024"
+	case "3:2":
+		if maxSide == 2048 {
+			return "2048x1360"
+		}
+		return "1024x682"
+	case "2:3":
+		if maxSide == 2048 {
+			return "1360x2048"
+		}
+		return "682x1024"
 	default:
 		return ""
 	}
@@ -202,51 +231,34 @@ func mergeOpenRouterExtraFields(imageReq *dto.ImageRequest, req OpenRouterImageR
 		imageReq.Extra = map[string]json.RawMessage{}
 	}
 
-	parameters := map[string]any{
-		"size": imageReq.Size,
-		"n":    1,
-	}
-	if len(req.Seed) > 0 {
-		var seed any
-		if err := common.Unmarshal(req.Seed, &seed); err == nil {
-			parameters["seed"] = seed
-		}
-	}
-	for key, value := range imageReq.Extra {
-		var decoded any
-		if err := common.Unmarshal(value, &decoded); err == nil {
-			parameters[key] = decoded
-		}
-	}
-
-	input := map[string]any{
-		"prompt": req.Prompt,
-	}
-	if raw, ok := imageReq.Extra["negative_prompt"]; ok {
-		var negativePrompt any
-		if err := common.Unmarshal(raw, &negativePrompt); err == nil {
-			input["negative_prompt"] = negativePrompt
-			delete(parameters, "negative_prompt")
-		}
+	allowed := map[string]struct{}{
+		"negative_prompt":     {},
+		"num_inference_steps": {},
+		"guidance_scale":      {},
+		"seed":                {},
 	}
 	if isOpenRouterEditImageModel(req.Model) {
-		if imageURL := firstOpenRouterInputReferenceURL(req.InputReferences); imageURL != "" {
-			input["messages"] = []map[string]any{{
-				"role": "user",
-				"content": []map[string]any{
-					{"image": imageURL},
-					{"text": req.Prompt},
-				},
-			}}
+		allowed["image_url"] = struct{}{}
+		allowed["mask_url"] = struct{}{}
+		allowed["task_types"] = struct{}{}
+	} else {
+		allowed["control_image"] = struct{}{}
+		allowed["control_mode"] = struct{}{}
+		allowed["image_scale"] = struct{}{}
+	}
+
+	for key := range imageReq.Extra {
+		if _, ok := allowed[key]; !ok {
+			delete(imageReq.Extra, key)
 		}
 	}
 
-	extraFields := map[string]any{
-		"parameters": parameters,
-		"input":      input,
+	extraFields := make(map[string]json.RawMessage, len(imageReq.Extra))
+	for key, value := range imageReq.Extra {
+		extraFields[key] = cloneRawMessage(value)
 	}
 	raw, err := common.Marshal(extraFields)
-	if err == nil && len(bytes.TrimSpace(raw)) > 0 {
+	if err == nil && len(bytes.TrimSpace(raw)) > 2 {
 		imageReq.ExtraFields = json.RawMessage(raw)
 	}
 }
@@ -283,15 +295,22 @@ func cloneRawMessageMap(source map[string]json.RawMessage) map[string]json.RawMe
 	return result
 }
 
-func normalizeOpenRouterSize(model, size, resolution, aspectRatio string) string {
+func normalizeOpenRouterSize(model, size, resolution, aspectRatio string) (string, error) {
 	size = strings.TrimSpace(size)
 	if strings.Contains(strings.ToLower(size), "x") {
-		return size
+		return size, validateOpenRouterUpstreamSize(model, size)
 	}
 	if size != "" {
 		resolution = size
 	}
-	return sizeFromOpenRouterDimensions(model, resolution, aspectRatio)
+	normalized := sizeFromOpenRouterDimensions(model, resolution, aspectRatio)
+	if normalized == "" {
+		if strings.TrimSpace(resolution) != "" || strings.TrimSpace(aspectRatio) != "" {
+			return "", fmt.Errorf("unsupported image size parameters for model %s: resolution=%q aspect_ratio=%q", model, resolution, aspectRatio)
+		}
+		return "", nil
+	}
+	return normalized, validateOpenRouterUpstreamSize(model, normalized)
 }
 
 func cloneRawMessage(source json.RawMessage) json.RawMessage {
@@ -301,4 +320,64 @@ func cloneRawMessage(source json.RawMessage) json.RawMessage {
 	result := make([]byte, len(source))
 	copy(result, source)
 	return result
+}
+
+func validateOpenRouterUpstreamSize(model, size string) error {
+	width, height, ok := parseOpenRouterSize(size)
+	if !ok {
+		return fmt.Errorf("unsupported image size %q for model %s", size, model)
+	}
+	if _, ok := openRouterSupportedUpstreamSizes[fmt.Sprintf("%dx%d", width, height)]; !ok {
+		return fmt.Errorf("unsupported image size %q for model %s", size, model)
+	}
+
+	lowerModel := strings.ToLower(strings.TrimSpace(model))
+	if !strings.Contains(lowerModel, "2k") && (width > 1024 || height > 1024) {
+		return fmt.Errorf("image size %s exceeds upstream limit for non-2k model %s; use a -2k model", size, model)
+	}
+	if width > 2048 || height > 2048 {
+		return fmt.Errorf("image size %s exceeds upstream 2k limit for model %s", size, model)
+	}
+	if strings.HasPrefix(lowerModel, "qwen-image-2512") && width == 2048 && height == 2048 {
+		return fmt.Errorf("image size %s exceeds upstream limit for model %s; Qwen-Image-2512 does not support 2048x2048", size, model)
+	}
+	return nil
+}
+
+func parseOpenRouterSize(size string) (int, int, bool) {
+	left, right, ok := strings.Cut(strings.ToLower(strings.TrimSpace(size)), "x")
+	if !ok {
+		return 0, 0, false
+	}
+	width, err := strconv.Atoi(strings.TrimSpace(left))
+	if err != nil {
+		return 0, 0, false
+	}
+	height, err := strconv.Atoi(strings.TrimSpace(right))
+	if err != nil {
+		return 0, 0, false
+	}
+	return width, height, width > 0 && height > 0
+}
+
+var openRouterSupportedUpstreamSizes = map[string]struct{}{
+	"512x512":   {},
+	"1024x1024": {},
+	"1024x576":  {},
+	"576x1024":  {},
+	"1024x640":  {},
+	"640x1024":  {},
+	"1024x768":  {},
+	"768x1024":  {},
+	"1024x682":  {},
+	"682x1024":  {},
+	"2048x2048": {},
+	"2048x1152": {},
+	"1152x2048": {},
+	"2048x1280": {},
+	"1280x2048": {},
+	"2048x1360": {},
+	"1360x2048": {},
+	"2048x1536": {},
+	"1536x2048": {},
 }

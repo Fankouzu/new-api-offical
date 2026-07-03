@@ -23,9 +23,9 @@ func TestConvertOpenRouterImageRequestMapsGenerationFields(t *testing.T) {
 	require.Equal(t, OpenRouterImageGenerationMode, mode)
 	require.Equal(t, "z-image-turbo-2k", got.Model)
 	require.Equal(t, "lychee product photo", got.Prompt)
-	require.Equal(t, "1536x864", got.Size)
+	require.Equal(t, "2048x1152", got.Size)
 	require.Equal(t, `"png"`, string(got.OutputFormat))
-	require.Contains(t, string(got.ExtraFields), `"parameters"`)
+	require.Empty(t, got.ExtraFields)
 }
 
 func TestConvertOpenRouterImageRequestRejectsMultipleImages(t *testing.T) {
@@ -63,9 +63,11 @@ func TestConvertOpenRouterImageRequestMapsEditReference(t *testing.T) {
 	require.Equal(t, OpenRouterImageEditMode, mode)
 	require.Equal(t, "Qwen-Image-Edit-2k", got.Model)
 	require.Equal(t, "make it red", got.Prompt)
-	require.Equal(t, `"https://example.com/input.png"`, string(got.Image))
+	require.Empty(t, got.Image)
+	require.Contains(t, got.Extra, "image_url")
+	require.JSONEq(t, `"https://example.com/input.png"`, string(got.Extra["image_url"]))
 	require.Contains(t, string(got.ExtraFields), `"guidance_scale"`)
-	require.Contains(t, string(got.ExtraFields), `"input"`)
+	require.NotContains(t, string(got.ExtraFields), `"input"`)
 }
 
 func TestConvertOpenRouterImageRequestRejectsEditWithoutReference(t *testing.T) {
@@ -87,7 +89,7 @@ func TestConvertOpenRouterImageRequestExtraFieldsCanHydrateImageRequestExtra(t *
 		Provider: &OpenRouterImageProviderOptions{
 			Options: map[string]any{
 				"lizh-ai": map[string]any{
-					"prompt_extend": true,
+					"guidance_scale": 3.5,
 				},
 			},
 		},
@@ -102,5 +104,5 @@ func TestConvertOpenRouterImageRequestExtraFieldsCanHydrateImageRequestExtra(t *
 		ExtraFields map[string]json.RawMessage `json:"extra_fields"`
 	}
 	require.NoError(t, common.Unmarshal(encoded, &decoded))
-	require.Contains(t, decoded.ExtraFields, "parameters")
+	require.Contains(t, decoded.ExtraFields, "guidance_scale")
 }

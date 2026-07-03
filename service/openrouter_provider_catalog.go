@@ -196,8 +196,8 @@ func parseOpenRouterModelAllowlist() map[string]bool {
 func buildOpenRouterImageSupportedParameters() []dto.OpenRouterSupportedParameter {
 	return []dto.OpenRouterSupportedParameter{
 		{Name: "prompt", Type: "string", Required: true},
-		{Name: "size", Type: "string", Values: []string{"1024x1024", "1024x576", "576x1024", "1536x1536", "1536x864", "864x1536", "2048x2048"}},
-		{Name: "aspect_ratio", Type: "string", Values: []string{"1:1", "16:9", "9:16", "4:3", "3:4"}},
+		{Name: "size", Type: "string", Values: []string{"512x512", "1024x1024", "1024x576", "576x1024", "1024x640", "640x1024", "1024x768", "768x1024", "1024x682", "682x1024", "2048x2048", "2048x1152", "1152x2048", "2048x1280", "1280x2048", "2048x1360", "1360x2048", "2048x1536", "1536x2048"}},
+		{Name: "aspect_ratio", Type: "string", Values: []string{"1:1", "16:9", "9:16", "16:10", "10:16", "4:3", "3:4", "3:2", "2:3"}},
 		{Name: "resolution", Type: "string", Values: []string{"1024", "2k", "2048"}},
 		{Name: "quality", Type: "string"},
 		{Name: "output_format", Type: "string", Values: []string{"png", "jpeg", "webp"}},
