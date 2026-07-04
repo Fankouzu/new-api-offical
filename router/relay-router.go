@@ -48,6 +48,24 @@ func SetRelayRouter(router *gin.Engine) {
 		openRouterProviderModelsRouter.GET("", controller.ListOpenRouterProviderModels)
 	}
 
+	openRouterImageModelsRouter := router.Group("/api/v1/images")
+	openRouterImageModelsRouter.Use(middleware.RouteTag("relay"))
+	openRouterImageModelsRouter.Use(middleware.TokenAuth())
+	{
+		openRouterImageModelsRouter.GET("/models", controller.ListOpenRouterProviderImageModels)
+		openRouterImageModelsRouter.GET("/models/*model", controller.ListOpenRouterProviderImageModelEndpoints)
+	}
+
+	openRouterImageRouter := router.Group("/api/v1/images")
+	openRouterImageRouter.Use(middleware.RouteTag("relay"))
+	openRouterImageRouter.Use(middleware.SystemPerformanceCheck())
+	openRouterImageRouter.Use(middleware.TokenAuth())
+	openRouterImageRouter.Use(middleware.ModelRequestRateLimit())
+	openRouterImageRouter.Use(middleware.Distribute())
+	{
+		openRouterImageRouter.POST("", controller.RelayOpenRouterImage)
+	}
+
 	geminiRouter := router.Group("/v1beta/models")
 	geminiRouter.Use(middleware.RouteTag("relay"))
 	geminiRouter.Use(middleware.TokenAuth())

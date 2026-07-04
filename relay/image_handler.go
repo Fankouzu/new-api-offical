@@ -46,7 +46,8 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 
 	var requestBody io.Reader
 
-	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
+	_, isOpenRouterImageBridge := c.Get(service.OpenRouterImageResponseConverterContextKey)
+	if (model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled) && !isOpenRouterImageBridge {
 		storage, err := common.GetBodyStorage(c)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
@@ -57,7 +58,7 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed)
 		}
-		relaycommon.AppendRequestConversionFromRequest(info, convertedRequest)
+		info.AppendRequestConversion(types.RelayFormatOpenAIImage)
 
 		switch convertedRequest.(type) {
 		case *bytes.Buffer:
@@ -111,6 +112,25 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
+	}
+	if converter, ok := c.Get(service.OpenRouterImageResponseConverterContextKey); ok {
+		convertImageResponse, ok := converter.(service.OpenRouterImageResponseConverter)
+		if !ok {
+			return types.NewErrorWithStatusCode(fmt.Errorf("invalid OpenRouter image response converter"), types.ErrorCodeBadResponseBody, http.StatusInternalServerError, types.ErrOptionWithSkipRetry())
+		}
+		responseRecorder, ok := c.Writer.(service.OpenRouterImageResponseRecorder)
+		if !ok {
+			return types.NewErrorWithStatusCode(fmt.Errorf("OpenRouter image response recorder is unavailable"), types.ErrorCodeBadResponseBody, http.StatusInternalServerError, types.ErrOptionWithSkipRetry())
+		}
+		status := c.Writer.Status()
+		converted, err := convertImageResponse(c.Request.Context(), responseRecorder.BodyBytes())
+		if err != nil {
+			responseRecorder.Reset()
+			return types.NewErrorWithStatusCode(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway, types.ErrOptionWithSkipRetry())
+		}
+		responseRecorder.ReplaceBody(status, converted)
+		c.Writer.Header().Set("Content-Type", "application/json")
+		c.Writer.Header().Set("Content-Length", fmt.Sprintf("%d", len(converted)))
 	}
 
 	imageN := uint(1)

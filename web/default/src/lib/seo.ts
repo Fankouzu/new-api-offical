@@ -48,6 +48,15 @@ function getRouteMeta(pathname: string): SEOMeta | null {
       robots: 'index,follow',
     }
   }
+  if (path === '/compare/ai-api-pricing') {
+    return {
+      title:
+        'AI API Pricing Comparison | GPT, Gemini, DeepSeek, Qwen - Lizh AI',
+      description:
+        'Compare AI API pricing across GPT, Gemini, DeepSeek, Qwen, GLM, Doubao, MiniMax, Kimi, and other OpenAI-compatible models on Lizh AI.',
+      robots: 'index,follow',
+    }
+  }
   if (path.startsWith('/pricing/')) {
     const modelId = safeDecodeURIComponent(path.slice('/pricing/'.length))
     return {

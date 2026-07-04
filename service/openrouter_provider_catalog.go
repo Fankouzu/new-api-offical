@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
@@ -24,6 +25,20 @@ var openRouterDefaultSamplingParameters = []string{
 	"logit_bias",
 }
 
+var openRouterImageSupportedParameterNames = []string{
+	"prompt",
+	"size",
+	"aspect_ratio",
+	"resolution",
+	"quality",
+	"output_format",
+	"output_compression",
+	"background",
+	"seed",
+	"input_references",
+	"provider.options",
+}
+
 type openRouterProviderMetadata struct {
 	huggingFaceID    string
 	name             string
@@ -41,8 +56,12 @@ type openRouterProviderMetadata struct {
 
 func BuildOpenRouterProviderModels(pricings []model.Pricing) []dto.OpenRouterProviderModel {
 	models := make([]dto.OpenRouterProviderModel, 0, len(pricings))
+	allowlist := parseOpenRouterModelAllowlist()
 	for _, pricing := range pricings {
 		if strings.TrimSpace(pricing.ModelName) == "" || len(pricing.EnableGroup) == 0 {
+			continue
+		}
+		if len(allowlist) > 0 && !allowlist[strings.TrimSpace(pricing.ModelName)] {
 			continue
 		}
 
@@ -60,6 +79,10 @@ func BuildOpenRouterProviderModels(pricings []model.Pricing) []dto.OpenRouterPro
 		sort.Strings(features)
 
 		orPricing := buildOpenRouterPricing(pricing)
+		supportedParameters := append([]string(nil), openRouterDefaultSamplingParameters...)
+		if hasEndpointType(pricing.SupportedEndpointTypes, constant.EndpointTypeImageGeneration) {
+			supportedParameters = append([]string(nil), openRouterImageSupportedParameterNames...)
+		}
 		models = append(models, dto.OpenRouterProviderModel{
 			ID:                          pricing.ModelName,
 			HuggingFaceID:               meta.huggingFaceID,
@@ -72,6 +95,7 @@ func BuildOpenRouterProviderModels(pricings []model.Pricing) []dto.OpenRouterPro
 			MaxOutputLength:             meta.maxOutputLength,
 			Pricing:                     orPricing,
 			SupportedSamplingParameters: append([]string(nil), openRouterDefaultSamplingParameters...),
+			SupportedParameters:         supportedParameters,
 			SupportedFeatures:           features,
 			Description:                 pricing.Description,
 			DeprecationDate:             meta.deprecationDate,
@@ -88,6 +112,101 @@ func BuildOpenRouterProviderModels(pricings []model.Pricing) []dto.OpenRouterPro
 		return models[i].ID < models[j].ID
 	})
 	return models
+}
+
+func BuildOpenRouterProviderImageModels(pricings []model.Pricing) []dto.OpenRouterImageModel {
+	providerModels := BuildOpenRouterProviderModels(pricings)
+	imageModels := make([]dto.OpenRouterImageModel, 0, len(providerModels))
+	for _, item := range providerModels {
+		if !containsString(item.OutputModalities, "image") {
+			continue
+		}
+		imageModels = append(imageModels, dto.OpenRouterImageModel{
+			ID:          item.ID,
+			Name:        item.Name,
+			Description: item.Description,
+			Created:     item.Created,
+			Architecture: dto.OpenRouterImageArchitecture{
+				InputModalities:  item.InputModalities,
+				OutputModalities: item.OutputModalities,
+			},
+			InputModalities:     item.InputModalities,
+			OutputModalities:    item.OutputModalities,
+			Pricing:             item.Pricing,
+			SupportedParameters: buildOpenRouterImageSupportedParameters(),
+			SupportsStreaming:   false,
+			IsReady:             item.IsReady,
+			Endpoints:           BuildOpenRouterProviderImageModelEndpoints(pricings, item.ID),
+		})
+	}
+	return imageModels
+}
+
+func BuildOpenRouterProviderImageModelEndpoints(pricings []model.Pricing, modelID string) []dto.OpenRouterImageModelEndpoint {
+	providerModels := BuildOpenRouterProviderModels(pricings)
+	endpoints := make([]dto.OpenRouterImageModelEndpoint, 0, 1)
+	for _, item := range providerModels {
+		if item.ID != modelID || !containsString(item.OutputModalities, "image") {
+			continue
+		}
+		status := "ready"
+		if !item.IsReady {
+			status = "not_ready"
+		}
+		endpoints = append(endpoints, dto.OpenRouterImageModelEndpoint{
+			Name:                item.Name,
+			ProviderName:        OpenRouterProviderName(),
+			Tag:                 OpenRouterProviderSlug(),
+			Pricing:             item.Pricing,
+			ContextLength:       item.ContextLength,
+			MaxCompletionTokens: item.MaxOutputLength,
+			SupportedParameters: buildOpenRouterImageSupportedParameters(),
+			Status:              status,
+			SupportsStreaming:   false,
+		})
+	}
+	return endpoints
+}
+
+func OpenRouterProviderName() string {
+	return common.GetEnvOrDefaultString("OPENROUTER_PROVIDER_NAME", "lizh.ai")
+}
+
+func OpenRouterProviderSlug() string {
+	return common.GetEnvOrDefaultString("OPENROUTER_PROVIDER_SLUG", "lizh-ai")
+}
+
+func parseOpenRouterModelAllowlist() map[string]bool {
+	raw := strings.TrimSpace(common.GetEnvOrDefaultString("OPENROUTER_PROVIDER_MODEL_ALLOWLIST", ""))
+	if raw == "" {
+		return nil
+	}
+	allowlist := make(map[string]bool)
+	for _, item := range strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n'
+	}) {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			allowlist[item] = true
+		}
+	}
+	return allowlist
+}
+
+func buildOpenRouterImageSupportedParameters() []dto.OpenRouterSupportedParameter {
+	return []dto.OpenRouterSupportedParameter{
+		{Name: "prompt", Type: "string", Required: true},
+		{Name: "size", Type: "string", Values: []string{"512x512", "1024x1024", "1024x576", "576x1024", "1024x640", "640x1024", "1024x768", "768x1024", "1024x682", "682x1024", "2048x2048", "2048x1152", "1152x2048", "2048x1280", "1280x2048", "2048x1360", "1360x2048", "2048x1536", "1536x2048"}},
+		{Name: "aspect_ratio", Type: "string", Values: []string{"1:1", "16:9", "9:16", "16:10", "10:16", "4:3", "3:4", "3:2", "2:3"}},
+		{Name: "resolution", Type: "string", Values: []string{"1024", "2k", "2048"}},
+		{Name: "quality", Type: "string"},
+		{Name: "output_format", Type: "string", Values: []string{"png", "jpeg", "webp"}},
+		{Name: "output_compression", Type: "integer"},
+		{Name: "background", Type: "string"},
+		{Name: "seed", Type: "integer"},
+		{Name: "input_references", Type: "array"},
+		{Name: "provider.options", Type: "object"},
+	}
 }
 
 func parseOpenRouterProviderMetadata(pricing model.Pricing) openRouterProviderMetadata {
@@ -273,6 +392,24 @@ func mergeUniqueStrings(base []string, values []string) []string {
 		result = append(result, value)
 	}
 	return result
+}
+
+func hasEndpointType(endpointTypes []constant.EndpointType, expected constant.EndpointType) bool {
+	for _, endpointType := range endpointTypes {
+		if endpointType == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func firstNonEmpty(values ...string) string {

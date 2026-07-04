@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -144,27 +146,24 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 	switch relayMode {
 	case relayconstant.RelayModeImagesEdits:
 		if strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") {
-			_, err := c.MultipartForm()
+			form, err := common.ParseMultipartFormReusable(c)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse image edit form request: %w", err)
 			}
-			formData := c.Request.PostForm
+			formData := url.Values(form.Value)
 			imageRequest.Prompt = formData.Get("prompt")
 			imageRequest.Model = formData.Get("model")
-			imageRequest.N = common.GetPointer(uint(common.String2Int(formData.Get("n"))))
 			imageRequest.Quality = formData.Get("quality")
 			imageRequest.Size = formData.Get("size")
+			if nValue := strings.TrimSpace(formData.Get("n")); nValue != "" {
+				n, err := strconv.ParseUint(nValue, 10, 32)
+				if err != nil || n == 0 {
+					return nil, errors.New("n must be a positive integer")
+				}
+				imageRequest.N = common.GetPointer(uint(n))
+			}
 			if imageValue := formData.Get("image"); imageValue != "" {
 				imageRequest.Image, _ = common.Marshal(imageValue)
-			}
-
-			if imageRequest.Model == "gpt-image-1" {
-				if imageRequest.Quality == "" {
-					imageRequest.Quality = "standard"
-				}
-			}
-			if imageRequest.N == nil || *imageRequest.N == 0 {
-				imageRequest.N = common.GetPointer(uint(1))
 			}
 
 			hasWatermark := formData.Has("watermark")
@@ -172,9 +171,26 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 				watermark := formData.Get("watermark") == "true"
 				imageRequest.Watermark = &watermark
 			}
-			break
+
+			if imageRequest.Model == "" {
+				return nil, errors.New("model is required")
+			}
+			if imageRequest.Prompt == "" {
+				return nil, errors.New("prompt is required")
+			}
+			return imageRequest, nil
 		}
-		fallthrough
+
+		if err := common.UnmarshalBodyReusable(c, imageRequest); err != nil {
+			return nil, err
+		}
+		if imageRequest.Model == "" {
+			return nil, errors.New("model is required")
+		}
+		if imageRequest.Prompt == "" {
+			return nil, errors.New("prompt is required")
+		}
+		return imageRequest, nil
 	default:
 		err := common.UnmarshalBodyReusable(c, imageRequest)
 		if err != nil {

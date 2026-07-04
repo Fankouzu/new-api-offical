@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -277,6 +278,20 @@ func ListModels(c *gin.Context, modelType int) {
 func ListOpenRouterProviderModels(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OpenRouterProviderModelsResponse{
 		Data: service.BuildOpenRouterProviderModels(model.GetPricing()),
+	})
+}
+
+func ListOpenRouterProviderImageModels(c *gin.Context) {
+	c.JSON(http.StatusOK, dto.OpenRouterImageModelsResponse{
+		Data: service.BuildOpenRouterProviderImageModels(model.GetPricing()),
+	})
+}
+
+func ListOpenRouterProviderImageModelEndpoints(c *gin.Context) {
+	modelName := strings.Trim(c.Param("model"), "/")
+	modelName = strings.TrimSuffix(modelName, "/endpoints")
+	c.JSON(http.StatusOK, dto.OpenRouterImageModelEndpointsResponse{
+		Endpoints: service.BuildOpenRouterProviderImageModelEndpoints(model.GetPricing(), modelName),
 	})
 }
 

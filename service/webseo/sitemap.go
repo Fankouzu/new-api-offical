@@ -40,11 +40,14 @@ func BuildSitemapXMLForTheme(baseURL string, pricings []model.Pricing, theme str
 		XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9",
 	}
 	now := time.Now().UTC().Format("2006-01-02")
-	staticPaths := []string{"/", "/pricing", "/rankings", "/about", "/privacy-policy", "/user-agreement"}
+	staticPaths := []string{"/", "/pricing", "/compare/ai-api-pricing", "/rankings", "/about", "/privacy-policy", "/user-agreement"}
 	if theme == "classic" {
-		staticPaths = []string{"/", "/pricing", "/about", "/privacy-policy", "/user-agreement"}
+		staticPaths = []string{"/", "/pricing", "/compare/ai-api-pricing", "/about", "/privacy-policy", "/user-agreement"}
 	}
 	for _, path := range staticPaths {
+		if isNoindexSitemapPath(path, base, pricings, theme) {
+			continue
+		}
 		urlset.URLs = append(urlset.URLs, sitemapURL{
 			Loc:        canonicalURL(base, path),
 			LastMod:    now,
@@ -53,8 +56,12 @@ func BuildSitemapXMLForTheme(baseURL string, pricings []model.Pricing, theme str
 		})
 	}
 	for _, item := range BuildCatalog(pricings) {
+		path := modelURLPath(item.ID)
+		if isNoindexSitemapPath(path, base, pricings, theme) {
+			continue
+		}
 		urlset.URLs = append(urlset.URLs, sitemapURL{
-			Loc:        base + modelURLPath(item.ID),
+			Loc:        base + path,
 			LastMod:    now,
 			ChangeFreq: "weekly",
 			Priority:   "0.7",
@@ -65,6 +72,10 @@ func BuildSitemapXMLForTheme(baseURL string, pricings []model.Pricing, theme str
 		return `<?xml version="1.0" encoding="UTF-8"?>` + "\n"
 	}
 	return `<?xml version="1.0" encoding="UTF-8"?>` + "\n" + string(bytes) + "\n"
+}
+
+func isNoindexSitemapPath(path, baseURL string, pricings []model.Pricing, theme string) bool {
+	return strings.Contains(ResolveMetaForTheme(path, baseURL, pricings, theme).Robots, "noindex")
 }
 
 type sitemapURLSet struct {
@@ -84,6 +95,8 @@ func changeFreq(path string) string {
 	switch path {
 	case "/", "/pricing":
 		return "daily"
+	case "/compare/ai-api-pricing":
+		return "daily"
 	case "/rankings":
 		return "hourly"
 	default:
@@ -96,6 +109,8 @@ func priority(path string) string {
 	case "/":
 		return "1.0"
 	case "/pricing":
+		return "0.9"
+	case "/compare/ai-api-pricing":
 		return "0.9"
 	case "/rankings", "/about":
 		return "0.8"

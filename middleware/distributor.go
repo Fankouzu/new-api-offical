@@ -247,6 +247,13 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 			shouldSelectChannel = false
 		}
 		c.Set("relay_mode", relayMode)
+	} else if strings.HasPrefix(c.Request.URL.Path, "/api/v1/images") && c.Request.Method == http.MethodPost {
+		req, err := getModelFromRequest(c)
+		if err != nil {
+			return nil, false, err
+		}
+		modelRequest.Model = req.Model
+		c.Set("relay_mode", relayconstant.RelayModeImagesGenerations)
 	} else if strings.Contains(c.Request.URL.Path, "/v1/video/generations") {
 		relayMode := relayconstant.RelayModeUnknown
 		if c.Request.Method == http.MethodPost {

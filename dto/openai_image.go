@@ -64,6 +64,16 @@ func (i *ImageRequest) UnmarshalJSON(data []byte) error {
 			i.Extra[k] = v
 		}
 	}
+	if len(i.ExtraFields) > 0 {
+		var extraFields map[string]json.RawMessage
+		if err := common.Unmarshal(i.ExtraFields, &extraFields); err == nil {
+			for k, v := range extraFields {
+				if _, exists := i.Extra[k]; !exists {
+					i.Extra[k] = v
+				}
+			}
+		}
+	}
 	return nil
 }
 

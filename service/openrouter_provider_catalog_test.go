@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/stretchr/testify/require"
 )
@@ -62,4 +63,71 @@ func TestBuildOpenRouterProviderModelsMarksFreeModels(t *testing.T) {
 	require.True(t, result[0].IsFree)
 	require.Equal(t, "0", result[0].Pricing.Prompt)
 	require.Equal(t, "0", result[0].Pricing.Completion)
+}
+
+func TestBuildOpenRouterProviderModelsHonorsAllowlist(t *testing.T) {
+	t.Setenv("OPENROUTER_PROVIDER_MODEL_ALLOWLIST", "z-image-turbo-2k")
+	items := []model.Pricing{
+		{
+			ModelName:              "z-image-turbo-2k",
+			QuotaType:              1,
+			ModelPrice:             0.01,
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeImageGeneration},
+			EnableGroup:            []string{"default"},
+		},
+		{
+			ModelName:              "acme/chat",
+			QuotaType:              0,
+			ModelRatio:             0.001,
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+			EnableGroup:            []string{"default"},
+		},
+	}
+
+	result := BuildOpenRouterProviderModels(items)
+
+	require.Len(t, result, 1)
+	require.Equal(t, "z-image-turbo-2k", result[0].ID)
+}
+
+func TestBuildOpenRouterProviderImageModelsOnlyIncludesImageModels(t *testing.T) {
+	imageRatio := 0.01
+	items := []model.Pricing{
+		{
+			ModelName:              "z-image-turbo-2k",
+			Description:            "2K image model",
+			Tags:                   "or:name=Z Image Turbo 2K",
+			QuotaType:              1,
+			ModelPrice:             0.01,
+			ImageRatio:             &imageRatio,
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeImageGeneration},
+			EnableGroup:            []string{"default"},
+		},
+		{
+			ModelName:              "acme/chat",
+			QuotaType:              0,
+			ModelRatio:             0.001,
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+			EnableGroup:            []string{"default"},
+		},
+	}
+
+	result := BuildOpenRouterProviderImageModels(items)
+
+	require.Len(t, result, 1)
+	require.Equal(t, "z-image-turbo-2k", result[0].ID)
+	require.Equal(t, []string{"text", "image"}, result[0].InputModalities)
+	require.Equal(t, []string{"image"}, result[0].OutputModalities)
+	require.Contains(t, openRouterSupportedParameterNames(result[0].SupportedParameters), "input_references")
+	require.Contains(t, openRouterSupportedParameterNames(result[0].SupportedParameters), "provider.options")
+	require.Len(t, result[0].Endpoints, 1)
+	require.Equal(t, "lizh-ai", result[0].Endpoints[0].Tag)
+}
+
+func openRouterSupportedParameterNames(parameters []dto.OpenRouterSupportedParameter) []string {
+	names := make([]string, 0, len(parameters))
+	for _, parameter := range parameters {
+		names = append(names, parameter.Name)
+	}
+	return names
 }
