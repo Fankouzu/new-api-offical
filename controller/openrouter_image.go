@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -57,6 +58,9 @@ func RelayOpenRouterImage(c *gin.Context) {
 	}
 	originalRelayMode, hadOriginalRelayMode := c.Get("relay_mode")
 	c.Set("relay_mode", relayMode)
+	c.Set(service.OpenRouterImageResponseConverterContextKey, service.OpenRouterImageResponseConverter(func(ctx context.Context, body []byte) ([]byte, error) {
+		return service.ConvertOpenRouterImageResponse(ctx, body, service.DefaultOpenRouterImageConvertOptions())
+	}))
 	c.Request.URL.Path = relayPath
 	c.Request.URL.RawPath = ""
 	defer func() {
@@ -88,15 +92,10 @@ func RelayOpenRouterImage(c *gin.Context) {
 		return
 	}
 
-	converted, err := service.ConvertOpenRouterImageResponse(c.Request.Context(), recorder.body.Bytes(), service.DefaultOpenRouterImageConvertOptions())
-	if err != nil {
-		writeOpenRouterImageErrorToWriter(c, http.StatusBadGateway, err)
-		return
-	}
 	c.Writer.Header().Set("Content-Type", "application/json")
-	c.Writer.Header().Set("Content-Length", fmt.Sprintf("%d", len(converted)))
+	c.Writer.Header().Set("Content-Length", fmt.Sprintf("%d", recorder.body.Len()))
 	c.Writer.WriteHeader(status)
-	_, _ = c.Writer.Write(converted)
+	_, _ = c.Writer.Write(recorder.body.Bytes())
 }
 
 type openRouterImageResponseRecorder struct {
@@ -160,6 +159,26 @@ func (r *openRouterImageResponseRecorder) Status() int {
 }
 
 func (r *openRouterImageResponseRecorder) Flush() {
+}
+
+func (r *openRouterImageResponseRecorder) BodyBytes() []byte {
+	return r.body.Bytes()
+}
+
+func (r *openRouterImageResponseRecorder) ReplaceBody(status int, body []byte) {
+	r.body.Reset()
+	_, _ = r.body.Write(body)
+	r.status = status
+	r.size = len(body)
+}
+
+func (r *openRouterImageResponseRecorder) Reset() {
+	for key := range r.header {
+		delete(r.header, key)
+	}
+	r.body.Reset()
+	r.status = 0
+	r.size = 0
 }
 
 func copyOpenRouterImageHeaders(source, target http.Header) {

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -29,6 +28,16 @@ type OpenRouterImageConvertOptions struct {
 	AllowedHosts      []string
 	AllowInsecureHTTP bool
 	AllowPrivateHosts bool
+}
+
+const OpenRouterImageResponseConverterContextKey = "openrouter_image_response_converter"
+
+type OpenRouterImageResponseConverter func(context.Context, []byte) ([]byte, error)
+
+type OpenRouterImageResponseRecorder interface {
+	BodyBytes() []byte
+	ReplaceBody(status int, body []byte)
+	Reset()
 }
 
 func ConvertOpenRouterImageResponse(ctx context.Context, body []byte, options OpenRouterImageConvertOptions) ([]byte, error) {
@@ -91,6 +100,7 @@ func downloadOpenRouterImage(ctx context.Context, rawURL string, options OpenRou
 			client = http.DefaultClient
 		}
 	}
+	client = openRouterImageHTTPClientWithRedirectPolicy(client, options)
 	timeout := options.Timeout
 	if timeout <= 0 {
 		timeout = defaultOpenRouterImageDownloadTimeout
@@ -134,6 +144,27 @@ func downloadOpenRouterImage(ctx context.Context, rawURL string, options OpenRou
 	return data, nil
 }
 
+func openRouterImageHTTPClientWithRedirectPolicy(client *http.Client, options OpenRouterImageConvertOptions) *http.Client {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	copyClient := *client
+	previousCheckRedirect := client.CheckRedirect
+	copyClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		if _, err := validateOpenRouterImageURL(req.URL.String(), options); err != nil {
+			return fmt.Errorf("redirect to %s blocked: %w", req.URL.String(), err)
+		}
+		if previousCheckRedirect != nil {
+			return previousCheckRedirect(req, via)
+		}
+		return nil
+	}
+	return &copyClient
+}
+
 func validateOpenRouterImageURL(rawURL string, options OpenRouterImageConvertOptions) (*url.URL, error) {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
@@ -149,35 +180,24 @@ func validateOpenRouterImageURL(rawURL string, options OpenRouterImageConvertOpt
 	if len(options.AllowedHosts) > 0 && !hostMatchesAllowedList(host, options.AllowedHosts) {
 		return nil, fmt.Errorf("image url host %q is not allowed", host)
 	}
-	if !options.AllowPrivateHosts && isPrivateHostname(host) {
-		return nil, fmt.Errorf("image url host %q resolves to private address", host)
-	}
-	return parsed, nil
-}
-
-func isPrivateHostname(host string) bool {
-	ip := net.ParseIP(host)
-	if ip != nil {
-		return isPrivateIP(ip)
-	}
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		return false
-	}
-	for _, resolved := range ips {
-		if isPrivateIP(resolved) {
-			return true
+	if !options.AllowPrivateHosts {
+		protection := &common.SSRFProtection{
+			AllowPrivateIp:         false,
+			DomainFilterMode:       false,
+			DomainList:             nil,
+			IpFilterMode:           false,
+			IpList:                 nil,
+			AllowedPorts:           nil,
+			ApplyIPFilterForDomain: true,
+		}
+		if err := protection.ValidateURL(parsed.String()); err != nil {
+			if strings.Contains(err.Error(), "private IP address not allowed") {
+				return nil, fmt.Errorf("image url host %q resolves to private address: %w", host, err)
+			}
+			return nil, fmt.Errorf("image url is not allowed: %w", err)
 		}
 	}
-	return false
-}
-
-func isPrivateIP(ip net.IP) bool {
-	return ip.IsLoopback() ||
-		ip.IsPrivate() ||
-		ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() ||
-		ip.IsUnspecified()
+	return parsed, nil
 }
 
 func hostMatchesAllowedList(host string, allowedHosts []string) bool {

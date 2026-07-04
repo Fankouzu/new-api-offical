@@ -66,6 +66,32 @@ func TestGetAndValidOpenAIImageEditMultipartRequiresModelAndPrompt(t *testing.T)
 	})
 }
 
+func TestGetAndValidOpenAIImageEditMultipartPreservesN(t *testing.T) {
+	c := newMultipartImageEditContext(t, map[string]string{
+		"model":  "qwen-image",
+		"prompt": "edit",
+		"n":      "4",
+	}, nil)
+
+	request, err := GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesEdits)
+
+	require.NoError(t, err)
+	require.NotNil(t, request.N)
+	require.Equal(t, uint(4), *request.N)
+}
+
+func TestGetAndValidOpenAIImageEditMultipartRejectsInvalidN(t *testing.T) {
+	c := newMultipartImageEditContext(t, map[string]string{
+		"model":  "qwen-image",
+		"prompt": "edit",
+		"n":      "invalid",
+	}, nil)
+
+	_, err := GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesEdits)
+
+	require.EqualError(t, err, "n must be a positive integer")
+}
+
 func newMultipartImageEditContext(t *testing.T, fields map[string]string, files map[string]string) *gin.Context {
 	t.Helper()
 

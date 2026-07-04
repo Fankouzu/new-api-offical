@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -154,6 +155,13 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 			imageRequest.Model = formData.Get("model")
 			imageRequest.Quality = formData.Get("quality")
 			imageRequest.Size = formData.Get("size")
+			if nValue := strings.TrimSpace(formData.Get("n")); nValue != "" {
+				n, err := strconv.ParseUint(nValue, 10, 32)
+				if err != nil || n == 0 {
+					return nil, errors.New("n must be a positive integer")
+				}
+				imageRequest.N = common.GetPointer(uint(n))
+			}
 			if imageValue := formData.Get("image"); imageValue != "" {
 				imageRequest.Image, _ = common.Marshal(imageValue)
 			}

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -74,6 +75,42 @@ func TestConvertOpenRouterImageResponseRejectsPrivateImageURL(t *testing.T) {
 	require.Contains(t, err.Error(), "private")
 }
 
+func TestConvertOpenRouterImageResponseRejectsSpecialRangeImageURL(t *testing.T) {
+	_, err := validateOpenRouterImageURL("https://100.64.0.1/image.png", OpenRouterImageConvertOptions{})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "private")
+}
+
+func TestConvertOpenRouterImageResponseValidatesRedirectPolicy(t *testing.T) {
+	var redirected bool
+	redirectTarget := "https://example.com/image.png"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		redirected = true
+		http.Redirect(w, r, redirectTarget, http.StatusFound)
+	}))
+	defer upstream.Close()
+
+	body, err := common.Marshal(dto.ImageResponse{
+		Data: []dto.ImageData{{
+			Url: upstream.URL + "/image.png",
+		}},
+	})
+	require.NoError(t, err)
+
+	_, err = ConvertOpenRouterImageResponse(context.Background(), body, OpenRouterImageConvertOptions{
+		HTTPClient:        upstream.Client(),
+		MaxDownloadSize:   1024,
+		AllowedHosts:      []string{mustURLHost(t, upstream.URL)},
+		AllowInsecureHTTP: true,
+		AllowPrivateHosts: true,
+	})
+
+	require.True(t, redirected)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), fmt.Sprintf("image url host %q is not allowed", "example.com"))
+}
+
 func TestConvertOpenRouterImageResponseEnforcesMaxDownloadSize(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
@@ -97,4 +134,11 @@ func TestConvertOpenRouterImageResponseEnforcesMaxDownloadSize(t *testing.T) {
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "exceeds")
+}
+
+func mustURLHost(t *testing.T, rawURL string) string {
+	t.Helper()
+	parsed, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	require.NoError(t, err)
+	return parsed.URL.Hostname()
 }

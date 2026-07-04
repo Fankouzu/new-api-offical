@@ -112,6 +112,25 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
 	}
+	if converter, ok := c.Get(service.OpenRouterImageResponseConverterContextKey); ok {
+		convertImageResponse, ok := converter.(service.OpenRouterImageResponseConverter)
+		if !ok {
+			return types.NewErrorWithStatusCode(fmt.Errorf("invalid OpenRouter image response converter"), types.ErrorCodeBadResponseBody, http.StatusInternalServerError, types.ErrOptionWithSkipRetry())
+		}
+		responseRecorder, ok := c.Writer.(service.OpenRouterImageResponseRecorder)
+		if !ok {
+			return types.NewErrorWithStatusCode(fmt.Errorf("OpenRouter image response recorder is unavailable"), types.ErrorCodeBadResponseBody, http.StatusInternalServerError, types.ErrOptionWithSkipRetry())
+		}
+		status := c.Writer.Status()
+		converted, err := convertImageResponse(c.Request.Context(), responseRecorder.BodyBytes())
+		if err != nil {
+			responseRecorder.Reset()
+			return types.NewErrorWithStatusCode(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway, types.ErrOptionWithSkipRetry())
+		}
+		responseRecorder.ReplaceBody(status, converted)
+		c.Writer.Header().Set("Content-Type", "application/json")
+		c.Writer.Header().Set("Content-Length", fmt.Sprintf("%d", len(converted)))
+	}
 
 	imageN := uint(1)
 	if request.N != nil {
