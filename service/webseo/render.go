@@ -3,6 +3,7 @@ package webseo
 import (
 	"bytes"
 	"html"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -54,6 +55,11 @@ func buildSEOTags(meta Meta) string {
 		builder.WriteString(html.EscapeString(meta.CanonicalURL))
 		builder.WriteString(`">` + "\n")
 	}
+	if llmsURL := llmsTxtURL(meta.CanonicalURL); llmsURL != "" {
+		builder.WriteString(`    <link rel="alternate" type="text/plain" href="`)
+		builder.WriteString(html.EscapeString(llmsURL))
+		builder.WriteString(`" title="llms.txt">` + "\n")
+	}
 	writeMeta(&builder, "property", "og:type", firstNonEmpty(meta.OGType, "website"))
 	writeMeta(&builder, "property", "og:site_name", defaultSiteName)
 	writeMeta(&builder, "property", "og:title", meta.Title)
@@ -71,6 +77,14 @@ func buildSEOTags(meta Meta) string {
 	}
 	builder.WriteString("    <!--seo:injected:end-->\n")
 	return builder.String()
+}
+
+func llmsTxtURL(canonicalURL string) string {
+	parsed, err := url.Parse(canonicalURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	return parsed.Scheme + "://" + parsed.Host + "/llms.txt"
 }
 
 func writeTag(builder *strings.Builder, tag string, value string) {

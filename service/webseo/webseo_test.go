@@ -193,6 +193,7 @@ func TestRenderIndexHTMLInjectsRouteSpecificTags(t *testing.T) {
 		`<meta name="description" content="DeepSeek V4 Flash API`,
 		`<meta name="robots" content="index,follow">`,
 		`<link rel="canonical" href="https://lizh.ai/pricing/deepseek-v4-flash">`,
+		`<link rel="alternate" type="text/plain" href="https://lizh.ai/llms.txt" title="llms.txt">`,
 		`<meta property="og:title" content="DeepSeek V4 Flash API pricing | Lizh AI">`,
 		`<script type="application/ld+json">`,
 	}
@@ -206,10 +207,27 @@ func TestRenderIndexHTMLInjectsRouteSpecificTags(t *testing.T) {
 	}
 }
 
+func TestRenderIndexHTMLInjectsLlmsAlternateLinkOnHomepage(t *testing.T) {
+	html := `<!doctype html><html><head><title>New API</title></head><body><div id="root"></div></body></html>`
+	meta := ResolveMeta("/", "https://lizh.ai", testCatalog)
+
+	rendered := string(RenderIndexHTML([]byte(html), meta))
+	needle := `<link rel="alternate" type="text/plain" href="https://lizh.ai/llms.txt" title="llms.txt">`
+	if !strings.Contains(rendered, needle) {
+		t.Fatalf("homepage HTML missing llms.txt alternate link %q:\n%s", needle, rendered)
+	}
+}
+
 func TestBuildRobotsAndSitemap(t *testing.T) {
 	robots := BuildRobotsTxt("https://lizh.ai")
 	if !strings.Contains(robots, "Sitemap: https://lizh.ai/sitemap.xml") {
 		t.Fatalf("robots should link sitemap, got:\n%s", robots)
+	}
+	if !strings.Contains(robots, "Allow: /llms.txt") {
+		t.Fatalf("robots should explicitly allow llms.txt, got:\n%s", robots)
+	}
+	if strings.Contains(robots, "Disallow: /llms.txt") {
+		t.Fatalf("robots should not disallow llms.txt, got:\n%s", robots)
 	}
 	if !strings.Contains(robots, "Disallow: /console/") {
 		t.Fatalf("robots should disallow console paths, got:\n%s", robots)

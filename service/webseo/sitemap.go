@@ -12,6 +12,7 @@ func BuildRobotsTxt(baseURL string) string {
 	base := normalizeBaseURL(baseURL)
 	lines := []string{
 		"User-agent: *",
+		"Allow: /llms.txt",
 		"Allow: /",
 		"Disallow: /console/",
 		"Disallow: /api/",

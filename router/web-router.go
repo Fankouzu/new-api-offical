@@ -37,6 +37,11 @@ func SetWebRouter(router *gin.Engine, assets ThemeAssets) {
 		c.Header("Cache-Control", "public, max-age=3600")
 		c.String(http.StatusOK, webseo.BuildRobotsTxt(system_setting.ServerAddress))
 	})
+	router.GET("/llms.txt", func(c *gin.Context) {
+		c.Set(middleware.RouteTagKey, "web")
+		c.Header("Cache-Control", "public, max-age=3600")
+		c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(webseo.BuildLLMSTxt()))
+	})
 	router.GET("/sitemap.xml", func(c *gin.Context) {
 		c.Set(middleware.RouteTagKey, "web")
 		c.Header("Cache-Control", "public, max-age=3600")
