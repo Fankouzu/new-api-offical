@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -66,6 +68,76 @@ func TestImageHelperRunsOpenRouterImageConversionBeforeBilling(t *testing.T) {
 	require.Equal(t, http.StatusBadGateway, err.StatusCode)
 	require.False(t, billing.settled)
 	require.Empty(t, recorder.BodyBytes())
+}
+
+func TestImageHelperConvertsOpenRouterBridgeRequestWhenPassThroughEnabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	service.InitHttpClient()
+
+	originalPassThrough := model_setting.GetGlobalSettings().PassThroughRequestEnabled
+	model_setting.GetGlobalSettings().PassThroughRequestEnabled = true
+	t.Cleanup(func() {
+		model_setting.GetGlobalSettings().PassThroughRequestEnabled = originalPassThrough
+	})
+
+	var upstreamBody []byte
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var err error
+		upstreamBody, err = io.ReadAll(r.Body)
+		require.NoError(t, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"stop before billing","type":"invalid_request_error"}}`))
+	}))
+	defer upstream.Close()
+
+	body := []byte(`{"model":"Qwen-Image-Edit","prompt":"edit","size":"1024x1024","extra_fields":{"image_url":"https://example.com/input.png"}}`)
+	base := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(base)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(service.OpenRouterImageResponseConverterContextKey, service.OpenRouterImageResponseConverter(func(context.Context, []byte) ([]byte, error) {
+		return nil, nil
+	}))
+	storage, err := common.CreateBodyStorage(body)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = storage.Close()
+	})
+	c.Set(common.KeyBodyStorage, storage)
+	common.SetContextKey(c, constant.ContextKeyChannelType, constant.ChannelTypeOpenAI)
+	common.SetContextKey(c, constant.ContextKeyChannelId, 1)
+	common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, upstream.URL)
+	common.SetContextKey(c, constant.ContextKeyChannelKey, "test-key")
+	common.SetContextKey(c, constant.ContextKeyOriginalModel, "Qwen-Image-Edit")
+
+	err = ImageHelper(c, &relaycommon.RelayInfo{
+		RelayMode:       relayconstant.RelayModeImagesEdits,
+		RelayFormat:     types.RelayFormatOpenAIImage,
+		OriginModelName: "Qwen-Image-Edit",
+		RequestURLPath:  "/v1/images/edits",
+		PriceData: types.PriceData{
+			UsePrice:    true,
+			OtherRatios: map[string]float64{},
+		},
+		Request: &dto.ImageRequest{
+			Model:  "Qwen-Image-Edit",
+			Prompt: "edit",
+			Size:   "1024x1024",
+			ExtraFields: []byte(
+				`{"image_url":"https://example.com/input.png"}`,
+			),
+		},
+	})
+
+	require.Error(t, err)
+	require.JSONEq(t, `{
+		"model":"Qwen-Image-Edit",
+		"prompt":"edit",
+		"size":"1024x1024",
+		"image_url":"https://example.com/input.png"
+	}`, string(upstreamBody))
+	require.NotContains(t, string(upstreamBody), "extra_fields")
 }
 
 type testBillingSettler struct {
