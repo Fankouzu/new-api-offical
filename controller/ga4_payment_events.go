@@ -1,13 +1,9 @@
 package controller
 
 import (
-	"strings"
-
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service/analytics"
-	"github.com/QuantumNous/new-api/setting"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -15,7 +11,7 @@ import (
 const (
 	ga4SubjectTypeTopUp       = "top_up"
 	ga4SubjectTypePurchase    = "purchase"
-	ga4EventTopUp             = "top_up"
+	ga4EventTopUp             = "top_up_success"
 	ga4EventPurchase          = "purchase"
 	ga4ItemTypeTopUp          = "top_up"
 	ga4ItemTypeSubscription   = "subscription"
@@ -85,28 +81,6 @@ func trackAnalyticsMarkResult(markID int) func(error) {
 	}
 }
 
-func resolveGA4PaymentCurrency(paymentProvider string, currency string) string {
-	currency = strings.ToUpper(strings.TrimSpace(currency))
-	if currency != "" {
-		return currency
-	}
-	switch paymentProvider {
-	case model.PaymentProviderBinancePay:
-		return strings.ToUpper(strings.TrimSpace(setting.BinancePayCurrency))
-	case model.PaymentProviderWaffo:
-		return strings.ToUpper(strings.TrimSpace(setting.WaffoCurrency))
-	case model.PaymentProviderWaffoPancake:
-		return strings.ToUpper(strings.TrimSpace(setting.WaffoPancakeCurrency))
-	default:
-		return resolveGA4DisplayCurrency()
-	}
-}
-
-func resolveGA4DisplayCurrency() string {
-	switch operation_setting.GetQuotaDisplayType() {
-	case operation_setting.QuotaDisplayTypeCNY:
-		return "CNY"
-	default:
-		return defaultPaymentCurrencyUSD
-	}
+func resolveGA4PaymentCurrency(_ string, _ string) string {
+	return defaultPaymentCurrencyUSD
 }

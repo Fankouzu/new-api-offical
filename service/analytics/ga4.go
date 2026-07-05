@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
@@ -23,12 +24,13 @@ import (
 
 const (
 	eventSignUp               = "sign_up"
-	eventVoucherRedeemSuccess = "voucher_redeem_success"
+	eventVoucherRedeemSuccess = "redeem_success"
 	eventAPIKeyCreated        = "api_key_created"
-	eventFirstAPICall         = "first_api_call"
-	eventTopUp                = "top_up"
+	eventFirstAPICall         = "first_api_request_success"
+	eventTopUp                = "top_up_success"
 	eventPurchase             = "purchase"
 	defaultVoucherSource      = "lizh_ai"
+	defaultRedeemSource       = "voucher"
 	defaultTimeoutMS          = 1500
 	developmentHashSalt       = "ga4-development-hash-salt"
 )
@@ -49,6 +51,12 @@ var attributionURLParamAllowlist = map[string]struct{}{
 type EventParams map[string]any
 
 type RedemptionAttribution struct {
+	TransactionID       string
+	Value               float64
+	Currency            string
+	Source              string
+	PageLocation        string
+	PageReferrer        string
 	VoucherSource       string
 	DigisellerInvoiceID string
 	DigisellerProductID string
@@ -57,6 +65,9 @@ type RedemptionAttribution struct {
 
 type UserAttribution struct {
 	VoucherSource string
+	KeyType       string
+	PageLocation  string
+	PageReferrer  string
 }
 
 type PurchaseAttribution struct {
@@ -67,6 +78,9 @@ type PurchaseAttribution struct {
 	PaymentMethod   string
 	ItemType        string
 	QuotaAmount     int64
+	PageLocation    string
+	PageReferrer    string
+	FallbackPath    string
 }
 
 type SignUpAttribution struct {
@@ -84,6 +98,15 @@ type SignUpAttribution struct {
 	YCLID        string `json:"yclid"`
 	FirstVisitAt string `json:"first_visit_at"`
 	Method       string `json:"method"`
+}
+
+type FirstAPIRequestAttribution struct {
+	Model        string
+	Endpoint     string
+	StatusCode   int
+	QuotaSpent   int
+	PageLocation string
+	PageReferrer string
 }
 
 type Config struct {
@@ -244,19 +267,33 @@ func TrackVoucherRedeemSuccess(c *gin.Context, userID int, voucherCode string, q
 	if !trackingEnabled(cfg) {
 		return
 	}
-	source := strings.TrimSpace(attrs.VoucherSource)
+	source := strings.TrimSpace(attrs.Source)
 	if source == "" {
-		source = defaultVoucherSource
+		source = defaultRedeemSource
+	}
+	value := attrs.Value
+	if value <= 0 && quota > 0 {
+		value = float64(quota) / common.QuotaPerUnit
+	}
+	transactionID := strings.TrimSpace(attrs.TransactionID)
+	if transactionID == "" {
+		transactionID = "voucher:" + HashIdentifier(voucherCode)
 	}
 	params := EventParams{
+		"transaction_id":     transactionID,
+		"value":              value,
+		"currency":           normalizeCurrency(attrs.Currency),
+		"source":             source,
 		"voucher_code_hash":  HashIdentifier(voucherCode),
-		"voucher_amount_usd": float64(quota) / common.QuotaPerUnit,
-		"voucher_source":     source,
+		"voucher_amount_usd": value,
+		"voucher_source":     firstNonEmpty(attrs.VoucherSource, source),
 		"redeem_result":      "success",
 	}
+	addUserIDParam(params, userID)
 	addStringParam(params, "digiseller_invoice_id", attrs.DigisellerInvoiceID)
 	addStringParam(params, "digiseller_product_id", attrs.DigisellerProductID)
 	addStringParam(params, "plati_campaign", attrs.PlatiCampaign)
+	addPageContext(c, params, attrs.PageLocation, attrs.PageReferrer, "/wallet")
 	track(c, cfg, userID, 0, eventVoucherRedeemSuccess, params)
 }
 
@@ -277,6 +314,9 @@ func TrackAPIKeyCreated(c *gin.Context, userID int, tokenID int, tokenKey string
 		"api_key_id_hash": HashIdentifier(hashSource),
 		"voucher_source":  source,
 	}
+	addUserIDParam(params, userID)
+	addStringParam(params, "key_type", attrs.KeyType)
+	addPageContext(c, params, attrs.PageLocation, attrs.PageReferrer, "/keys")
 	track(c, cfg, userID, tokenID, eventAPIKeyCreated, params)
 }
 
@@ -301,17 +341,27 @@ func trackPurchaseEventWithResult(c *gin.Context, userID int, eventName string, 
 	if !trackingEnabled(cfg) {
 		return
 	}
-	params := EventParams{
-		"transaction_id_hash": HashIdentifier(attrs.TradeNo),
-		"value":               attrs.Value,
-		"currency":            normalizeCurrency(attrs.Currency),
+	paymentMethod := strings.TrimSpace(attrs.PaymentProvider)
+	if paymentMethod == "" {
+		paymentMethod = strings.TrimSpace(attrs.PaymentMethod)
 	}
+	params := EventParams{
+		"transaction_id": attrs.TradeNo,
+		"value":          attrs.Value,
+		"currency":       normalizeCurrency(attrs.Currency),
+		"payment_method": paymentMethod,
+	}
+	addUserIDParam(params, userID)
 	addStringParam(params, "payment_provider", attrs.PaymentProvider)
-	addStringParam(params, "payment_method", attrs.PaymentMethod)
+	if strings.TrimSpace(attrs.PaymentMethod) != "" && strings.TrimSpace(attrs.PaymentMethod) != paymentMethod {
+		addStringParam(params, "payment_method_detail", attrs.PaymentMethod)
+	}
 	addStringParam(params, "item_type", attrs.ItemType)
 	if attrs.QuotaAmount > 0 {
 		params["quota_amount"] = attrs.QuotaAmount
 	}
+	fallbackPath := firstNonEmpty(attrs.FallbackPath, "/wallet")
+	addPageContext(c, params, attrs.PageLocation, attrs.PageReferrer, fallbackPath)
 	trackWithResult(c, cfg, userID, 0, eventName, params, onResult)
 }
 
@@ -327,8 +377,8 @@ func TrackSignUp(c *gin.Context, userID int, attrs SignUpAttribution) {
 	params := EventParams{
 		"method": method,
 	}
-	addStringParam(params, "page_location", sanitizeAttributionURL(attrs.PageLocation))
-	addStringParam(params, "page_referrer", sanitizeAttributionURL(attrs.PageReferrer))
+	addUserIDParam(params, userID)
+	addPageContext(c, params, attrs.PageLocation, attrs.PageReferrer, "/sign-up")
 	addStringParam(params, "source", attrs.Source)
 	addStringParam(params, "medium", attrs.Medium)
 	addStringParam(params, "campaign", attrs.Campaign)
@@ -343,10 +393,22 @@ func TrackSignUp(c *gin.Context, userID int, attrs SignUpAttribution) {
 }
 
 func TrackFirstAPICall(c *gin.Context, userID int, tokenID int, tokenKey string, modelID string, quotaSpent int) {
-	TrackFirstAPICallWithResult(c, userID, tokenID, tokenKey, modelID, quotaSpent, nil)
+	TrackFirstAPIRequestSuccessWithResult(c, userID, tokenID, tokenKey, FirstAPIRequestAttribution{
+		Model:      modelID,
+		QuotaSpent: quotaSpent,
+		StatusCode: http.StatusOK,
+	}, nil)
 }
 
 func TrackFirstAPICallWithResult(c *gin.Context, userID int, tokenID int, tokenKey string, modelID string, quotaSpent int, onResult func(error)) {
+	TrackFirstAPIRequestSuccessWithResult(c, userID, tokenID, tokenKey, FirstAPIRequestAttribution{
+		Model:      modelID,
+		QuotaSpent: quotaSpent,
+		StatusCode: http.StatusOK,
+	}, onResult)
+}
+
+func TrackFirstAPIRequestSuccessWithResult(c *gin.Context, userID int, tokenID int, tokenKey string, attrs FirstAPIRequestAttribution, onResult func(error)) {
 	cfg := currentConfig()
 	if !trackingEnabled(cfg) {
 		return
@@ -355,12 +417,21 @@ func TrackFirstAPICallWithResult(c *gin.Context, userID int, tokenID int, tokenK
 	if tokenID <= 0 {
 		hashSource = tokenKey
 	}
+	statusCode := attrs.StatusCode
+	if statusCode <= 0 {
+		statusCode = http.StatusOK
+	}
 	params := EventParams{
 		"api_key_id_hash": HashIdentifier(hashSource),
-		"model_id":        modelID,
-		"quota_spent":     quotaSpent,
+		"model":           attrs.Model,
+		"model_id":        attrs.Model,
+		"endpoint":        normalizeEndpoint(attrs.Endpoint),
+		"status_code":     statusCode,
+		"quota_spent":     attrs.QuotaSpent,
 		"voucher_source":  defaultVoucherSource,
 	}
+	addUserIDParam(params, userID)
+	addPageContext(c, params, attrs.PageLocation, attrs.PageReferrer, normalizeEndpoint(attrs.Endpoint))
 	trackWithResult(c, cfg, userID, tokenID, eventFirstAPICall, params, onResult)
 }
 
@@ -369,6 +440,26 @@ func addStringParam(params EventParams, key string, value string) {
 	if value != "" {
 		params[key] = value
 	}
+}
+
+func setStringParam(params EventParams, key string, value string) {
+	params[key] = strings.TrimSpace(value)
+}
+
+func addUserIDParam(params EventParams, userID int) {
+	if userID > 0 {
+		params["user_id"] = userID
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func normalizeCurrency(currency string) string {
@@ -406,6 +497,144 @@ func sanitizeAttributionURL(raw string) string {
 	}
 	clean.RawQuery = query.Encode()
 	return clean.String()
+}
+
+func addPageContext(c *gin.Context, params EventParams, pageLocation string, pageReferrer string, fallbackPath string) {
+	resolvedLocation := resolvePageLocation(c, pageLocation, fallbackPath)
+	setStringParam(params, "page_location", resolvedLocation)
+	setStringParam(params, "page_referrer", sanitizeAttributionURL(pageReferrer))
+	setStringParam(params, "hostname", resolveHostname(c, resolvedLocation))
+}
+
+func resolvePageLocation(c *gin.Context, pageLocation string, fallbackPath string) string {
+	if sanitized := sanitizeAttributionURL(pageLocation); sanitized != "" {
+		return sanitized
+	}
+	base := configuredSiteBaseURL()
+	if base == nil {
+		base = requestBaseURL(c)
+	}
+	if base == nil {
+		return ""
+	}
+	fallbackPath = normalizePagePath(fallbackPath)
+	if fallbackPath == "" {
+		return base.String()
+	}
+	resolved := *base
+	resolved.Path = fallbackPath
+	resolved.RawQuery = ""
+	resolved.Fragment = ""
+	return resolved.String()
+}
+
+func resolveHostname(c *gin.Context, pageLocation string) string {
+	if parsed, err := url.Parse(strings.TrimSpace(pageLocation)); err == nil && parsed.Hostname() != "" {
+		return parsed.Hostname()
+	}
+	if base := configuredSiteBaseURL(); base != nil {
+		return base.Hostname()
+	}
+	if base := requestBaseURL(c); base != nil {
+		return base.Hostname()
+	}
+	return ""
+}
+
+func configuredSiteBaseURL() *url.URL {
+	raw := strings.TrimSpace(system_setting.ServerAddress)
+	if raw == "" {
+		return nil
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return nil
+	}
+	return cleanBaseURL(parsed)
+}
+
+func requestBaseURL(c *gin.Context) *url.URL {
+	if c == nil || c.Request == nil {
+		return nil
+	}
+	host := strings.TrimSpace(c.GetHeader("X-Forwarded-Host"))
+	if host == "" {
+		host = strings.TrimSpace(c.Request.Host)
+	}
+	if host == "" {
+		return nil
+	}
+	scheme := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto"))
+	if scheme == "" {
+		if c.Request.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	parsed := &url.URL{Scheme: scheme, Host: host}
+	return cleanBaseURL(parsed)
+}
+
+func cleanBaseURL(parsed *url.URL) *url.URL {
+	if parsed == nil {
+		return nil
+	}
+	clean := *parsed
+	clean.Path = ""
+	clean.RawPath = ""
+	clean.RawQuery = ""
+	clean.Fragment = ""
+	return &clean
+}
+
+func normalizePagePath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if parsed, err := url.Parse(path); err == nil {
+		if parsed.Scheme != "" && parsed.Host != "" {
+			path = parsed.EscapedPath()
+		}
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	if idx := strings.Index(path, "?"); idx >= 0 {
+		path = path[:idx]
+	}
+	if path == "" {
+		return ""
+	}
+	return path
+}
+
+func normalizeEndpoint(endpoint string) string {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		return ""
+	}
+	if parsed, err := url.Parse(endpoint); err == nil {
+		if parsed.Scheme != "" && parsed.Host != "" {
+			endpoint = parsed.Path
+		} else if parsed.Path != "" {
+			endpoint = parsed.Path
+		}
+	}
+	if endpoint == "" {
+		return ""
+	}
+	if !strings.HasPrefix(endpoint, "/") {
+		endpoint = "/" + endpoint
+	}
+	if idx := strings.Index(endpoint, "?"); idx >= 0 {
+		endpoint = endpoint[:idx]
+	}
+	return endpoint
 }
 
 func track(c *gin.Context, cfg Config, userID int, tokenID int, eventName string, params EventParams) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,6 +55,7 @@ func TestTrackFirstAPICallDoesNotMarkWhenGA4Disabled(t *testing.T) {
 		TokenId:         7,
 		TokenKey:        "token-key",
 		OriginModelName: "gpt-test",
+		RequestURLPath:  "/v1/chat/completions?trace=1",
 	}, 100)
 
 	var count int64
@@ -61,7 +63,7 @@ func TestTrackFirstAPICallDoesNotMarkWhenGA4Disabled(t *testing.T) {
 		t.Fatalf("count analytics event marks: %v", err)
 	}
 	if count != 0 {
-		t.Fatalf("disabled GA4 should not create first_api_call mark, got %d", count)
+		t.Fatalf("disabled GA4 should not create first_api_request_success mark, got %d", count)
 	}
 }
 
@@ -86,11 +88,12 @@ func TestTrackFirstAPICallRetriesFailedSendAndSuppressesSentDuplicate(t *testing
 		TokenId:         7,
 		TokenKey:        "token-key",
 		OriginModelName: "gpt-test",
+		RequestURLPath:  "/v1/chat/completions?trace=1",
 	}
 
 	trackFirstAPICallIfNeeded(info, 100)
 	waitForGA4Send(t, sender.done)
-	mark := requireAnalyticsMark(t, 7)
+	mark := waitForAnalyticsMarkStatus(t, 7, model.AnalyticsEventStatusFailed)
 	if mark.Status != model.AnalyticsEventStatusFailed {
 		t.Fatalf("status after failed send = %q, want failed", mark.Status)
 	}
@@ -100,12 +103,23 @@ func TestTrackFirstAPICallRetriesFailedSendAndSuppressesSentDuplicate(t *testing
 
 	trackFirstAPICallIfNeeded(info, 100)
 	waitForGA4Send(t, sender.done)
-	mark = requireAnalyticsMark(t, 7)
+	mark = waitForAnalyticsMarkStatus(t, 7, model.AnalyticsEventStatusSent)
 	if mark.Status != model.AnalyticsEventStatusSent {
 		t.Fatalf("status after retry success = %q, want sent", mark.Status)
 	}
 	if sender.requests != 2 {
 		t.Fatalf("requests after retry = %d, want 2", sender.requests)
+	}
+	if !strings.Contains(sender.bodies[1], `"name":"first_api_request_success"`) {
+		t.Fatalf("first API payload should use new event name: %s", sender.bodies[1])
+	}
+	if !strings.Contains(sender.bodies[1], `"endpoint":"/v1/chat/completions"`) ||
+		!strings.Contains(sender.bodies[1], `"status_code":200`) ||
+		!strings.Contains(sender.bodies[1], `"model":"gpt-test"`) {
+		t.Fatalf("first API payload missing endpoint/status/model: %s", sender.bodies[1])
+	}
+	if strings.Contains(sender.bodies[1], "token-key") {
+		t.Fatalf("first API payload leaked raw token key: %s", sender.bodies[1])
 	}
 
 	trackFirstAPICallIfNeeded(info, 100)
@@ -116,7 +130,7 @@ func TestTrackFirstAPICallRetriesFailedSendAndSuppressesSentDuplicate(t *testing
 
 func requireAnalyticsMark(t *testing.T, tokenID int) *model.AnalyticsEventMark {
 	t.Helper()
-	mark, err := model.GetAnalyticsEventMark("token", tokenID, "first_api_call")
+	mark, err := model.GetAnalyticsEventMark("token", tokenID, "first_api_request_success")
 	if err != nil {
 		t.Fatalf("get analytics mark: %v", err)
 	}
@@ -130,4 +144,17 @@ func waitForGA4Send(t *testing.T, done <-chan struct{}) {
 	case <-time.After(time.Second):
 		t.Fatalf("timed out waiting for GA4 send")
 	}
+}
+
+func waitForAnalyticsMarkStatus(t *testing.T, tokenID int, status string) *model.AnalyticsEventMark {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		mark := requireAnalyticsMark(t, tokenID)
+		if mark.Status == status {
+			return mark
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return requireAnalyticsMark(t, tokenID)
 }

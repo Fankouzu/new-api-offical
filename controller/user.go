@@ -1116,7 +1116,7 @@ func TopUp(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	quota, err := model.RedeemWithAudit(req.Key, id, c.ClientIP())
+	redeemDetails, err := model.RedeemWithAuditDetails(req.Key, id, c.ClientIP())
 	if err != nil {
 		if errors.Is(err, model.ErrRedeemFailed) {
 			common.ApiErrorI18n(c, i18n.MsgRedeemFailed)
@@ -1125,11 +1125,14 @@ func TopUp(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	analytics.TrackVoucherRedeemSuccess(c, id, req.Key, quota, analytics.RedemptionAttribution{})
+	analytics.TrackVoucherRedeemSuccess(c, id, req.Key, redeemDetails.Quota, analytics.RedemptionAttribution{
+		TransactionID: redeemDetails.TransactionID(),
+		Source:        "voucher",
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    quota,
+		"data":    redeemDetails.Quota,
 	})
 }
 

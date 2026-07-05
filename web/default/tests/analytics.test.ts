@@ -93,8 +93,8 @@ function dataLayerAsCommands(): unknown[][] {
 }
 
 describe('google analytics runtime', () => {
-  test('uses the repository default measurement id when env is not set', () => {
-    expect(getGoogleAnalyticsMeasurementId()).toBe('G-9693VBP1VM')
+  test('does not hardcode a measurement id when env is not set', () => {
+    expect(getGoogleAnalyticsMeasurementId()).toBe('')
   })
 
   test('does not initialize without a measurement id', () => {
@@ -134,10 +134,42 @@ describe('google analytics runtime', () => {
         {
           page_path: '/pricing?model=gpt',
           page_location: 'http://localhost/pricing?model=gpt',
+          page_referrer: '',
+          hostname: 'localhost',
           page_title: document.title,
         },
       ],
       ['event', 'sign_up_click', { method: 'oauth' }],
+    ])
+  })
+
+  test('does not report undefined or null route values as page paths', () => {
+    initGoogleAnalytics('G-TEST123')
+
+    trackPageView('undefined')
+    trackPageView('/undefined')
+    trackPageView('null')
+
+    expect(dataLayerAsCommands().slice(2)).toEqual([])
+  })
+
+  test('normalizes duplicated question marks before reporting page views', () => {
+    initGoogleAnalytics('G-TEST123')
+
+    trackPageView('/usage-logs/common?page=2?page=2')
+
+    expect(dataLayerAsCommands().slice(2)).toEqual([
+      [
+        'event',
+        'page_view',
+        {
+          page_path: '/usage-logs/common?page=2',
+          page_location: 'http://localhost/usage-logs/common?page=2',
+          page_referrer: '',
+          hostname: 'localhost',
+          page_title: document.title,
+        },
+      ],
     ])
   })
 })

@@ -461,11 +461,16 @@ func trackFirstAPICallIfNeeded(relayInfo *relaycommon.RelayInfo, quota int) {
 	if !analytics.Enabled() {
 		return
 	}
-	markID := model.BeginAnalyticsEventDelivery("token", relayInfo.TokenId, "first_api_call")
+	markID := model.BeginAnalyticsEventDelivery("token", relayInfo.TokenId, "first_api_request_success")
 	if markID <= 0 {
 		return
 	}
-	analytics.TrackFirstAPICallWithResult(nil, relayInfo.UserId, relayInfo.TokenId, relayInfo.TokenKey, relayInfo.OriginModelName, quota, func(err error) {
+	analytics.TrackFirstAPIRequestSuccessWithResult(nil, relayInfo.UserId, relayInfo.TokenId, relayInfo.TokenKey, analytics.FirstAPIRequestAttribution{
+		Model:      relayInfo.OriginModelName,
+		Endpoint:   relayInfo.RequestURLPath,
+		StatusCode: 200,
+		QuotaSpent: quota,
+	}, func(err error) {
 		if err != nil {
 			model.MarkAnalyticsEventFailed(markID)
 			return

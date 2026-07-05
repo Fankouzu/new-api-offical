@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -134,9 +135,11 @@ func TestTrackPurchaseIncludesPaymentMetadataOnly(t *testing.T) {
 	cfg := testConfig()
 	restore := ConfigureForTest(cfg, sender)
 	defer restore()
+	restoreServerAddress := setTestServerAddress("https://lizh.ai")
+	defer restoreServerAddress()
 
 	TrackPurchase(nil, 42, PurchaseAttribution{
-		TradeNo:         "raw-trade-no",
+		TradeNo:         "order-202607060001",
 		Value:           19.99,
 		Currency:        "usd",
 		PaymentProvider: "stripe",
@@ -162,33 +165,38 @@ func TestTrackPurchaseIncludesPaymentMetadataOnly(t *testing.T) {
 		t.Fatalf("unexpected events: %#v", decoded.Events)
 	}
 	params := decoded.Events[0].Params
-	if params["transaction_id_hash"] == "" || params["transaction_id_hash"] == "raw-trade-no" {
-		t.Fatalf("transaction id should be hashed, got %#v", params["transaction_id_hash"])
+	if params["transaction_id"] != "order-202607060001" {
+		t.Fatalf("transaction id missing: %#v", params)
 	}
 	if params["value"] != 19.99 || params["currency"] != "USD" {
 		t.Fatalf("purchase value/currency missing: %#v", params)
 	}
-	if params["payment_provider"] != "stripe" || params["payment_method"] != "card" || params["item_type"] != "top_up" {
+	if params["payment_provider"] != "stripe" || params["payment_method"] != "stripe" || params["payment_method_detail"] != "card" || params["item_type"] != "top_up" {
 		t.Fatalf("payment metadata missing: %#v", params)
 	}
+	if params["user_id"] != float64(42) || params["hostname"] != "lizh.ai" || params["page_location"] != "https://lizh.ai/wallet" {
+		t.Fatalf("purchase attribution context missing: %#v", params)
+	}
 	body := sender.bodies[0]
-	for _, forbidden := range []string{"raw-trade-no", "email", "prompt", "response", "content"} {
+	for _, forbidden := range []string{"private@example.com", "sk-secret", "voucher-secret", "prompt", "response", "content"} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("purchase payload leaked forbidden value %q: %s", forbidden, body)
 		}
 	}
 }
 
-func TestTrackTopUpUsesTopUpEventName(t *testing.T) {
+func TestTrackTopUpUsesTopUpSuccessEventNameAndConversionFields(t *testing.T) {
 	sender := &captureSender{done: make(chan struct{}, 1)}
 	cfg := testConfig()
 	restore := ConfigureForTest(cfg, sender)
 	defer restore()
+	restoreServerAddress := setTestServerAddress("https://lizh.ai")
+	defer restoreServerAddress()
 
 	TrackTopUp(nil, 42, PurchaseAttribution{
-		TradeNo:         "topup-trade-no",
+		TradeNo:         "topup-202607060001",
 		Value:           10,
-		Currency:        "cny",
+		Currency:        "usd",
 		PaymentProvider: "epay",
 		PaymentMethod:   "alipay",
 		ItemType:        "top_up",
@@ -208,8 +216,127 @@ func TestTrackTopUpUsesTopUpEventName(t *testing.T) {
 	if len(decoded.Events) != 1 || decoded.Events[0].Name != eventTopUp {
 		t.Fatalf("unexpected events: %#v", decoded.Events)
 	}
-	if decoded.Events[0].Params["currency"] != "CNY" {
-		t.Fatalf("currency should be normalized: %#v", decoded.Events[0].Params)
+	params := decoded.Events[0].Params
+	if params["transaction_id"] != "topup-202607060001" || params["value"] != float64(10) || params["currency"] != "USD" {
+		t.Fatalf("top_up_success conversion fields missing: %#v", params)
+	}
+	if params["payment_method"] != "epay" || params["payment_method_detail"] != "alipay" || params["payment_provider"] != "epay" {
+		t.Fatalf("payment method missing: %#v", params)
+	}
+	if params["user_id"] != float64(42) || params["hostname"] != "lizh.ai" || params["page_location"] != "https://lizh.ai/wallet" {
+		t.Fatalf("top_up_success context missing: %#v", params)
+	}
+}
+
+func TestTrackVoucherRedeemSuccessUsesRedemptionIdAndOmitsRawCode(t *testing.T) {
+	sender := &captureSender{done: make(chan struct{}, 1)}
+	cfg := testConfig()
+	restore := ConfigureForTest(cfg, sender)
+	defer restore()
+	restoreServerAddress := setTestServerAddress("https://lizh.ai")
+	defer restoreServerAddress()
+
+	TrackVoucherRedeemSuccess(nil, 42, "raw-voucher-code", int(10*common.QuotaPerUnit), RedemptionAttribution{
+		TransactionID: "redemption:987",
+		Source:        "voucher",
+	})
+
+	select {
+	case <-sender.done:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for redeem_success send")
+	}
+
+	var decoded ga4Payload
+	if err := common.Unmarshal([]byte(sender.bodies[0]), &decoded); err != nil {
+		t.Fatalf("payload is not valid json: %v", err)
+	}
+	if len(decoded.Events) != 1 || decoded.Events[0].Name != eventVoucherRedeemSuccess {
+		t.Fatalf("unexpected events: %#v", decoded.Events)
+	}
+	params := decoded.Events[0].Params
+	if params["transaction_id"] != "redemption:987" || params["value"] != float64(10) || params["currency"] != "USD" {
+		t.Fatalf("redeem_success conversion fields missing: %#v", params)
+	}
+	if params["source"] != "voucher" || params["user_id"] != float64(42) || params["hostname"] != "lizh.ai" || params["page_location"] != "https://lizh.ai/wallet" {
+		t.Fatalf("redeem_success context missing: %#v", params)
+	}
+	if strings.Contains(sender.bodies[0], "raw-voucher-code") {
+		t.Fatalf("redeem_success payload leaked raw voucher code: %s", sender.bodies[0])
+	}
+}
+
+func TestTrackAPIKeyCreatedIncludesKeyTypeAndContextOnly(t *testing.T) {
+	sender := &captureSender{done: make(chan struct{}, 1)}
+	cfg := testConfig()
+	restore := ConfigureForTest(cfg, sender)
+	defer restore()
+	restoreServerAddress := setTestServerAddress("https://lizh.ai")
+	defer restoreServerAddress()
+
+	TrackAPIKeyCreated(nil, 42, 7, "sk-secret-api-key", UserAttribution{
+		KeyType: "api_key",
+	})
+
+	select {
+	case <-sender.done:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for api_key_created send")
+	}
+
+	var decoded ga4Payload
+	if err := common.Unmarshal([]byte(sender.bodies[0]), &decoded); err != nil {
+		t.Fatalf("payload is not valid json: %v", err)
+	}
+	if len(decoded.Events) != 1 || decoded.Events[0].Name != eventAPIKeyCreated {
+		t.Fatalf("unexpected events: %#v", decoded.Events)
+	}
+	params := decoded.Events[0].Params
+	if params["key_type"] != "api_key" || params["user_id"] != float64(42) || params["hostname"] != "lizh.ai" || params["page_location"] != "https://lizh.ai/keys" {
+		t.Fatalf("api_key_created context missing: %#v", params)
+	}
+	if strings.Contains(sender.bodies[0], "sk-secret-api-key") {
+		t.Fatalf("api_key_created payload leaked raw API key: %s", sender.bodies[0])
+	}
+}
+
+func TestTrackFirstAPIRequestSuccessIncludesEndpointStatusAndContext(t *testing.T) {
+	sender := &captureSender{done: make(chan struct{}, 1)}
+	cfg := testConfig()
+	restore := ConfigureForTest(cfg, sender)
+	defer restore()
+	restoreServerAddress := setTestServerAddress("https://lizh.ai")
+	defer restoreServerAddress()
+
+	TrackFirstAPIRequestSuccessWithResult(nil, 42, 7, "sk-secret-api-key", FirstAPIRequestAttribution{
+		Model:      "glm-5.2",
+		Endpoint:   "/v1/chat/completions",
+		StatusCode: http.StatusOK,
+		QuotaSpent: 100,
+	}, nil)
+
+	select {
+	case <-sender.done:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for first_api_request_success send")
+	}
+
+	var decoded ga4Payload
+	if err := common.Unmarshal([]byte(sender.bodies[0]), &decoded); err != nil {
+		t.Fatalf("payload is not valid json: %v", err)
+	}
+	if len(decoded.Events) != 1 || decoded.Events[0].Name != eventFirstAPICall {
+		t.Fatalf("unexpected events: %#v", decoded.Events)
+	}
+	params := decoded.Events[0].Params
+	if params["model"] != "glm-5.2" || params["endpoint"] != "/v1/chat/completions" || params["status_code"] != float64(200) {
+		t.Fatalf("first_api_request_success metadata missing: %#v", params)
+	}
+	if params["user_id"] != float64(42) || params["hostname"] != "lizh.ai" || params["page_location"] != "https://lizh.ai/v1/chat/completions" {
+		t.Fatalf("first_api_request_success context missing: %#v", params)
+	}
+	if strings.Contains(sender.bodies[0], "sk-secret-api-key") {
+		t.Fatalf("first_api_request_success payload leaked raw API key: %s", sender.bodies[0])
 	}
 }
 
@@ -265,6 +392,9 @@ func TestTrackSignUpIncludesAttributionWithoutPII(t *testing.T) {
 	params := decoded.Events[0].Params
 	if params["method"] != "email" || params["source"] != "plati" || params["gclid"] != "gclid-value" {
 		t.Fatalf("attribution params missing: %#v", params)
+	}
+	if params["user_id"] != float64(42) || params["hostname"] != "lizh.ai" {
+		t.Fatalf("sign_up context missing: %#v", params)
 	}
 	for _, forbidden := range []string{"email", "username", "password", "phone"} {
 		if _, ok := params[forbidden]; ok {
@@ -340,7 +470,12 @@ func TestTrackFirstAPICallWithResultDoesNotReportSuccessWhenDisabled(t *testing.
 	defer restore()
 
 	called := false
-	TrackFirstAPICallWithResult(nil, 42, 7, "token-key", "gpt-test", 100, func(err error) {
+	TrackFirstAPIRequestSuccessWithResult(nil, 42, 7, "token-key", FirstAPIRequestAttribution{
+		Model:      "gpt-test",
+		Endpoint:   "/v1/chat/completions",
+		StatusCode: http.StatusOK,
+		QuotaSpent: 100,
+	}, func(err error) {
 		called = true
 	})
 
@@ -349,6 +484,14 @@ func TestTrackFirstAPICallWithResultDoesNotReportSuccessWhenDisabled(t *testing.
 	}
 	if len(sender.requests) != 0 {
 		t.Fatalf("disabled tracking sent %d requests", len(sender.requests))
+	}
+}
+
+func setTestServerAddress(address string) func() {
+	old := system_setting.ServerAddress
+	system_setting.ServerAddress = address
+	return func() {
+		system_setting.ServerAddress = old
 	}
 }
 

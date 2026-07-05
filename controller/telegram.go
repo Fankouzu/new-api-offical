@@ -14,6 +14,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service/analytics"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -149,6 +150,9 @@ func TelegramLogin(c *gin.Context) {
 			})
 			return
 		}
+		analytics.TrackSignUp(c, user.Id, analytics.SignUpAttribution{
+			Method: "telegram",
+		})
 	}
 	if user.Status != common.UserStatusEnabled {
 		c.JSON(http.StatusOK, gin.H{

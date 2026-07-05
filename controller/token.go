@@ -230,6 +230,7 @@ func AddToken(c *gin.Context) {
 	}
 	analytics.TrackAPIKeyCreated(c, cleanToken.UserId, cleanToken.Id, cleanToken.Key, analytics.UserAttribution{
 		VoucherSource: "lizh_ai",
+		KeyType:       "api_key",
 	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

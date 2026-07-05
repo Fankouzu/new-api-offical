@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
+	"github.com/QuantumNous/new-api/service/analytics"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -351,6 +352,10 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 		// Perform post-transaction tasks
 		user.FinalizeOAuthUserCreation(inviterId)
 	}
+
+	analytics.TrackSignUp(c, user.Id, analytics.SignUpAttribution{
+		Method: strings.ToLower(strings.TrimSpace(provider.GetName())),
+	})
 
 	return user, nil
 }

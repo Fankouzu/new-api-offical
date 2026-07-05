@@ -23,7 +23,7 @@ import type { NavItem, NavCollapsible } from '../types'
  * Convert LinkProps['to'] to string
  * Handles both string URLs and object URLs (e.g., { pathname, search })
  */
-function urlToString(url: LinkProps['to'] | (string & {})): string | null {
+export function urlToString(url: LinkProps['to'] | (string & {})): string | null {
   if (typeof url === 'string') {
     return url
   }
@@ -31,7 +31,13 @@ function urlToString(url: LinkProps['to'] | (string & {})): string | null {
     // Handle object URLs like { pathname: string, search?: string }
     const urlObj = url as Record<string, unknown>
     const pathname = typeof urlObj.pathname === 'string' ? urlObj.pathname : ''
-    const search = typeof urlObj.search === 'string' ? urlObj.search : ''
+    let search = typeof urlObj.search === 'string' ? urlObj.search : ''
+    if (pathname.includes('?')) {
+      return pathname
+    }
+    if (search && !search.startsWith('?')) {
+      search = `?${search}`
+    }
     return pathname + search
   }
   return null

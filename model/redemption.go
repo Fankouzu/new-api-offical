@@ -26,6 +26,18 @@ type Redemption struct {
 	ExpiredTime  int64          `json:"expired_time" gorm:"bigint"` // 过期时间，0 表示不过期
 }
 
+type RedeemDetails struct {
+	ID    int
+	Quota int
+}
+
+func (d RedeemDetails) TransactionID() string {
+	if d.ID <= 0 {
+		return ""
+	}
+	return "redemption:" + strconv.Itoa(d.ID)
+}
+
 func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
 	// 开始事务
 	tx := DB.Begin()
@@ -117,11 +129,19 @@ func Redeem(key string, userId int) (quota int, err error) {
 }
 
 func RedeemWithAudit(key string, userId int, callerIp string) (quota int, err error) {
+	details, err := RedeemWithAuditDetails(key, userId, callerIp)
+	if err != nil {
+		return 0, err
+	}
+	return details.Quota, nil
+}
+
+func RedeemWithAuditDetails(key string, userId int, callerIp string) (details RedeemDetails, err error) {
 	if key == "" {
-		return 0, errors.New("未提供兑换码")
+		return RedeemDetails{}, errors.New("未提供兑换码")
 	}
 	if userId == 0 {
-		return 0, errors.New("无效的 user id")
+		return RedeemDetails{}, errors.New("无效的 user id")
 	}
 	redemption := &Redemption{}
 
@@ -153,10 +173,10 @@ func RedeemWithAudit(key string, userId int, callerIp string) (quota int, err er
 	})
 	if err != nil {
 		common.SysError("redemption failed: " + err.Error())
-		return 0, ErrRedeemFailed
+		return RedeemDetails{}, ErrRedeemFailed
 	}
 	RecordTopupLog(userId, fmt.Sprintf("通过兑换码充值 %s，兑换码ID %d", logger.LogQuota(redemption.Quota), redemption.Id), callerIp, PaymentMethodRedemption, PaymentMethodRedemption)
-	return redemption.Quota, nil
+	return RedeemDetails{ID: redemption.Id, Quota: redemption.Quota}, nil
 }
 
 func (redemption *Redemption) Insert() error {

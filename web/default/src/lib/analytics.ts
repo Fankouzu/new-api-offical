@@ -20,8 +20,6 @@ For commercial licensing, please contact support@quantumnous.com
 type GtagCommand = [command: string, ...args: unknown[]]
 type GtagDataLayerItem = GtagCommand | IArguments
 
-const DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID = 'G-9693VBP1VM'
-
 declare global {
   interface Window {
     dataLayer?: GtagDataLayerItem[]
@@ -33,10 +31,7 @@ let activeMeasurementId = ''
 let initialized = false
 
 export function getGoogleAnalyticsMeasurementId(): string {
-  return (
-    import.meta.env.VITE_GOOGLE_ANALYTICS_ID ||
-    DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID
-  ).trim()
+  return (import.meta.env?.VITE_GOOGLE_ANALYTICS_ID || '').trim()
 }
 
 export function initConfiguredGoogleAnalytics(): void {
@@ -80,14 +75,62 @@ export function initGoogleAnalytics(measurementId: string): void {
 export function trackPageView(path: string): void {
   if (!initialized || !activeMeasurementId || !window.gtag) return
 
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  const pageLocation = new URL(normalizedPath, window.location.origin).href
+  const normalizedPath = normalizeAnalyticsPagePath(path)
+  if (!normalizedPath) return
+
+  const pageLocation = new URL(normalizedPath, window.location.origin)
 
   window.gtag('event', 'page_view', {
     page_path: normalizedPath,
-    page_location: pageLocation,
+    page_location: pageLocation.href,
+    page_referrer:
+      typeof document.referrer === 'string' ? document.referrer : '',
+    hostname: pageLocation.hostname,
     page_title: document.title,
   })
+}
+
+export function normalizeAnalyticsPagePath(path: string): string | null {
+  const rawPath = String(path ?? '').trim()
+  if (rawPath === '') return null
+
+  const lowerPath = rawPath.toLowerCase()
+  if (
+    lowerPath === 'undefined' ||
+    lowerPath === '/undefined' ||
+    lowerPath === 'null' ||
+    lowerPath === '/null'
+  ) {
+    return null
+  }
+
+  const candidate =
+    rawPath.startsWith('/') || /^[a-z][a-z0-9+.-]*:\/\//i.test(rawPath)
+      ? rawPath
+      : `/${rawPath}`
+
+  try {
+    const url = new URL(candidate, window.location.origin)
+    const normalizedSearch = normalizeSearchParams(url.search)
+    return `${url.pathname}${normalizedSearch}`
+  } catch {
+    return null
+  }
+}
+
+function normalizeSearchParams(search: string): string {
+  if (!search) return ''
+  const params = new URLSearchParams(search.slice(1).replace(/\?/g, '&'))
+  const normalized = new URLSearchParams()
+
+  for (const [key, value] of params.entries()) {
+    if (!normalized.has(key)) {
+      normalized.set(key, value)
+    }
+  }
+
+  const result = normalized.toString()
+  return result ? `?${result}` : ''
 }
 
 export function trackAnalyticsEvent(
