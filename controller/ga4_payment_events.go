@@ -11,8 +11,8 @@ import (
 const (
 	ga4SubjectTypeTopUp       = "top_up"
 	ga4SubjectTypePurchase    = "purchase"
-	ga4EventTopUp             = "top_up_success"
 	ga4EventPurchase          = "purchase"
+	ga4EventTopUp             = ga4EventPurchase
 	ga4ItemTypeTopUp          = "top_up"
 	ga4ItemTypeSubscription   = "subscription"
 	defaultPaymentCurrencyUSD = "USD"

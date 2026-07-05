@@ -63,7 +63,7 @@ func TestTrackFirstAPICallDoesNotMarkWhenGA4Disabled(t *testing.T) {
 		t.Fatalf("count analytics event marks: %v", err)
 	}
 	if count != 0 {
-		t.Fatalf("disabled GA4 should not create first_api_request_success mark, got %d", count)
+		t.Fatalf("disabled GA4 should not create first_api_call mark, got %d", count)
 	}
 }
 
@@ -110,7 +110,7 @@ func TestTrackFirstAPICallRetriesFailedSendAndSuppressesSentDuplicate(t *testing
 	if sender.requests != 2 {
 		t.Fatalf("requests after retry = %d, want 2", sender.requests)
 	}
-	if !strings.Contains(sender.bodies[1], `"name":"first_api_request_success"`) {
+	if !strings.Contains(sender.bodies[1], `"name":"first_api_call"`) {
 		t.Fatalf("first API payload should use new event name: %s", sender.bodies[1])
 	}
 	if !strings.Contains(sender.bodies[1], `"endpoint":"/v1/chat/completions"`) ||
@@ -130,7 +130,7 @@ func TestTrackFirstAPICallRetriesFailedSendAndSuppressesSentDuplicate(t *testing
 
 func requireAnalyticsMark(t *testing.T, tokenID int) *model.AnalyticsEventMark {
 	t.Helper()
-	mark, err := model.GetAnalyticsEventMark("token", tokenID, "first_api_request_success")
+	mark, err := model.GetAnalyticsEventMark("token", tokenID, "first_api_call")
 	if err != nil {
 		t.Fatalf("get analytics mark: %v", err)
 	}

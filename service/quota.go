@@ -461,7 +461,7 @@ func trackFirstAPICallIfNeeded(relayInfo *relaycommon.RelayInfo, quota int) {
 	if !analytics.Enabled() {
 		return
 	}
-	markID := model.BeginAnalyticsEventDelivery("token", relayInfo.TokenId, "first_api_request_success")
+	markID := model.BeginAnalyticsEventDelivery("token", relayInfo.TokenId, "first_api_call")
 	if markID <= 0 {
 		return
 	}

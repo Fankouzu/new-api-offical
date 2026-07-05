@@ -24,11 +24,11 @@ import (
 
 const (
 	eventSignUp               = "sign_up"
-	eventVoucherRedeemSuccess = "redeem_success"
+	eventVoucherRedeemSuccess = "voucher_redeem_success"
 	eventAPIKeyCreated        = "api_key_created"
-	eventFirstAPICall         = "first_api_request_success"
-	eventTopUp                = "top_up_success"
 	eventPurchase             = "purchase"
+	eventFirstAPICall         = "first_api_call"
+	eventTopUp                = eventPurchase
 	defaultVoucherSource      = "lizh_ai"
 	defaultRedeemSource       = "voucher"
 	defaultTimeoutMS          = 1500
