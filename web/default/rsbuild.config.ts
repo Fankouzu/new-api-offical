@@ -54,6 +54,7 @@ export default defineConfig(({ envMode }) => {
       entry: {
         index: './src/main.tsx',
       },
+      define: env.publicVars,
     },
     resolve: {
       alias: {
