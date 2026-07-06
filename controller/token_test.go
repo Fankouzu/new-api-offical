@@ -5,15 +5,19 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service/analytics"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
@@ -47,22 +51,44 @@ type sqliteColumnInfo struct {
 	Type string `gorm:"column:type"`
 }
 
+type tokenGA4CaptureSender struct {
+	status int
+	bodies []string
+	done   chan struct{}
+}
+
+func (s *tokenGA4CaptureSender) Do(req *http.Request) (*http.Response, error) {
+	body, _ := io.ReadAll(req.Body)
+	s.bodies = append(s.bodies, string(body))
+	if s.done != nil {
+		s.done <- struct{}{}
+	}
+	status := s.status
+	if status == 0 {
+		status = http.StatusNoContent
+	}
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(bytes.NewReader(nil)),
+	}, nil
+}
+
 type legacyToken struct {
-	Id                 int            `gorm:"primaryKey"`
-	UserId             int            `gorm:"index"`
-	Key                string         `gorm:"column:key;type:char(48);uniqueIndex"`
-	Status             int            `gorm:"default:1"`
-	Name               string         `gorm:"index"`
-	CreatedTime        int64          `gorm:"bigint"`
-	AccessedTime       int64          `gorm:"bigint"`
-	ExpiredTime        int64          `gorm:"bigint;default:-1"`
-	RemainQuota        int            `gorm:"default:0"`
+	Id                 int    `gorm:"primaryKey"`
+	UserId             int    `gorm:"index"`
+	Key                string `gorm:"column:key;type:char(48);uniqueIndex"`
+	Status             int    `gorm:"default:1"`
+	Name               string `gorm:"index"`
+	CreatedTime        int64  `gorm:"bigint"`
+	AccessedTime       int64  `gorm:"bigint"`
+	ExpiredTime        int64  `gorm:"bigint;default:-1"`
+	RemainQuota        int    `gorm:"default:0"`
 	UnlimitedQuota     bool
 	ModelLimitsEnabled bool
-	ModelLimits        string         `gorm:"type:text"`
-	AllowIps           *string        `gorm:"default:''"`
-	UsedQuota          int            `gorm:"default:0"`
-	Group              string         `gorm:"column:group;default:''"`
+	ModelLimits        string  `gorm:"type:text"`
+	AllowIps           *string `gorm:"default:''"`
+	UsedQuota          int     `gorm:"default:0"`
+	Group              string  `gorm:"column:group;default:''"`
 	CrossGroupRetry    bool
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
 }
@@ -272,6 +298,67 @@ func getTokenKeyColumnType(t *testing.T, db *gorm.DB, dialect string) string {
 		t.Fatalf("unsupported dialect %q", dialect)
 		return ""
 	}
+}
+
+func setupAPIKeyCreatedAnalyticsTest(t *testing.T, status int) (*gorm.DB, *tokenGA4CaptureSender) {
+	t.Helper()
+
+	db := setupTokenControllerTestDB(t)
+	if err := db.AutoMigrate(&model.AnalyticsEventMark{}); err != nil {
+		t.Fatalf("failed to migrate analytics event marks: %v", err)
+	}
+	sender := &tokenGA4CaptureSender{
+		status: status,
+		done:   make(chan struct{}, 1),
+	}
+	restore := analytics.ConfigureForTest(analytics.Config{
+		Enabled:       true,
+		MeasurementID: "G-TEST",
+		APISecret:     "secret",
+		HashSalt:      "salt",
+		Timeout:       50 * time.Millisecond,
+		Endpoint:      "https://example.test/mp/collect",
+	}, sender)
+	t.Cleanup(restore)
+	oldServerAddress := system_setting.ServerAddress
+	system_setting.ServerAddress = "https://lizh.ai"
+	t.Cleanup(func() {
+		system_setting.ServerAddress = oldServerAddress
+	})
+	return db, sender
+}
+
+func waitForTokenGA4Send(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for api_key_created send")
+	}
+}
+
+func waitForAPIKeyCreatedMarkStatus(t *testing.T, tokenID int, status string) *model.AnalyticsEventMark {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	var last *model.AnalyticsEventMark
+	for time.Now().Before(deadline) {
+		mark, err := model.GetAnalyticsEventMark("token", tokenID, "api_key_created")
+		if err == nil {
+			last = mark
+			if mark.Status == status {
+				return mark
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if last != nil {
+		return last
+	}
+	mark, err := model.GetAnalyticsEventMark("token", tokenID, "api_key_created")
+	if err != nil {
+		t.Fatalf("get api_key_created mark: %v", err)
+	}
+	return mark
 }
 
 func runTokenMigrationCompatibilityTest(t *testing.T, db *gorm.DB, dialect string, managedTokensTable *bool) {
@@ -537,5 +624,100 @@ func TestGetTokenKeyRequiresOwnershipAndReturnsFullKey(t *testing.T) {
 	}
 	if strings.Contains(unauthorizedRecorder.Body.String(), token.Key) {
 		t.Fatalf("unauthorized key response leaked raw token key: %s", unauthorizedRecorder.Body.String())
+	}
+}
+
+func TestAddTokenMarksAPIKeyCreatedSentAfterGA4Success(t *testing.T) {
+	db, sender := setupAPIKeyCreatedAnalyticsTest(t, http.StatusNoContent)
+
+	body := map[string]any{
+		"name":                 "ga4-created-token",
+		"expired_time":         -1,
+		"remain_quota":         100,
+		"unlimited_quota":      true,
+		"model_limits_enabled": false,
+		"model_limits":         "",
+		"group":                "default",
+		"cross_group_retry":    false,
+	}
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/token/", body, 42)
+	ctx.Request.Host = "lizh.ai"
+	ctx.Request.Header.Set("X-Forwarded-Proto", "https")
+
+	AddToken(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected token creation success, got message: %s", response.Message)
+	}
+	waitForTokenGA4Send(t, sender.done)
+
+	var token model.Token
+	if err := db.First(&token, "name = ?", "ga4-created-token").Error; err != nil {
+		t.Fatalf("failed to load created token: %v", err)
+	}
+	mark := waitForAPIKeyCreatedMarkStatus(t, token.Id, model.AnalyticsEventStatusSent)
+	if mark.SubjectType != "token" || mark.SubjectId != token.Id || mark.EventName != "api_key_created" {
+		t.Fatalf("unexpected analytics mark: %#v", mark)
+	}
+	if len(sender.bodies) != 1 {
+		t.Fatalf("sent %d GA4 requests, want 1", len(sender.bodies))
+	}
+	bodyPayload := sender.bodies[0]
+	for _, want := range []string{
+		`"name":"api_key_created"`,
+		`"user_id":42`,
+		`"key_type":"api_key"`,
+		`"hostname":"lizh.ai"`,
+		`"page_location":"https://lizh.ai/keys"`,
+		`"api_key_id_hash"`,
+	} {
+		if !strings.Contains(bodyPayload, want) {
+			t.Fatalf("api_key_created payload missing %s: %s", want, bodyPayload)
+		}
+	}
+	if strings.Contains(bodyPayload, token.Key) || strings.Contains(bodyPayload, token.GetFullKey()) {
+		t.Fatalf("api_key_created payload leaked raw token key: %s", bodyPayload)
+	}
+}
+
+func TestAddTokenMarksAPIKeyCreatedFailedAfterGA4Failure(t *testing.T) {
+	db, sender := setupAPIKeyCreatedAnalyticsTest(t, http.StatusInternalServerError)
+
+	body := map[string]any{
+		"name":                 "ga4-failed-token",
+		"expired_time":         -1,
+		"remain_quota":         100,
+		"unlimited_quota":      true,
+		"model_limits_enabled": false,
+		"model_limits":         "",
+		"group":                "default",
+		"cross_group_retry":    false,
+	}
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/token/", body, 42)
+	ctx.Request.Host = "lizh.ai"
+	ctx.Request.Header.Set("X-Forwarded-Proto", "https")
+
+	AddToken(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected token creation success despite GA4 failure, got message: %s", response.Message)
+	}
+	waitForTokenGA4Send(t, sender.done)
+
+	var token model.Token
+	if err := db.First(&token, "name = ?", "ga4-failed-token").Error; err != nil {
+		t.Fatalf("failed to load created token: %v", err)
+	}
+	mark := waitForAPIKeyCreatedMarkStatus(t, token.Id, model.AnalyticsEventStatusFailed)
+	if mark.SubjectType != "token" || mark.SubjectId != token.Id || mark.EventName != "api_key_created" {
+		t.Fatalf("unexpected analytics mark: %#v", mark)
+	}
+	if len(sender.bodies) != 1 {
+		t.Fatalf("sent %d GA4 requests, want 1", len(sender.bodies))
+	}
+	if strings.Contains(sender.bodies[0], token.Key) || strings.Contains(sender.bodies[0], token.GetFullKey()) {
+		t.Fatalf("api_key_created payload leaked raw token key: %s", sender.bodies[0])
 	}
 }

@@ -298,6 +298,10 @@ func TrackVoucherRedeemSuccess(c *gin.Context, userID int, voucherCode string, q
 }
 
 func TrackAPIKeyCreated(c *gin.Context, userID int, tokenID int, tokenKey string, attrs UserAttribution) {
+	TrackAPIKeyCreatedWithResult(c, userID, tokenID, tokenKey, attrs, nil)
+}
+
+func TrackAPIKeyCreatedWithResult(c *gin.Context, userID int, tokenID int, tokenKey string, attrs UserAttribution, onResult func(error)) {
 	cfg := currentConfig()
 	if !trackingEnabled(cfg) {
 		return
@@ -317,7 +321,7 @@ func TrackAPIKeyCreated(c *gin.Context, userID int, tokenID int, tokenKey string
 	addUserIDParam(params, userID)
 	addStringParam(params, "key_type", attrs.KeyType)
 	addPageContext(c, params, attrs.PageLocation, attrs.PageReferrer, "/keys")
-	track(c, cfg, userID, tokenID, eventAPIKeyCreated, params)
+	trackWithResult(c, cfg, userID, tokenID, eventAPIKeyCreated, params, onResult)
 }
 
 func TrackTopUp(c *gin.Context, userID int, attrs PurchaseAttribution) {

@@ -228,10 +228,15 @@ func AddToken(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	analytics.TrackAPIKeyCreated(c, cleanToken.UserId, cleanToken.Id, cleanToken.Key, analytics.UserAttribution{
-		VoucherSource: "lizh_ai",
-		KeyType:       "api_key",
-	})
+	if analytics.Enabled() {
+		markID := model.BeginAnalyticsEventDelivery("token", cleanToken.Id, "api_key_created")
+		if markID > 0 {
+			analytics.TrackAPIKeyCreatedWithResult(c, cleanToken.UserId, cleanToken.Id, cleanToken.Key, analytics.UserAttribution{
+				VoucherSource: "lizh_ai",
+				KeyType:       "api_key",
+			}, trackAnalyticsMarkResult(markID))
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
