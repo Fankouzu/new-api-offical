@@ -26,6 +26,7 @@ declare global {
   interface Window {
     dataLayer?: GtagDataLayerItem[]
     gtag?: (...args: GtagCommand) => void
+    __GOOGLE_ANALYTICS_ID__?: string
   }
 }
 
@@ -33,7 +34,11 @@ let activeMeasurementId = ''
 let initialized = false
 
 export function getGoogleAnalyticsMeasurementId(): string {
-  return (import.meta.env?.VITE_GOOGLE_ANALYTICS_ID || '').trim()
+  const runtimeMeasurementId =
+    typeof window !== 'undefined' ? window.__GOOGLE_ANALYTICS_ID__ : ''
+  return (
+    runtimeMeasurementId || import.meta.env?.VITE_GOOGLE_ANALYTICS_ID || ''
+  ).trim()
 }
 
 export function initConfiguredGoogleAnalytics(): void {

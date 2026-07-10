@@ -83,6 +83,9 @@ beforeEach(() => {
 
 afterEach(() => {
   resetAnalyticsForTests()
+  delete (
+    window as Window & { __GOOGLE_ANALYTICS_ID__?: string }
+  ).__GOOGLE_ANALYTICS_ID__
   delete window.gtag
   delete window.dataLayer
   document.head
@@ -97,6 +100,14 @@ function dataLayerAsCommands(): unknown[][] {
 describe('google analytics runtime', () => {
   test('does not hardcode a measurement id when env is not set', () => {
     expect(getGoogleAnalyticsMeasurementId()).toBe('')
+  })
+
+  test('prefers a runtime measurement id for container deployments', () => {
+    ;(
+      window as Window & { __GOOGLE_ANALYTICS_ID__?: string }
+    ).__GOOGLE_ANALYTICS_ID__ = 'G-RUNTIME123'
+
+    expect(getGoogleAnalyticsMeasurementId()).toBe('G-RUNTIME123')
   })
 
   test('does not initialize without a measurement id', () => {

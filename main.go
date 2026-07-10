@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -232,27 +233,28 @@ func InjectUmamiAnalytics() {
 }
 
 func InjectGoogleAnalytics() {
-	analyticsInjectBuilder := &strings.Builder{}
-	if os.Getenv("GOOGLE_ANALYTICS_ID") != "" {
-		gaID := os.Getenv("GOOGLE_ANALYTICS_ID")
-		// Google Analytics 4 (gtag.js)
-		analyticsInjectBuilder.WriteString("<script async src=\"https://www.googletagmanager.com/gtag/js?id=")
-		analyticsInjectBuilder.WriteString(gaID)
-		analyticsInjectBuilder.WriteString("\"></script>")
-		analyticsInjectBuilder.WriteString("<script>")
-		analyticsInjectBuilder.WriteString("window.dataLayer = window.dataLayer || [];")
-		analyticsInjectBuilder.WriteString("function gtag(){dataLayer.push(arguments);}")
-		analyticsInjectBuilder.WriteString("gtag('js', new Date());")
-		analyticsInjectBuilder.WriteString("gtag('config', '")
-		analyticsInjectBuilder.WriteString(gaID)
-		analyticsInjectBuilder.WriteString("');")
-		analyticsInjectBuilder.WriteString("</script>")
-	}
-	analyticsInjectBuilder.WriteString("<!--Google Analytics QuantumNous-->\n")
-	analyticsInject := []byte(analyticsInjectBuilder.String())
+	defaultSnippet, classicSnippet := buildGoogleAnalyticsSnippets(os.Getenv("GOOGLE_ANALYTICS_ID"))
 	placeholder := []byte("<!--Google Analytics-->\n")
-	indexPage = bytes.ReplaceAll(indexPage, placeholder, analyticsInject)
-	classicIndexPage = bytes.ReplaceAll(classicIndexPage, placeholder, analyticsInject)
+	indexPage = bytes.ReplaceAll(indexPage, placeholder, []byte(defaultSnippet))
+	classicIndexPage = bytes.ReplaceAll(classicIndexPage, placeholder, []byte(classicSnippet))
+}
+
+func buildGoogleAnalyticsSnippets(gaID string) (string, string) {
+	const marker = "<!--Google Analytics QuantumNous-->\n"
+	gaID = strings.TrimSpace(gaID)
+	if gaID == "" {
+		return marker, marker
+	}
+	encodedID, err := common.Marshal(gaID)
+	if err != nil {
+		return marker, marker
+	}
+	encodedIDString := string(encodedID)
+	defaultSnippet := "<script>window.__GOOGLE_ANALYTICS_ID__=" + encodedIDString + ";</script>" + marker
+	classicSnippet := "<script async src=\"https://www.googletagmanager.com/gtag/js?id=" + url.QueryEscape(gaID) + "\"></script>" +
+		"<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}" +
+		"gtag('js',new Date());gtag('config'," + encodedIDString + ");</script>" + marker
+	return defaultSnippet, classicSnippet
 }
 
 func InitResources() error {
