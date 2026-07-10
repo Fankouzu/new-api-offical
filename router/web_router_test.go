@@ -122,21 +122,61 @@ func TestWebRouterServesSEOFilesWithCrawlerFriendlyContentTypes(t *testing.T) {
 	}
 }
 
+func TestSetupWebRouterTestDBRestoresGlobals(t *testing.T) {
+	originalDB := model.DB
+	originalSQLite := common.UsingSQLite
+	originalMySQL := common.UsingMySQL
+	originalPostgreSQL := common.UsingPostgreSQL
+	t.Cleanup(func() {
+		model.DB = originalDB
+		common.UsingSQLite = originalSQLite
+		common.UsingMySQL = originalMySQL
+		common.UsingPostgreSQL = originalPostgreSQL
+	})
+
+	t.Run("isolated database", func(t *testing.T) {
+		setupWebRouterTestDB(t)
+		if model.DB == originalDB {
+			t.Fatalf("test database was not installed")
+		}
+	})
+
+	if model.DB != originalDB {
+		t.Fatalf("model.DB was not restored after subtest cleanup")
+	}
+	if common.UsingSQLite != originalSQLite || common.UsingMySQL != originalMySQL || common.UsingPostgreSQL != originalPostgreSQL {
+		t.Fatalf("database dialect flags were not restored after subtest cleanup")
+	}
+}
+
 func setupWebRouterTestDB(t *testing.T) {
 	t.Helper()
+	oldDB := model.DB
+	oldSQLite := common.UsingSQLite
+	oldMySQL := common.UsingMySQL
+	oldPostgreSQL := common.UsingPostgreSQL
 	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
 	model.DB = db
 	common.UsingSQLite = true
+	common.UsingMySQL = false
+	common.UsingPostgreSQL = false
+	t.Cleanup(func() {
+		if sqlDB, err := db.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+		model.DB = oldDB
+		common.UsingSQLite = oldSQLite
+		common.UsingMySQL = oldMySQL
+		common.UsingPostgreSQL = oldPostgreSQL
+		model.InvalidatePricingCache()
+	})
 	model.InvalidatePricingCache()
 	if err := db.AutoMigrate(&model.Ability{}, &model.Channel{}, &model.Model{}, &model.Vendor{}); err != nil {
 		t.Fatalf("migrate test db: %v", err)
 	}
-	t.Cleanup(func() {
-		model.InvalidatePricingCache()
-	})
 }
 
 //go:embed web/default/dist

@@ -223,6 +223,17 @@ func TestTrackTopUpUsesPurchaseEventNameAndConversionFields(t *testing.T) {
 	if params["payment_method"] != "epay" || params["payment_method_detail"] != "alipay" || params["payment_provider"] != "epay" {
 		t.Fatalf("payment method missing: %#v", params)
 	}
+	items, ok := params["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("purchase items missing: %#v", params["items"])
+	}
+	item, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("purchase item has unexpected type: %#v", items[0])
+	}
+	if item["item_id"] != "top_up" || item["item_name"] != "Balance top-up" || item["price"] != float64(10) || item["quantity"] != float64(1) {
+		t.Fatalf("purchase item fields missing: %#v", item)
+	}
 	if params["user_id"] != float64(42) || params["hostname"] != "lizh.ai" || params["page_location"] != "https://lizh.ai/wallet" {
 		t.Fatalf("purchase context missing: %#v", params)
 	}
@@ -443,6 +454,40 @@ func TestTrackSignUpSanitizesAttributionURLs(t *testing.T) {
 	}
 	if params["page_referrer"] != "https://partner.example/path?utm_medium=marketplace" {
 		t.Fatalf("unexpected sanitized page_referrer: %#v", params["page_referrer"])
+	}
+}
+
+func TestSanitizeAttributionURLPreservesEscapedPath(t *testing.T) {
+	raw := "https://lizh.ai/%E4%BB%B7%E6%A0%BC/a%20b?token=secret&utm_source=plati"
+	want := "https://lizh.ai/%E4%BB%B7%E6%A0%BC/a%20b?utm_source=plati"
+
+	if got := sanitizeAttributionURL(raw); got != want {
+		t.Fatalf("sanitizeAttributionURL() = %q, want %q", got, want)
+	}
+}
+
+func TestResolvePageLocationPreservesEscapedFallbackPath(t *testing.T) {
+	restoreServerAddress := setTestServerAddress("https://lizh.ai")
+	defer restoreServerAddress()
+
+	fallback := "https://api.example/%E4%BB%B7%E6%A0%BC/a%20b?token=secret"
+	want := "https://lizh.ai/%E4%BB%B7%E6%A0%BC/a%20b"
+	if got := resolvePageLocation(nil, "", fallback); got != want {
+		t.Fatalf("resolvePageLocation() = %q, want %q", got, want)
+	}
+}
+
+func TestNormalizePagePathDropsQueryOnlyInput(t *testing.T) {
+	path, rawPath := normalizePagePath("?token=secret")
+	if path != "" || rawPath != "" {
+		t.Fatalf("normalizePagePath() = (%q, %q), want empty paths", path, rawPath)
+	}
+}
+
+func TestNormalizePagePathDropsAbsoluteURLWithoutPath(t *testing.T) {
+	path, rawPath := normalizePagePath("https://api.example?token=secret")
+	if path != "" || rawPath != "" {
+		t.Fatalf("normalizePagePath() = (%q, %q), want empty paths", path, rawPath)
 	}
 }
 

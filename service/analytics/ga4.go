@@ -355,6 +355,18 @@ func trackPurchaseEventWithResult(c *gin.Context, userID int, eventName string, 
 		"currency":       normalizeCurrency(attrs.Currency),
 		"payment_method": paymentMethod,
 	}
+	itemID := strings.TrimSpace(attrs.ItemType)
+	if itemID == "" {
+		itemID = "purchase"
+	}
+	params["items"] = []EventParams{
+		{
+			"item_id":   itemID,
+			"item_name": purchaseItemName(itemID),
+			"price":     attrs.Value,
+			"quantity":  1,
+		},
+	}
 	addUserIDParam(params, userID)
 	addStringParam(params, "payment_provider", attrs.PaymentProvider)
 	if strings.TrimSpace(attrs.PaymentMethod) != "" && strings.TrimSpace(attrs.PaymentMethod) != paymentMethod {
@@ -367,6 +379,17 @@ func trackPurchaseEventWithResult(c *gin.Context, userID int, eventName string, 
 	fallbackPath := firstNonEmpty(attrs.FallbackPath, "/wallet")
 	addPageContext(c, params, attrs.PageLocation, attrs.PageReferrer, fallbackPath)
 	trackWithResult(c, cfg, userID, 0, eventName, params, onResult)
+}
+
+func purchaseItemName(itemID string) string {
+	switch itemID {
+	case "top_up":
+		return "Balance top-up"
+	case "subscription":
+		return "Subscription"
+	default:
+		return itemID
+	}
 }
 
 func TrackSignUp(c *gin.Context, userID int, attrs SignUpAttribution) {
@@ -484,9 +507,10 @@ func sanitizeAttributionURL(raw string) string {
 		return ""
 	}
 	clean := url.URL{
-		Scheme: parsed.Scheme,
-		Host:   parsed.Host,
-		Path:   parsed.EscapedPath(),
+		Scheme:  parsed.Scheme,
+		Host:    parsed.Host,
+		Path:    parsed.Path,
+		RawPath: parsed.RawPath,
 	}
 	query := url.Values{}
 	for key, values := range parsed.Query() {
@@ -521,12 +545,13 @@ func resolvePageLocation(c *gin.Context, pageLocation string, fallbackPath strin
 	if base == nil {
 		return ""
 	}
-	fallbackPath = normalizePagePath(fallbackPath)
+	fallbackPath, fallbackRawPath := normalizePagePath(fallbackPath)
 	if fallbackPath == "" {
 		return base.String()
 	}
 	resolved := *base
 	resolved.Path = fallbackPath
+	resolved.RawPath = fallbackRawPath
 	resolved.RawQuery = ""
 	resolved.Fragment = ""
 	return resolved.String()
@@ -595,26 +620,28 @@ func cleanBaseURL(parsed *url.URL) *url.URL {
 	return &clean
 }
 
-func normalizePagePath(path string) string {
+func normalizePagePath(path string) (string, string) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return ""
+		return "", ""
 	}
+	rawPath := ""
 	if parsed, err := url.Parse(path); err == nil {
-		if parsed.Scheme != "" && parsed.Host != "" {
-			path = parsed.EscapedPath()
-		}
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	if idx := strings.Index(path, "?"); idx >= 0 {
+		path = parsed.Path
+		rawPath = parsed.RawPath
+	} else if idx := strings.Index(path, "?"); idx >= 0 {
 		path = path[:idx]
 	}
 	if path == "" {
-		return ""
+		return "", ""
 	}
-	return path
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+		if rawPath != "" {
+			rawPath = "/" + rawPath
+		}
+	}
+	return path, rawPath
 }
 
 func normalizeEndpoint(endpoint string) string {
