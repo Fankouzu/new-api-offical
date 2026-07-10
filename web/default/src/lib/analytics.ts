@@ -34,6 +34,36 @@ declare global {
 let activeMeasurementId = ''
 let initialized = false
 
+const ALWAYS_SENSITIVE_PAGE_VIEW_PARAMS = new Set([
+  'access_token',
+  'api_key',
+  'authorization',
+  'client_secret',
+  'code',
+  'confirm_password',
+  'email',
+  'id_token',
+  'key',
+  'new_password',
+  'old_password',
+  'otp',
+  'password',
+  'password_confirmation',
+  'refresh_token',
+  'secret',
+  'session',
+  'session_id',
+  'state',
+  'token',
+  'verification_code',
+])
+
+interface AnalyticsPageLocation {
+  href: string
+  hostname: string
+  path: string
+}
+
 export function initConfiguredGoogleAnalytics(): void {
   initGoogleAnalytics(getGoogleAnalyticsMeasurementId())
 }
@@ -71,7 +101,7 @@ export function initGoogleAnalytics(measurementId: string): void {
   window.gtag('js', new Date())
   const pageLocation =
     typeof window.location?.href === 'string'
-      ? sanitizeAttributionURL(window.location.href)
+      ? resolveAnalyticsPageLocation(window.location.href)?.href
       : undefined
   const pageReferrer =
     typeof document.referrer === 'string' && document.referrer
@@ -93,24 +123,81 @@ export function trackPageView(path: string): void {
   const normalizedPath = normalizeAnalyticsPagePath(path)
   if (!normalizedPath) return
 
-  const pageLocation = sanitizeAttributionURL(
-    new URL(normalizedPath, window.location.origin).href
+  const pageLocation = resolveAnalyticsPageLocation(
+    normalizedPath,
+    window.location.origin
   )
   if (!pageLocation) return
 
-  const sanitizedPageLocation = new URL(pageLocation)
-  const sanitizedPath = `${sanitizedPageLocation.pathname}${sanitizedPageLocation.search}`
-
   window.gtag('event', 'page_view', {
-    page_path: sanitizedPath,
-    page_location: sanitizedPageLocation.href,
+    page_path: pageLocation.path,
+    page_location: pageLocation.href,
     page_referrer:
       typeof document.referrer === 'string' && document.referrer
         ? sanitizeAttributionURL(document.referrer) || ''
         : '',
-    hostname: sanitizedPageLocation.hostname,
+    hostname: pageLocation.hostname,
     page_title: document.title,
   })
+}
+
+function resolveAnalyticsPageLocation(
+  raw: string,
+  base?: string
+): AnalyticsPageLocation | null {
+  try {
+    const url = base ? new URL(raw, base) : new URL(raw)
+    const search = removeSensitivePageViewParams(
+      normalizeSearchParams(url.search),
+      url.pathname
+    )
+    const path = `${url.pathname}${search}`
+    return {
+      href: `${url.origin}${path}`,
+      hostname: url.hostname,
+      path,
+    }
+  } catch {
+    return null
+  }
+}
+
+function removeSensitivePageViewParams(
+  search: string,
+  pathname: string
+): string {
+  if (!search) return ''
+
+  const keptSegments = search
+    .slice(1)
+    .split('&')
+    .filter((segment) => {
+      const separator = segment.indexOf('=')
+      const rawKey = separator >= 0 ? segment.slice(0, separator) : segment
+      return !isSensitivePageViewParam(pathname, decodeQueryKey(rawKey))
+    })
+  const filteredSearch = keptSegments.join('&')
+  return filteredSearch ? `?${filteredSearch}` : ''
+}
+
+function isSensitivePageViewParam(pathname: string, key: string): boolean {
+  const normalizedPathname = pathname.replace(/\/+$/, '') || '/'
+  if (
+    key === 'token' &&
+    (normalizedPathname === '/usage-logs' ||
+      normalizedPathname.startsWith('/usage-logs/'))
+  ) {
+    return false
+  }
+  return ALWAYS_SENSITIVE_PAGE_VIEW_PARAMS.has(key)
+}
+
+function decodeQueryKey(rawKey: string): string {
+  try {
+    return decodeURIComponent(rawKey.replace(/\+/g, ' ')).trim().toLowerCase()
+  } catch {
+    return rawKey.trim().toLowerCase()
+  }
 }
 
 export function normalizeAnalyticsPagePath(path: string): string | null {

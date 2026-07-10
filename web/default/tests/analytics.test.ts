@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import {
   getGoogleAnalyticsMeasurementId,
   initGoogleAnalytics,
-  normalizeAnalyticsPagePath,
   resetAnalyticsForTests,
   trackAnalyticsEvent,
   trackPageView,
@@ -163,6 +162,29 @@ describe('google analytics runtime', () => {
     ])
   })
 
+  test('normalizes an exact duplicate query in the initial page view', () => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        origin: 'http://localhost',
+        href: 'http://localhost/usage-logs/common?page=2?page=2',
+      },
+    })
+
+    initGoogleAnalytics('G-TEST123')
+
+    expect(dataLayerAsCommands()).toEqual([
+      ['js', expect.any(Date)],
+      [
+        'config',
+        'G-TEST123',
+        {
+          page_location: 'http://localhost/usage-logs/common?page=2',
+        },
+      ],
+    ])
+  })
+
   test('tracks page views and events after initialization', () => {
     initGoogleAnalytics('G-TEST123')
 
@@ -174,8 +196,8 @@ describe('google analytics runtime', () => {
         'event',
         'page_view',
         {
-          page_path: '/pricing',
-          page_location: 'http://localhost/pricing',
+          page_path: '/pricing?model=gpt',
+          page_location: 'http://localhost/pricing?model=gpt',
           page_referrer: '',
           hostname: 'localhost',
           page_title: document.title,
@@ -218,18 +240,15 @@ describe('google analytics runtime', () => {
   test('normalizes duplicated question marks before reporting page views', () => {
     initGoogleAnalytics('G-TEST123')
 
-    trackPageView(
-      '/usage-logs/common?utm_content=page-2?utm_content=page-2'
-    )
+    trackPageView('/usage-logs/common?page=2?page=2')
 
     expect(dataLayerAsCommands().slice(2)).toEqual([
       [
         'event',
         'page_view',
         {
-          page_path: '/usage-logs/common?utm_content=page-2',
-          page_location:
-            'http://localhost/usage-logs/common?utm_content=page-2',
+          page_path: '/usage-logs/common?page=2',
+          page_location: 'http://localhost/usage-logs/common?page=2',
           page_referrer: '',
           hostname: 'localhost',
           page_title: document.title,
@@ -239,11 +258,96 @@ describe('google analytics runtime', () => {
   })
 
   test('preserves nested URL values and repeated query keys', () => {
-    expect(
-      normalizeAnalyticsPagePath(
-        '/callback?next=https://example.com/a?x=1&tag=a&tag=b'
-      )
-    ).toBe('/callback?next=https://example.com/a?x=1&tag=a&tag=b')
+    initGoogleAnalytics('G-TEST123')
+
+    trackPageView('/callback?next=https://example.com/a?x=1&tag=a&tag=b')
+
+    expect(dataLayerAsCommands().at(-1)).toEqual([
+      'event',
+      'page_view',
+      {
+        page_path: '/callback?next=https://example.com/a?x=1&tag=a&tag=b',
+        page_location:
+          'http://localhost/callback?next=https://example.com/a?x=1&tag=a&tag=b',
+        page_referrer: '',
+        hostname: 'localhost',
+        page_title: document.title,
+      },
+    ])
+  })
+
+  test('preserves query parameter order and encoding in page views', () => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        origin: 'http://localhost',
+        href: 'http://localhost/search?gclid=a%20b&utm_source=x&utm_source=y',
+      },
+    })
+    initGoogleAnalytics('G-TEST123')
+
+    trackPageView('/search?gclid=a%20b&utm_source=x&utm_source=y')
+
+    const expectedLocation =
+      'http://localhost/search?gclid=a%20b&utm_source=x&utm_source=y'
+    expect(dataLayerAsCommands()).toEqual([
+      ['js', expect.any(Date)],
+      [
+        'config',
+        'G-TEST123',
+        {
+          page_location: expectedLocation,
+        },
+      ],
+      [
+        'event',
+        'page_view',
+        {
+          page_path: '/search?gclid=a%20b&utm_source=x&utm_source=y',
+          page_location: expectedLocation,
+          page_referrer: '',
+          hostname: 'localhost',
+          page_title: document.title,
+        },
+      ],
+    ])
+  })
+
+  test('preserves legitimate token filters outside reset routes', () => {
+    initGoogleAnalytics('G-TEST123')
+
+    trackPageView('/usage-logs/common?token=production-key&page=2')
+
+    expect(dataLayerAsCommands().at(-1)).toEqual([
+      'event',
+      'page_view',
+      {
+        page_path: '/usage-logs/common?token=production-key&page=2',
+        page_location:
+          'http://localhost/usage-logs/common?token=production-key&page=2',
+        page_referrer: '',
+        hostname: 'localhost',
+        page_title: document.title,
+      },
+    ])
+  })
+
+  test('removes OAuth callback credentials from page views', () => {
+    initGoogleAnalytics('G-TEST123')
+
+    trackPageView('/oauth/github?code=secret-code&state=secret-state')
+
+    expect(dataLayerAsCommands().at(-1)).toEqual([
+      'event',
+      'page_view',
+      {
+        page_path: '/oauth/github',
+        page_location: 'http://localhost/oauth/github',
+        page_referrer: '',
+        hostname: 'localhost',
+        page_title: document.title,
+      },
+    ])
   })
 
   test('removes reset credentials from page referrers', () => {
