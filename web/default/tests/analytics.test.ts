@@ -174,14 +174,34 @@ describe('google analytics runtime', () => {
         'event',
         'page_view',
         {
-          page_path: '/pricing?model=gpt',
-          page_location: 'http://localhost/pricing?model=gpt',
+          page_path: '/pricing',
+          page_location: 'http://localhost/pricing',
           page_referrer: '',
           hostname: 'localhost',
           page_title: document.title,
         },
       ],
       ['event', 'sign_up_click', { method: 'oauth' }],
+    ])
+  })
+
+  test('removes reset credentials from explicit page views', () => {
+    initGoogleAnalytics('G-TEST123')
+
+    trackPageView(
+      '/user/reset?email=user%40example.com&token=secret-token&utm_source=email'
+    )
+
+    expect(dataLayerAsCommands().at(-1)).toEqual([
+      'event',
+      'page_view',
+      {
+        page_path: '/user/reset?utm_source=email',
+        page_location: 'http://localhost/user/reset?utm_source=email',
+        page_referrer: '',
+        hostname: 'localhost',
+        page_title: document.title,
+      },
     ])
   })
 
@@ -198,15 +218,18 @@ describe('google analytics runtime', () => {
   test('normalizes duplicated question marks before reporting page views', () => {
     initGoogleAnalytics('G-TEST123')
 
-    trackPageView('/usage-logs/common?page=2?page=2')
+    trackPageView(
+      '/usage-logs/common?utm_content=page-2?utm_content=page-2'
+    )
 
     expect(dataLayerAsCommands().slice(2)).toEqual([
       [
         'event',
         'page_view',
         {
-          page_path: '/usage-logs/common?page=2',
-          page_location: 'http://localhost/usage-logs/common?page=2',
+          page_path: '/usage-logs/common?utm_content=page-2',
+          page_location:
+            'http://localhost/usage-logs/common?utm_content=page-2',
           page_referrer: '',
           hostname: 'localhost',
           page_title: document.title,

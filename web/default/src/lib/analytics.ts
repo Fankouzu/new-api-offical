@@ -17,6 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { sanitizeAttributionURL } from './first-touch-attribution'
+import { getGoogleAnalyticsMeasurementId } from './google-analytics-config'
+
+export { getGoogleAnalyticsMeasurementId } from './google-analytics-config'
 
 type GtagCommand = [command: string, ...args: unknown[]]
 type GtagDataLayerItem = GtagCommand | IArguments
@@ -25,22 +28,11 @@ declare global {
   interface Window {
     dataLayer?: GtagDataLayerItem[]
     gtag?: (...args: GtagCommand) => void
-    __GOOGLE_ANALYTICS_ID__?: string
   }
 }
 
 let activeMeasurementId = ''
 let initialized = false
-
-export function getGoogleAnalyticsMeasurementId(): string {
-  const runtimeMeasurementId =
-    typeof window !== 'undefined' ? window.__GOOGLE_ANALYTICS_ID__ : ''
-  return (
-    runtimeMeasurementId ||
-    import.meta.env?.VITE_GOOGLE_ANALYTICS_ID ||
-    ''
-  ).trim()
-}
 
 export function initConfiguredGoogleAnalytics(): void {
   initGoogleAnalytics(getGoogleAnalyticsMeasurementId())
@@ -101,16 +93,22 @@ export function trackPageView(path: string): void {
   const normalizedPath = normalizeAnalyticsPagePath(path)
   if (!normalizedPath) return
 
-  const pageLocation = new URL(normalizedPath, window.location.origin)
+  const pageLocation = sanitizeAttributionURL(
+    new URL(normalizedPath, window.location.origin).href
+  )
+  if (!pageLocation) return
+
+  const sanitizedPageLocation = new URL(pageLocation)
+  const sanitizedPath = `${sanitizedPageLocation.pathname}${sanitizedPageLocation.search}`
 
   window.gtag('event', 'page_view', {
-    page_path: normalizedPath,
-    page_location: pageLocation.href,
+    page_path: sanitizedPath,
+    page_location: sanitizedPageLocation.href,
     page_referrer:
       typeof document.referrer === 'string' && document.referrer
         ? sanitizeAttributionURL(document.referrer) || ''
         : '',
-    hostname: pageLocation.hostname,
+    hostname: sanitizedPageLocation.hostname,
     page_title: document.title,
   })
 }

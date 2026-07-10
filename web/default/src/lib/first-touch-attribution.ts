@@ -1,3 +1,23 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { getGoogleAnalyticsSessionCookieName } from './google-analytics-config'
+
 const STORAGE_KEY = 'lizh_first_touch_attribution'
 
 const CLICK_ID_PARAMS = ['gclid', 'fbclid', 'ttclid', 'yclid']
@@ -41,10 +61,12 @@ function readGAClientID(): string {
 
 function readGASessionID(): string {
   if (typeof document === 'undefined') return ''
+  const sessionCookieName = getGoogleAnalyticsSessionCookieName()
+  if (!sessionCookieName) return ''
   for (const item of document.cookie.split(';')) {
     const cookie = item.trim()
     const separator = cookie.indexOf('=')
-    if (separator <= 0 || !cookie.slice(0, separator).startsWith('_ga_')) {
+    if (separator <= 0 || cookie.slice(0, separator) !== sessionCookieName) {
       continue
     }
     const value = decodeURIComponent(cookie.slice(separator + 1))
@@ -113,7 +135,7 @@ export function initializeFirstTouchAttribution(): void {
       refreshed.client_id = clientID
       changed = true
     }
-    if (!refreshed.session_id && sessionID) {
+    if (sessionID && refreshed.session_id !== sessionID) {
       refreshed.session_id = sessionID
       changed = true
     }
