@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import {
   getGoogleAnalyticsMeasurementId,
   initGoogleAnalytics,
+  normalizeAnalyticsPagePath,
   resetAnalyticsForTests,
   trackAnalyticsEvent,
   trackPageView,
@@ -73,6 +74,7 @@ beforeEach(() => {
     value: {
       head: fakeHead,
       title: 'Test title',
+      referrer: '',
       createElement: (tagName: string) => new FakeElement(tagName),
       querySelector: (selector: string) => fakeHead.querySelector(selector),
     },
@@ -118,6 +120,35 @@ describe('google analytics runtime', () => {
     expect(dataLayerAsCommands()).toEqual([
       ['js', expect.any(Date)],
       ['config', 'G-TEST123'],
+    ])
+  })
+
+  test('sanitizes the automatic initial page-view context', () => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        origin: 'http://localhost',
+        href: 'http://localhost/user/reset?email=user%40example.com&token=secret',
+      },
+    })
+    Object.defineProperty(document, 'referrer', {
+      configurable: true,
+      value:
+        'https://mail.example.test/open?email=user%40example.com&token=secret',
+    })
+
+    initGoogleAnalytics('G-TEST123')
+
+    expect(dataLayerAsCommands()).toEqual([
+      ['js', expect.any(Date)],
+      [
+        'config',
+        'G-TEST123',
+        {
+          page_location: 'http://localhost/user/reset',
+          page_referrer: 'https://mail.example.test/open',
+        },
+      ],
     ])
   })
 
@@ -170,6 +201,37 @@ describe('google analytics runtime', () => {
           page_title: document.title,
         },
       ],
+    ])
+  })
+
+  test('preserves nested URL values and repeated query keys', () => {
+    expect(
+      normalizeAnalyticsPagePath(
+        '/callback?next=https://example.com/a?x=1&tag=a&tag=b'
+      )
+    ).toBe('/callback?next=https://example.com/a?x=1&tag=a&tag=b')
+  })
+
+  test('removes reset credentials from page referrers', () => {
+    Object.defineProperty(document, 'referrer', {
+      configurable: true,
+      value:
+        'https://lizh.ai/user/reset?email=user%40example.com&token=secret-token',
+    })
+    initGoogleAnalytics('G-TEST123')
+
+    trackPageView('/wallet')
+
+    expect(dataLayerAsCommands().at(-1)).toEqual([
+      'event',
+      'page_view',
+      {
+        page_path: '/wallet',
+        page_location: 'http://localhost/wallet',
+        page_referrer: 'https://lizh.ai/user/reset',
+        hostname: 'localhost',
+        page_title: document.title,
+      },
     ])
   })
 })

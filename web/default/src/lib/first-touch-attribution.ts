@@ -12,6 +12,7 @@ const SAFE_URL_PARAMS = [...UTM_PARAMS, ...CLICK_ID_PARAMS, 'aff']
 
 export interface FirstTouchAttribution {
   client_id?: string
+  session_id?: string
   page_location?: string
   page_referrer?: string
   source?: string
@@ -38,6 +39,26 @@ function readGAClientID(): string {
   return `${first}.${second}`
 }
 
+function readGASessionID(): string {
+  if (typeof document === 'undefined') return ''
+  for (const item of document.cookie.split(';')) {
+    const cookie = item.trim()
+    const separator = cookie.indexOf('=')
+    if (separator <= 0 || !cookie.slice(0, separator).startsWith('_ga_')) {
+      continue
+    }
+    const value = decodeURIComponent(cookie.slice(separator + 1))
+    const gs2Session = value.match(/(?:^|\$)s(\d+)(?:\$|$)/)?.[1]
+    if (gs2Session) return gs2Session
+
+    const parts = value.split('.')
+    if (/^GS\d+$/.test(parts[0]) && /^\d+$/.test(parts[2] || '')) {
+      return parts[2]
+    }
+  }
+  return ''
+}
+
 function readStoredAttribution(): FirstTouchAttribution | null {
   if (typeof localStorage === 'undefined') return null
   try {
@@ -61,7 +82,7 @@ function writeStoredAttribution(attribution: FirstTouchAttribution): void {
   }
 }
 
-function sanitizeAttributionURL(raw: string): string | undefined {
+export function sanitizeAttributionURL(raw: string): string | undefined {
   try {
     const url = new URL(raw)
     const safeParams = new URLSearchParams()
@@ -84,9 +105,20 @@ export function initializeFirstTouchAttribution(): void {
 
   const existing = readStoredAttribution()
   const clientID = readGAClientID()
+  const sessionID = readGASessionID()
   if (existing) {
-    if (!existing.client_id && clientID) {
-      writeStoredAttribution({ ...existing, client_id: clientID })
+    const refreshed = { ...existing }
+    let changed = false
+    if (!refreshed.client_id && clientID) {
+      refreshed.client_id = clientID
+      changed = true
+    }
+    if (!refreshed.session_id && sessionID) {
+      refreshed.session_id = sessionID
+      changed = true
+    }
+    if (changed) {
+      writeStoredAttribution(refreshed)
     }
     return
   }
@@ -100,6 +132,7 @@ export function initializeFirstTouchAttribution(): void {
     first_visit_at: new Date().toISOString(),
   }
   if (clientID) attribution.client_id = clientID
+  if (sessionID) attribution.session_id = sessionID
 
   const utmMap: Record<string, keyof FirstTouchAttribution> = {
     utm_source: 'source',

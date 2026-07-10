@@ -17,6 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
+import { sanitizeAttributionURL } from './first-touch-attribution'
+
 type GtagCommand = [command: string, ...args: unknown[]]
 type GtagDataLayerItem = GtagCommand | IArguments
 
@@ -69,7 +71,22 @@ export function initGoogleAnalytics(measurementId: string): void {
   }
 
   window.gtag('js', new Date())
-  window.gtag('config', normalizedId)
+  const pageLocation =
+    typeof window.location?.href === 'string'
+      ? sanitizeAttributionURL(window.location.href)
+      : undefined
+  const pageReferrer =
+    typeof document.referrer === 'string' && document.referrer
+      ? sanitizeAttributionURL(document.referrer)
+      : undefined
+  if (pageLocation || pageReferrer) {
+    window.gtag('config', normalizedId, {
+      ...(pageLocation ? { page_location: pageLocation } : {}),
+      ...(pageReferrer ? { page_referrer: pageReferrer } : {}),
+    })
+  } else {
+    window.gtag('config', normalizedId)
+  }
 }
 
 export function trackPageView(path: string): void {
@@ -84,7 +101,9 @@ export function trackPageView(path: string): void {
     page_path: normalizedPath,
     page_location: pageLocation.href,
     page_referrer:
-      typeof document.referrer === 'string' ? document.referrer : '',
+      typeof document.referrer === 'string' && document.referrer
+        ? sanitizeAttributionURL(document.referrer) || ''
+        : '',
     hostname: pageLocation.hostname,
     page_title: document.title,
   })
@@ -120,17 +139,15 @@ export function normalizeAnalyticsPagePath(path: string): string | null {
 
 function normalizeSearchParams(search: string): string {
   if (!search) return ''
-  const params = new URLSearchParams(search.slice(1).replace(/\?/g, '&'))
-  const normalized = new URLSearchParams()
-
-  for (const [key, value] of params.entries()) {
-    if (!normalized.has(key)) {
-      normalized.set(key, value)
-    }
+  const raw = search.slice(1)
+  const duplicateSeparator = raw.indexOf('?')
+  if (
+    duplicateSeparator > 0 &&
+    raw.slice(0, duplicateSeparator) === raw.slice(duplicateSeparator + 1)
+  ) {
+    return `?${raw.slice(0, duplicateSeparator)}`
   }
-
-  const result = normalized.toString()
-  return result ? `?${result}` : ''
+  return search
 }
 
 export function trackAnalyticsEvent(
