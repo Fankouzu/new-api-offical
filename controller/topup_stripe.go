@@ -37,7 +37,8 @@ type StripePayRequest struct {
 	SuccessURL string `json:"success_url,omitempty"`
 	// CancelURL is the optional custom URL to redirect when payment is canceled.
 	// If empty, defaults to the server's console topup page.
-	CancelURL string `json:"cancel_url,omitempty"`
+	CancelURL   string         `json:"cancel_url,omitempty"`
+	Attribution ga4Attribution `json:"attribution"`
 }
 
 type StripeAdaptor struct {
@@ -101,14 +102,15 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 	}
 
 	topUp := &model.TopUp{
-		UserId:          id,
-		Amount:          req.Amount,
-		Money:           chargedMoney,
-		TradeNo:         referenceId,
-		PaymentMethod:   model.PaymentMethodStripe,
-		PaymentProvider: model.PaymentProviderStripe,
-		CreateTime:      time.Now().Unix(),
-		Status:          common.TopUpStatusPending,
+		UserId:               id,
+		Amount:               req.Amount,
+		Money:                chargedMoney,
+		TradeNo:              referenceId,
+		PaymentMethod:        model.PaymentMethodStripe,
+		PaymentProvider:      model.PaymentProviderStripe,
+		CreateTime:           time.Now().Unix(),
+		Status:               common.TopUpStatusPending,
+		AnalyticsAttribution: encodeGA4Attribution(req.Attribution),
 	}
 	err = topUp.Insert()
 	if err != nil {

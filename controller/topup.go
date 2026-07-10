@@ -138,8 +138,9 @@ func GetTopUpInfo(c *gin.Context) {
 }
 
 type EpayRequest struct {
-	Amount        int64  `json:"amount"`
-	PaymentMethod string `json:"payment_method"`
+	Amount        int64          `json:"amount"`
+	PaymentMethod string         `json:"payment_method"`
+	Attribution   ga4Attribution `json:"attribution"`
 }
 
 type AmountRequest struct {
@@ -260,14 +261,15 @@ func RequestEpay(c *gin.Context) {
 		amount = dAmount.Div(dQuotaPerUnit).IntPart()
 	}
 	topUp := &model.TopUp{
-		UserId:          id,
-		Amount:          amount,
-		Money:           payMoney,
-		TradeNo:         tradeNo,
-		PaymentMethod:   req.PaymentMethod,
-		PaymentProvider: model.PaymentProviderEpay,
-		CreateTime:      time.Now().Unix(),
-		Status:          common.TopUpStatusPending,
+		UserId:               id,
+		Amount:               amount,
+		Money:                payMoney,
+		TradeNo:              tradeNo,
+		PaymentMethod:        req.PaymentMethod,
+		PaymentProvider:      model.PaymentProviderEpay,
+		CreateTime:           time.Now().Unix(),
+		Status:               common.TopUpStatusPending,
+		AnalyticsAttribution: encodeGA4Attribution(req.Attribution),
 	}
 	err = topUp.Insert()
 	if err != nil {

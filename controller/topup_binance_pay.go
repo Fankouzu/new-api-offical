@@ -19,7 +19,8 @@ import (
 )
 
 type BinancePayRequest struct {
-	Amount int64 `json:"amount"`
+	Amount      int64          `json:"amount"`
+	Attribution ga4Attribution `json:"attribution"`
 }
 
 func RequestBinancePayAmount(c *gin.Context) {
@@ -90,14 +91,15 @@ func RequestBinancePay(c *gin.Context) {
 
 	tradeNo := newBinancePayTradeNo(id)
 	topUp := &model.TopUp{
-		UserId:          id,
-		Amount:          normalizeBinancePayTopUpAmount(req.Amount),
-		Money:           payMoney,
-		TradeNo:         tradeNo,
-		PaymentMethod:   model.PaymentMethodBinancePay,
-		PaymentProvider: model.PaymentProviderBinancePay,
-		CreateTime:      time.Now().Unix(),
-		Status:          common.TopUpStatusPending,
+		UserId:               id,
+		Amount:               normalizeBinancePayTopUpAmount(req.Amount),
+		Money:                payMoney,
+		TradeNo:              tradeNo,
+		PaymentMethod:        model.PaymentMethodBinancePay,
+		PaymentProvider:      model.PaymentProviderBinancePay,
+		CreateTime:           time.Now().Unix(),
+		Status:               common.TopUpStatusPending,
+		AnalyticsAttribution: encodeGA4Attribution(req.Attribution),
 	}
 	if err := topUp.Insert(); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Binance Pay 创建充值订单失败 user_id=%d trade_no=%s amount=%d error=%q", id, tradeNo, req.Amount, err.Error()))

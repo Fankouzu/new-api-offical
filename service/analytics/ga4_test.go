@@ -185,6 +185,65 @@ func TestTrackPurchaseIncludesPaymentMetadataOnly(t *testing.T) {
 	}
 }
 
+func TestTrackPurchaseUsesStoredBrowserAttribution(t *testing.T) {
+	sender := &captureSender{done: make(chan struct{}, 1)}
+	restore := ConfigureForTest(testConfig(), sender)
+	defer restore()
+
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(nil)
+	ctx.Request, _ = http.NewRequest(http.MethodPost, "/webhook", nil)
+	ctx.Request.AddCookie(&http.Cookie{Name: "_ga", Value: "GA1.1.999.888"})
+
+	TrackPurchase(ctx, 42, PurchaseAttribution{
+		TradeNo: "order-browser-attribution",
+		Value:   19.99,
+		Attribution: SignUpAttribution{
+			ClientID:     "123.456",
+			SessionID:    "789",
+			PageLocation: "https://lizh.ai/wallet?utm_source=google",
+			PageReferrer: "https://google.com/",
+			Source:       "google",
+			Medium:       "cpc",
+			Campaign:     "launch",
+			GCLID:        "click-123",
+		},
+	})
+
+	select {
+	case <-sender.done:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for attributed purchase send")
+	}
+
+	var decoded ga4Payload
+	if err := common.Unmarshal([]byte(sender.bodies[0]), &decoded); err != nil {
+		t.Fatalf("decode purchase payload: %v", err)
+	}
+	if decoded.ClientID != "123.456" {
+		t.Fatalf("client id = %q, want stored browser id", decoded.ClientID)
+	}
+	params := decoded.Events[0].Params
+	if params["session_id"] != float64(789) || params["source"] != "google" || params["gclid"] != "click-123" {
+		t.Fatalf("browser attribution missing: %#v", params)
+	}
+}
+
+func TestNormalizeSignUpAttributionDropsInvalidIdentifiersAndOversizedValues(t *testing.T) {
+	got := NormalizeSignUpAttribution(SignUpAttribution{
+		ClientID:  "not-a-client-id",
+		SessionID: "not-a-session-id",
+		Source:    strings.Repeat("x", 300),
+		Medium:    " cpc ",
+	})
+	if got.ClientID != "" || got.SessionID != "" || got.Source != "" {
+		t.Fatalf("invalid attribution was retained: %#v", got)
+	}
+	if got.Medium != "cpc" {
+		t.Fatalf("medium was not normalized: %q", got.Medium)
+	}
+}
+
 func TestTrackTopUpUsesPurchaseEventNameAndConversionFields(t *testing.T) {
 	sender := &captureSender{done: make(chan struct{}, 1)}
 	cfg := testConfig()

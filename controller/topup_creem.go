@@ -48,8 +48,9 @@ func verifyCreemSignature(payload string, signature string, secret string) bool 
 }
 
 type CreemPayRequest struct {
-	ProductId     string `json:"product_id"`
-	PaymentMethod string `json:"payment_method"`
+	ProductId     string         `json:"product_id"`
+	PaymentMethod string         `json:"payment_method"`
+	Attribution   ga4Attribution `json:"attribution"`
 }
 
 type CreemProduct struct {
@@ -106,14 +107,15 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 
 	// 先创建订单记录，使用产品配置的金额和充值额度
 	topUp := &model.TopUp{
-		UserId:          id,
-		Amount:          selectedProduct.Quota, // 充值额度
-		Money:           selectedProduct.Price, // 支付金额
-		TradeNo:         referenceId,
-		PaymentMethod:   model.PaymentMethodCreem,
-		PaymentProvider: model.PaymentProviderCreem,
-		CreateTime:      time.Now().Unix(),
-		Status:          common.TopUpStatusPending,
+		UserId:               id,
+		Amount:               selectedProduct.Quota, // 充值额度
+		Money:                selectedProduct.Price, // 支付金额
+		TradeNo:              referenceId,
+		PaymentMethod:        model.PaymentMethodCreem,
+		PaymentProvider:      model.PaymentProviderCreem,
+		CreateTime:           time.Now().Unix(),
+		Status:               common.TopUpStatusPending,
+		AnalyticsAttribution: encodeGA4Attribution(req.Attribution),
 	}
 	err = topUp.Insert()
 	if err != nil {
@@ -151,8 +153,6 @@ func RequestCreemPay(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "read query error"})
 		return
 	}
-
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Creem 支付请求已收到 user_id=%d body=%q", c.GetInt("id"), string(bodyBytes)))
 
 	// 重新设置body供后续的ShouldBindJSON使用
 	c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))

@@ -94,10 +94,11 @@ func getWaffoPayMoney(amount float64, group string) float64 {
 }
 
 type WaffoPayRequest struct {
-	Amount         int64  `json:"amount"`
-	PayMethodIndex *int   `json:"pay_method_index"` // 服务端支付方式列表的索引，nil 表示由 Waffo 自动选择
-	PayMethodType  string `json:"pay_method_type"`  // Deprecated: 兼容旧前端，优先使用 pay_method_index
-	PayMethodName  string `json:"pay_method_name"`  // Deprecated: 兼容旧前端，优先使用 pay_method_index
+	Amount         int64          `json:"amount"`
+	PayMethodIndex *int           `json:"pay_method_index"` // 服务端支付方式列表的索引，nil 表示由 Waffo 自动选择
+	PayMethodType  string         `json:"pay_method_type"`  // Deprecated: 兼容旧前端，优先使用 pay_method_index
+	PayMethodName  string         `json:"pay_method_name"`  // Deprecated: 兼容旧前端，优先使用 pay_method_index
+	Attribution    ga4Attribution `json:"attribution"`
 }
 
 func RequestWaffoAmount(c *gin.Context) {
@@ -208,14 +209,15 @@ func RequestWaffoPay(c *gin.Context) {
 
 	// 创建本地订单
 	topUp := &model.TopUp{
-		UserId:          id,
-		Amount:          amount,
-		Money:           payMoney,
-		TradeNo:         merchantOrderId,
-		PaymentMethod:   model.PaymentMethodWaffo,
-		PaymentProvider: model.PaymentProviderWaffo,
-		CreateTime:      time.Now().Unix(),
-		Status:          common.TopUpStatusPending,
+		UserId:               id,
+		Amount:               amount,
+		Money:                payMoney,
+		TradeNo:              merchantOrderId,
+		PaymentMethod:        model.PaymentMethodWaffo,
+		PaymentProvider:      model.PaymentProviderWaffo,
+		CreateTime:           time.Now().Unix(),
+		Status:               common.TopUpStatusPending,
+		AnalyticsAttribution: encodeGA4Attribution(req.Attribution),
 	}
 	if err := topUp.Insert(); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Waffo 创建充值订单失败 user_id=%d trade_no=%s amount=%d error=%q", id, merchantOrderId, req.Amount, err.Error()))

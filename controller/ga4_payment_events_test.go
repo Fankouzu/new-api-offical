@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service/analytics"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/glebarez/sqlite"
@@ -112,6 +113,44 @@ func TestBeginGA4TopUpDeliveryKeepsLegacyIdempotencyKey(t *testing.T) {
 	}
 }
 
+func TestGA4OrderAttributionRoundTripsSanitizedBrowserContext(t *testing.T) {
+	encoded := encodeGA4Attribution(analytics.SignUpAttribution{
+		ClientID:     "123.456",
+		SessionID:    "789",
+		PageLocation: "https://lizh.ai/wallet?utm_source=google&token=secret",
+		PageReferrer: "https://mail.example/reset?email=user@example.com&token=secret",
+		Source:       "google",
+		Medium:       "cpc",
+		Campaign:     "launch",
+		GCLID:        "click-123",
+	})
+	if encoded == "" {
+		t.Fatalf("encoded attribution is empty")
+	}
+	for _, forbidden := range []string{"secret", "user@example.com", "email=", "token="} {
+		if strings.Contains(encoded, forbidden) {
+			t.Fatalf("encoded attribution leaked %q: %s", forbidden, encoded)
+		}
+	}
+
+	decoded := decodeGA4Attribution(encoded)
+	if decoded.ClientID != "123.456" || decoded.SessionID != "789" {
+		t.Fatalf("browser identifiers did not round trip: %#v", decoded)
+	}
+	if decoded.PageLocation != "https://lizh.ai/wallet?utm_source=google" {
+		t.Fatalf("unexpected page location: %q", decoded.PageLocation)
+	}
+	if decoded.PageReferrer != "https://mail.example/reset" {
+		t.Fatalf("unexpected page referrer: %q", decoded.PageReferrer)
+	}
+}
+
+func TestGA4OrderAttributionRejectsMalformedStoredJSON(t *testing.T) {
+	if got := decodeGA4Attribution(`{"client_id":`); got != (analytics.SignUpAttribution{}) {
+		t.Fatalf("malformed attribution decoded as %#v", got)
+	}
+}
+
 func setupGA4PaymentEventTestDB(t *testing.T) {
 	t.Helper()
 	oldDB := model.DB
@@ -124,7 +163,7 @@ func setupGA4PaymentEventTestDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open analytics test database: %v", err)
 	}
-	if err := db.AutoMigrate(&model.AnalyticsEventMark{}); err != nil {
+	if err := db.AutoMigrate(&model.AnalyticsEventMark{}, &model.TopUp{}, &model.SubscriptionOrder{}); err != nil {
 		t.Fatalf("migrate analytics event marks: %v", err)
 	}
 	model.DB = db

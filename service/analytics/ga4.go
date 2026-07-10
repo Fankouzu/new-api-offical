@@ -33,6 +33,8 @@ const (
 	defaultRedeemSource       = "voucher"
 	defaultTimeoutMS          = 1500
 	developmentHashSalt       = "ga4-development-hash-salt"
+	maxAttributionValueLength = 256
+	maxAttributionURLLength   = 2048
 )
 
 var attributionURLParamAllowlist = map[string]struct{}{
@@ -81,23 +83,25 @@ type PurchaseAttribution struct {
 	PageLocation    string
 	PageReferrer    string
 	FallbackPath    string
+	Attribution     SignUpAttribution
 }
 
 type SignUpAttribution struct {
-	ClientID     string `json:"client_id"`
-	PageLocation string `json:"page_location"`
-	PageReferrer string `json:"page_referrer"`
-	Source       string `json:"source"`
-	Medium       string `json:"medium"`
-	Campaign     string `json:"campaign"`
-	Term         string `json:"term"`
-	Content      string `json:"content"`
-	GCLID        string `json:"gclid"`
-	FBCLID       string `json:"fbclid"`
-	TTCLID       string `json:"ttclid"`
-	YCLID        string `json:"yclid"`
-	FirstVisitAt string `json:"first_visit_at"`
-	Method       string `json:"method"`
+	ClientID     string `json:"client_id,omitempty"`
+	SessionID    string `json:"session_id,omitempty"`
+	PageLocation string `json:"page_location,omitempty"`
+	PageReferrer string `json:"page_referrer,omitempty"`
+	Source       string `json:"source,omitempty"`
+	Medium       string `json:"medium,omitempty"`
+	Campaign     string `json:"campaign,omitempty"`
+	Term         string `json:"term,omitempty"`
+	Content      string `json:"content,omitempty"`
+	GCLID        string `json:"gclid,omitempty"`
+	FBCLID       string `json:"fbclid,omitempty"`
+	TTCLID       string `json:"ttclid,omitempty"`
+	YCLID        string `json:"yclid,omitempty"`
+	FirstVisitAt string `json:"first_visit_at,omitempty"`
+	Method       string `json:"method,omitempty"`
 }
 
 type FirstAPIRequestAttribution struct {
@@ -246,6 +250,70 @@ func ParseGAClientID(cookieValue string) string {
 	return first + "." + second
 }
 
+func NormalizeSignUpAttribution(attrs SignUpAttribution) SignUpAttribution {
+	attrs.ClientID = normalizeGAClientID(attrs.ClientID)
+	attrs.SessionID = normalizeNumericAttribution(attrs.SessionID, 20)
+	attrs.PageLocation = normalizeAttributionURL(attrs.PageLocation)
+	attrs.PageReferrer = normalizeAttributionURL(attrs.PageReferrer)
+	attrs.Source = normalizeAttributionValue(attrs.Source, maxAttributionValueLength)
+	attrs.Medium = normalizeAttributionValue(attrs.Medium, maxAttributionValueLength)
+	attrs.Campaign = normalizeAttributionValue(attrs.Campaign, maxAttributionValueLength)
+	attrs.Term = normalizeAttributionValue(attrs.Term, maxAttributionValueLength)
+	attrs.Content = normalizeAttributionValue(attrs.Content, maxAttributionValueLength)
+	attrs.GCLID = normalizeAttributionValue(attrs.GCLID, maxAttributionValueLength)
+	attrs.FBCLID = normalizeAttributionValue(attrs.FBCLID, maxAttributionValueLength)
+	attrs.TTCLID = normalizeAttributionValue(attrs.TTCLID, maxAttributionValueLength)
+	attrs.YCLID = normalizeAttributionValue(attrs.YCLID, maxAttributionValueLength)
+	attrs.FirstVisitAt = normalizeAttributionValue(attrs.FirstVisitAt, 64)
+	attrs.Method = normalizeAttributionValue(attrs.Method, 64)
+	return attrs
+}
+
+func normalizeGAClientID(value string) string {
+	value = strings.TrimSpace(value)
+	parts := strings.Split(value, ".")
+	if len(parts) != 2 {
+		return ""
+	}
+	for _, part := range parts {
+		if _, err := strconv.ParseUint(part, 10, 64); err != nil {
+			return ""
+		}
+	}
+	return value
+}
+
+func normalizeNumericAttribution(value string, maxLength int) string {
+	value = normalizeAttributionValue(value, maxLength)
+	if value == "" {
+		return ""
+	}
+	if _, err := strconv.ParseUint(value, 10, 64); err != nil {
+		return ""
+	}
+	return value
+}
+
+func normalizeAttributionValue(value string, maxLength int) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > maxLength {
+		return ""
+	}
+	return value
+}
+
+func normalizeAttributionURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > maxAttributionURLLength {
+		return ""
+	}
+	value = sanitizeAttributionURL(value)
+	if len(value) > maxAttributionURLLength {
+		return ""
+	}
+	return value
+}
+
 func ResolveGAClientID(c *gin.Context, userID int, tokenID int) string {
 	if c != nil {
 		if cookieValue, err := c.Cookie("_ga"); err == nil {
@@ -376,9 +444,31 @@ func trackPurchaseEventWithResult(c *gin.Context, userID int, eventName string, 
 	if attrs.QuotaAmount > 0 {
 		params["quota_amount"] = attrs.QuotaAmount
 	}
+	browserAttribution := NormalizeSignUpAttribution(attrs.Attribution)
+	if browserAttribution.SessionID != "" {
+		if sessionID, err := strconv.ParseUint(browserAttribution.SessionID, 10, 64); err == nil {
+			params["session_id"] = sessionID
+		}
+	}
+	addStringParam(params, "source", browserAttribution.Source)
+	addStringParam(params, "medium", browserAttribution.Medium)
+	addStringParam(params, "campaign", browserAttribution.Campaign)
+	addStringParam(params, "term", browserAttribution.Term)
+	addStringParam(params, "content", browserAttribution.Content)
+	addStringParam(params, "gclid", browserAttribution.GCLID)
+	addStringParam(params, "fbclid", browserAttribution.FBCLID)
+	addStringParam(params, "ttclid", browserAttribution.TTCLID)
+	addStringParam(params, "yclid", browserAttribution.YCLID)
+	addStringParam(params, "first_visit_at", browserAttribution.FirstVisitAt)
 	fallbackPath := firstNonEmpty(attrs.FallbackPath, "/wallet")
-	addPageContext(c, params, attrs.PageLocation, attrs.PageReferrer, fallbackPath)
-	trackWithResult(c, cfg, userID, 0, eventName, params, onResult)
+	addPageContext(
+		c,
+		params,
+		firstNonEmpty(browserAttribution.PageLocation, attrs.PageLocation),
+		firstNonEmpty(browserAttribution.PageReferrer, attrs.PageReferrer),
+		fallbackPath,
+	)
+	trackWithClientID(c, cfg, userID, 0, eventName, params, browserAttribution.ClientID, onResult)
 }
 
 func purchaseItemName(itemID string) string {
@@ -397,6 +487,7 @@ func TrackSignUp(c *gin.Context, userID int, attrs SignUpAttribution) {
 	if !trackingEnabled(cfg) {
 		return
 	}
+	attrs = NormalizeSignUpAttribution(attrs)
 	method := strings.TrimSpace(attrs.Method)
 	if method == "" {
 		method = "unknown"

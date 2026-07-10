@@ -22,6 +22,31 @@ const (
 	defaultPaymentCurrencyUSD = "USD"
 )
 
+type ga4Attribution = analytics.SignUpAttribution
+
+func encodeGA4Attribution(attrs analytics.SignUpAttribution) string {
+	attrs = analytics.NormalizeSignUpAttribution(attrs)
+	if attrs == (analytics.SignUpAttribution{}) {
+		return ""
+	}
+	data, err := common.Marshal(attrs)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+func decodeGA4Attribution(raw string) analytics.SignUpAttribution {
+	if strings.TrimSpace(raw) == "" {
+		return analytics.SignUpAttribution{}
+	}
+	var attrs analytics.SignUpAttribution
+	if err := common.Unmarshal([]byte(raw), &attrs); err != nil {
+		return analytics.SignUpAttribution{}
+	}
+	return analytics.NormalizeSignUpAttribution(attrs)
+}
+
 func trackGA4TopUpSuccess(c *gin.Context, tradeNo string) {
 	trackGA4TopUpSuccessWithCurrency(c, tradeNo, "")
 }
@@ -46,6 +71,7 @@ func trackGA4TopUpSuccessWithCurrency(c *gin.Context, tradeNo string, currency s
 		PaymentMethod:   topUp.PaymentMethod,
 		ItemType:        ga4ItemTypeTopUp,
 		QuotaAmount:     topUp.Amount,
+		Attribution:     decodeGA4Attribution(topUp.AnalyticsAttribution),
 	}, trackAnalyticsMarkResult(markID))
 }
 
@@ -77,6 +103,7 @@ func trackGA4PurchaseSuccessWithCurrency(c *gin.Context, tradeNo string, currenc
 		PaymentProvider: order.PaymentProvider,
 		PaymentMethod:   order.PaymentMethod,
 		ItemType:        ga4ItemTypeSubscription,
+		Attribution:     decodeGA4Attribution(order.AnalyticsAttribution),
 	}, trackAnalyticsMarkResult(markID))
 }
 

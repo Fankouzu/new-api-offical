@@ -18,7 +18,8 @@ import (
 )
 
 type SubscriptionStripePayRequest struct {
-	PlanId int `json:"plan_id"`
+	PlanId      int            `json:"plan_id"`
+	Attribution ga4Attribution `json:"attribution"`
 }
 
 func SubscriptionRequestStripePay(c *gin.Context) {
@@ -84,14 +85,15 @@ func SubscriptionRequestStripePay(c *gin.Context) {
 	}
 
 	order := &model.SubscriptionOrder{
-		UserId:          userId,
-		PlanId:          plan.Id,
-		Money:           plan.PriceAmount,
-		TradeNo:         referenceId,
-		PaymentMethod:   model.PaymentMethodStripe,
-		PaymentProvider: model.PaymentProviderStripe,
-		CreateTime:      time.Now().Unix(),
-		Status:          common.TopUpStatusPending,
+		UserId:               userId,
+		PlanId:               plan.Id,
+		Money:                plan.PriceAmount,
+		TradeNo:              referenceId,
+		PaymentMethod:        model.PaymentMethodStripe,
+		PaymentProvider:      model.PaymentProviderStripe,
+		CreateTime:           time.Now().Unix(),
+		Status:               common.TopUpStatusPending,
+		AnalyticsAttribution: encodeGA4Attribution(req.Attribution),
 	}
 	if err := order.Insert(); err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建订单失败"})

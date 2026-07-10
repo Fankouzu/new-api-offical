@@ -18,8 +18,9 @@ import (
 )
 
 type SubscriptionEpayPayRequest struct {
-	PlanId        int    `json:"plan_id"`
-	PaymentMethod string `json:"payment_method"`
+	PlanId        int            `json:"plan_id"`
+	PaymentMethod string         `json:"payment_method"`
+	Attribution   ga4Attribution `json:"attribution"`
 }
 
 func SubscriptionRequestEpay(c *gin.Context) {
@@ -82,14 +83,15 @@ func SubscriptionRequestEpay(c *gin.Context) {
 	}
 
 	order := &model.SubscriptionOrder{
-		UserId:          userId,
-		PlanId:          plan.Id,
-		Money:           plan.PriceAmount,
-		TradeNo:         tradeNo,
-		PaymentMethod:   req.PaymentMethod,
-		PaymentProvider: model.PaymentProviderEpay,
-		CreateTime:      time.Now().Unix(),
-		Status:          common.TopUpStatusPending,
+		UserId:               userId,
+		PlanId:               plan.Id,
+		Money:                plan.PriceAmount,
+		TradeNo:              tradeNo,
+		PaymentMethod:        req.PaymentMethod,
+		PaymentProvider:      model.PaymentProviderEpay,
+		CreateTime:           time.Now().Unix(),
+		Status:               common.TopUpStatusPending,
+		AnalyticsAttribution: encodeGA4Attribution(req.Attribution),
 	}
 	if err := order.Insert(); err != nil {
 		common.ApiErrorMsg(c, "创建订单失败")
