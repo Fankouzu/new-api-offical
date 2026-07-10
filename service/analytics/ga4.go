@@ -6,6 +6,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -48,6 +49,11 @@ var attributionURLParamAllowlist = map[string]struct{}{
 	"ttclid":       {},
 	"yclid":        {},
 	"aff":          {},
+}
+
+var defaultGA4RetryBackoffs = [...]time.Duration{
+	100 * time.Millisecond,
+	300 * time.Millisecond,
 }
 
 type EventParams map[string]any
@@ -137,6 +143,26 @@ type ga4Event struct {
 
 type sender interface {
 	Do(req *http.Request) (*http.Response, error)
+}
+
+type ga4StatusError struct {
+	StatusCode int
+}
+
+func (e *ga4StatusError) Error() string {
+	return fmt.Sprintf("status=%d", e.StatusCode)
+}
+
+type ga4TransportError struct {
+	err error
+}
+
+func (e *ga4TransportError) Error() string {
+	return e.err.Error()
+}
+
+func (e *ga4TransportError) Unwrap() error {
+	return e.err
 }
 
 var (
@@ -770,7 +796,7 @@ func trackWithResult(c *gin.Context, cfg Config, userID int, tokenID int, eventN
 func trackWithClientID(c *gin.Context, cfg Config, userID int, tokenID int, eventName string, params EventParams, clientID string, onResult func(error)) {
 	payload := buildPayloadWithClientID(c, userID, tokenID, eventName, params, clientID)
 	gopool.Go(func() {
-		if err := sendPayload(context.Background(), cfg, payload); err != nil {
+		if err := sendPayloadWithRetry(context.Background(), cfg, payload, defaultGA4RetryBackoffs[:]); err != nil {
 			common.SysLog(fmt.Sprintf("GA4 event send failed: event=%s error=%s", eventName, sanitizeError(err).Error()))
 			if onResult != nil {
 				onResult(err)
@@ -781,6 +807,39 @@ func trackWithClientID(c *gin.Context, cfg Config, userID int, tokenID int, even
 			onResult(nil)
 		}
 	})
+}
+
+func sendPayloadWithRetry(ctx context.Context, cfg Config, payload ga4Payload, backoffs []time.Duration) error {
+	for attempt := 0; ; attempt++ {
+		err := sendPayload(ctx, cfg, payload)
+		if err == nil || !isRetryableDeliveryError(err) || attempt >= len(backoffs) {
+			return err
+		}
+		delay := backoffs[attempt]
+		if delay <= 0 {
+			continue
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func isRetryableDeliveryError(err error) bool {
+	var statusErr *ga4StatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.StatusCode == http.StatusRequestTimeout ||
+			statusErr.StatusCode == http.StatusTooManyRequests ||
+			statusErr.StatusCode >= http.StatusInternalServerError
+	}
+	var transportErr *ga4TransportError
+	return errors.As(err, &transportErr)
 }
 
 func buildPayload(c *gin.Context, userID int, tokenID int, eventName string, params EventParams) ga4Payload {
@@ -833,11 +892,11 @@ func sendPayload(ctx context.Context, cfg Config, payload ga4Payload) error {
 	}
 	resp, err := s.Do(req)
 	if err != nil {
-		return err
+		return &ga4TransportError{err: err}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("status=%d", resp.StatusCode)
+		return &ga4StatusError{StatusCode: resp.StatusCode}
 	}
 	return nil
 }

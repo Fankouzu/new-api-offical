@@ -714,10 +714,12 @@ func TestAddTokenMarksAPIKeyCreatedFailedAfterGA4Failure(t *testing.T) {
 	if mark.SubjectType != "token" || mark.SubjectId != token.Id || mark.EventName != "api_key_created" {
 		t.Fatalf("unexpected analytics mark: %#v", mark)
 	}
-	if len(sender.bodies) != 1 {
-		t.Fatalf("sent %d GA4 requests, want 1", len(sender.bodies))
+	if len(sender.bodies) != 3 {
+		t.Fatalf("sent %d GA4 requests, want 3", len(sender.bodies))
 	}
-	if strings.Contains(sender.bodies[0], token.Key) || strings.Contains(sender.bodies[0], token.GetFullKey()) {
-		t.Fatalf("api_key_created payload leaked raw token key: %s", sender.bodies[0])
+	for _, bodyPayload := range sender.bodies {
+		if strings.Contains(bodyPayload, token.Key) || strings.Contains(bodyPayload, token.GetFullKey()) {
+			t.Fatalf("api_key_created payload leaked raw token key: %s", bodyPayload)
+		}
 	}
 }

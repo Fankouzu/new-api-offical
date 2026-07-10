@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,26 +17,33 @@ import (
 )
 
 type captureSender struct {
+	mu       sync.Mutex
 	requests []*http.Request
 	bodies   []string
 	status   int
+	statuses []int
 	err      error
 	done     chan struct{}
 }
 
 func (s *captureSender) Do(req *http.Request) (*http.Response, error) {
-	defer func() {
-		if s.done != nil {
-			s.done <- struct{}{}
-		}
-	}()
+	s.mu.Lock()
 	s.requests = append(s.requests, req)
 	body, _ := io.ReadAll(req.Body)
 	s.bodies = append(s.bodies, string(body))
-	if s.err != nil {
-		return nil, s.err
-	}
+	err := s.err
 	status := s.status
+	if len(s.statuses) > 0 {
+		status = s.statuses[0]
+		s.statuses = s.statuses[1:]
+	}
+	s.mu.Unlock()
+	if s.done != nil {
+		s.done <- struct{}{}
+	}
+	if err != nil {
+		return nil, err
+	}
 	if status == 0 {
 		status = http.StatusNoContent
 	}
@@ -43,6 +51,12 @@ func (s *captureSender) Do(req *http.Request) (*http.Response, error) {
 		StatusCode: status,
 		Body:       io.NopCloser(bytes.NewReader(nil)),
 	}, nil
+}
+
+func (s *captureSender) Attempts() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.requests)
 }
 
 func testConfig() Config {
@@ -660,6 +674,79 @@ func TestSendPayloadReturnsStatusErrorWithoutPanic(t *testing.T) {
 	err := sendPayload(context.Background(), cfg, ga4Payload{ClientID: "1.2"})
 	if err == nil || !strings.Contains(err.Error(), "status=500") {
 		t.Fatalf("expected status error, got %v", err)
+	}
+}
+
+func TestSendPayloadRetriesTransientStatuses(t *testing.T) {
+	sender := &captureSender{statuses: []int{
+		http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusNoContent,
+	}}
+	cfg := testConfig()
+	restore := ConfigureForTest(cfg, sender)
+	defer restore()
+
+	err := sendPayloadWithRetry(
+		context.Background(),
+		cfg,
+		ga4Payload{ClientID: "1.2"},
+		[]time.Duration{0, 0},
+	)
+	if err != nil {
+		t.Fatalf("sendPayloadWithRetry returned error: %v", err)
+	}
+	if sender.Attempts() != 3 {
+		t.Fatalf("attempts = %d, want 3", sender.Attempts())
+	}
+}
+
+func TestSendPayloadDoesNotRetryPermanentClientError(t *testing.T) {
+	sender := &captureSender{statuses: []int{http.StatusBadRequest, http.StatusNoContent}}
+	cfg := testConfig()
+	restore := ConfigureForTest(cfg, sender)
+	defer restore()
+
+	err := sendPayloadWithRetry(
+		context.Background(),
+		cfg,
+		ga4Payload{ClientID: "1.2"},
+		[]time.Duration{0, 0},
+	)
+	if err == nil || !strings.Contains(err.Error(), "status=400") {
+		t.Fatalf("expected permanent status error, got %v", err)
+	}
+	if sender.Attempts() != 1 {
+		t.Fatalf("attempts = %d, want 1", sender.Attempts())
+	}
+}
+
+func TestTrackWithResultCallsCallbackOnceAfterRetry(t *testing.T) {
+	sender := &captureSender{statuses: []int{http.StatusInternalServerError, http.StatusNoContent}}
+	cfg := testConfig()
+	restore := ConfigureForTest(cfg, sender)
+	defer restore()
+
+	results := make(chan error, 2)
+	trackWithClientID(nil, cfg, 42, 0, eventPurchase, EventParams{}, "123.456", func(err error) {
+		results <- err
+	})
+
+	select {
+	case err := <-results:
+		if err != nil {
+			t.Fatalf("callback returned error after retry: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for retry callback")
+	}
+	select {
+	case err := <-results:
+		t.Fatalf("callback ran more than once: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	if sender.Attempts() != 2 {
+		t.Fatalf("attempts = %d, want 2", sender.Attempts())
 	}
 }
 
