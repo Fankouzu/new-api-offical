@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-
 import { sanitizeAttributionURL } from './first-touch-attribution'
 
 type GtagCommand = [command: string, ...args: unknown[]]
@@ -37,7 +36,9 @@ export function getGoogleAnalyticsMeasurementId(): string {
   const runtimeMeasurementId =
     typeof window !== 'undefined' ? window.__GOOGLE_ANALYTICS_ID__ : ''
   return (
-    runtimeMeasurementId || import.meta.env?.VITE_GOOGLE_ANALYTICS_ID || ''
+    runtimeMeasurementId ||
+    import.meta.env?.VITE_GOOGLE_ANALYTICS_ID ||
+    ''
   ).trim()
 }
 

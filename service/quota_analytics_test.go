@@ -70,8 +70,13 @@ func TestTrackFirstAPICallDoesNotMarkWhenGA4Disabled(t *testing.T) {
 func TestTrackFirstAPICallRetriesFailedSendAndSuppressesSentDuplicate(t *testing.T) {
 	truncate(t)
 	sender := &ga4TestSender{
-		statuses: []int{http.StatusInternalServerError, http.StatusNoContent},
-		done:     make(chan struct{}, 2),
+		statuses: []int{
+			http.StatusInternalServerError,
+			http.StatusInternalServerError,
+			http.StatusInternalServerError,
+			http.StatusNoContent,
+		},
+		done: make(chan struct{}, 4),
 	}
 	restore := analytics.ConfigureForTest(analytics.Config{
 		Enabled:       true,
@@ -97,8 +102,8 @@ func TestTrackFirstAPICallRetriesFailedSendAndSuppressesSentDuplicate(t *testing
 	if mark.Status != model.AnalyticsEventStatusFailed {
 		t.Fatalf("status after failed send = %q, want failed", mark.Status)
 	}
-	if sender.requests != 1 {
-		t.Fatalf("requests after failed send = %d, want 1", sender.requests)
+	if sender.requests != 3 {
+		t.Fatalf("requests after failed send = %d, want 3", sender.requests)
 	}
 
 	trackFirstAPICallIfNeeded(info, 100)
@@ -107,23 +112,23 @@ func TestTrackFirstAPICallRetriesFailedSendAndSuppressesSentDuplicate(t *testing
 	if mark.Status != model.AnalyticsEventStatusSent {
 		t.Fatalf("status after retry success = %q, want sent", mark.Status)
 	}
-	if sender.requests != 2 {
-		t.Fatalf("requests after retry = %d, want 2", sender.requests)
+	if sender.requests != 4 {
+		t.Fatalf("requests after retry = %d, want 4", sender.requests)
 	}
-	if !strings.Contains(sender.bodies[1], `"name":"first_api_call"`) {
-		t.Fatalf("first API payload should use new event name: %s", sender.bodies[1])
+	if !strings.Contains(sender.bodies[3], `"name":"first_api_call"`) {
+		t.Fatalf("first API payload should use new event name: %s", sender.bodies[3])
 	}
-	if !strings.Contains(sender.bodies[1], `"endpoint":"/v1/chat/completions"`) ||
-		!strings.Contains(sender.bodies[1], `"status_code":200`) ||
-		!strings.Contains(sender.bodies[1], `"model":"gpt-test"`) {
-		t.Fatalf("first API payload missing endpoint/status/model: %s", sender.bodies[1])
+	if !strings.Contains(sender.bodies[3], `"endpoint":"/v1/chat/completions"`) ||
+		!strings.Contains(sender.bodies[3], `"status_code":200`) ||
+		!strings.Contains(sender.bodies[3], `"model":"gpt-test"`) {
+		t.Fatalf("first API payload missing endpoint/status/model: %s", sender.bodies[3])
 	}
-	if strings.Contains(sender.bodies[1], "token-key") {
-		t.Fatalf("first API payload leaked raw token key: %s", sender.bodies[1])
+	if strings.Contains(sender.bodies[3], "token-key") {
+		t.Fatalf("first API payload leaked raw token key: %s", sender.bodies[3])
 	}
 
 	trackFirstAPICallIfNeeded(info, 100)
-	if sender.requests != 2 {
+	if sender.requests != 4 {
 		t.Fatalf("sent event should suppress duplicate send, got %d requests", sender.requests)
 	}
 }
