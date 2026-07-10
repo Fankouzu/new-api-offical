@@ -23,7 +23,9 @@ import type { NavItem, NavCollapsible } from '../types'
  * Convert LinkProps['to'] to string
  * Handles both string URLs and object URLs (e.g., { pathname, search })
  */
-export function urlToString(url: LinkProps['to'] | (string & {})): string | null {
+export function urlToString(
+  url: LinkProps['to'] | (string & {})
+): string | null {
   if (typeof url === 'string') {
     return url
   }

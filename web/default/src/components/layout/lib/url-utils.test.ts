@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-
 import { urlToString } from './url-utils'
 
 test('urlToString does not duplicate query params when pathname already has search', () => {
