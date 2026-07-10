@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { getFirstTouchAttribution } from '../src/lib/first-touch-attribution'
+import * as firstTouchAttribution from '../src/lib/first-touch-attribution'
 
 const values = new Map<string, string>()
 
@@ -40,7 +40,7 @@ beforeEach(() => {
 
 describe('first-touch attribution', () => {
   test('captures the GA client and session identifiers', () => {
-    expect(getFirstTouchAttribution()).toEqual(
+    expect(firstTouchAttribution.getFirstTouchAttribution()).toEqual(
       expect.objectContaining({
         client_id: '123456789.987654321',
         session_id: '1740000000',
@@ -57,11 +57,29 @@ describe('first-touch attribution', () => {
       })
     )
 
-    expect(getFirstTouchAttribution()).toEqual(
+    expect(firstTouchAttribution.getFirstTouchAttribution()).toEqual(
       expect.objectContaining({
         client_id: '123456789.987654321',
         session_id: '1740000000',
       })
     )
+  })
+
+  test('adds the current attribution only to an explicitly enriched request', () => {
+    const enrich = (
+      firstTouchAttribution as typeof firstTouchAttribution & {
+        withFirstTouchAttribution?: (request: { amount: number }) => object
+      }
+    ).withFirstTouchAttribution
+    expect(typeof enrich).toBe('function')
+
+    expect(enrich?.({ amount: 10 })).toEqual({
+      amount: 10,
+      attribution: expect.objectContaining({
+        client_id: '123456789.987654321',
+        session_id: '1740000000',
+        gclid: 'click-123',
+      }),
+    })
   })
 })

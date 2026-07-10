@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { withFirstTouchAttribution } from '@/lib/first-touch-attribution'
 import type {
   RedemptionRequest,
   PaymentRequest,
@@ -101,9 +102,13 @@ export async function calculateStripeAmount(
 export async function requestPayment(
   request: PaymentRequest
 ): Promise<PaymentResponse> {
-  const res = await api.post('/api/user/pay', request, {
-    skipBusinessError: true,
-  } as Record<string, unknown>)
+  const res = await api.post(
+    '/api/user/pay',
+    withFirstTouchAttribution(request),
+    {
+      skipBusinessError: true,
+    } as Record<string, unknown>
+  )
   return {
     ...res.data,
     url: res.data.url || (res as unknown as { url?: string }).url,
@@ -116,9 +121,13 @@ export async function requestPayment(
 export async function requestStripePayment(
   request: PaymentRequest
 ): Promise<StripePaymentResponse> {
-  const res = await api.post('/api/user/stripe/pay', request, {
-    skipBusinessError: true,
-  } as Record<string, unknown>)
+  const res = await api.post(
+    '/api/user/stripe/pay',
+    withFirstTouchAttribution(request),
+    {
+      skipBusinessError: true,
+    } as Record<string, unknown>
+  )
   return res.data
 }
 
@@ -128,9 +137,13 @@ export async function requestStripePayment(
 export async function requestCreemPayment(
   request: CreemPaymentRequest
 ): Promise<CreemPaymentResponse> {
-  const res = await api.post('/api/user/creem/pay', request, {
-    skipBusinessError: true,
-  } as Record<string, unknown>)
+  const res = await api.post(
+    '/api/user/creem/pay',
+    withFirstTouchAttribution(request),
+    {
+      skipBusinessError: true,
+    } as Record<string, unknown>
+  )
   return res.data
 }
 
@@ -140,9 +153,13 @@ export async function requestCreemPayment(
 export async function requestWaffoPayment(
   request: WaffoPaymentRequest
 ): Promise<WaffoPaymentResponse> {
-  const res = await api.post('/api/user/waffo/pay', request, {
-    skipBusinessError: true,
-  } as Record<string, unknown>)
+  const res = await api.post(
+    '/api/user/waffo/pay',
+    withFirstTouchAttribution(request),
+    {
+      skipBusinessError: true,
+    } as Record<string, unknown>
+  )
   return res.data
 }
 
@@ -164,9 +181,13 @@ export async function calculateWaffoPancakeAmount(
 export async function requestWaffoPancakePayment(
   request: WaffoPancakePaymentRequest
 ): Promise<WaffoPancakePaymentResponse> {
-  const res = await api.post('/api/user/waffo-pancake/pay', request, {
-    skipBusinessError: true,
-  } as Record<string, unknown>)
+  const res = await api.post(
+    '/api/user/waffo-pancake/pay',
+    withFirstTouchAttribution(request),
+    {
+      skipBusinessError: true,
+    } as Record<string, unknown>
+  )
   return res.data
 }
 
@@ -182,9 +203,13 @@ export async function calculateBinancePayAmount(
 export async function requestBinancePayPayment(
   request: BinancePayPaymentRequest
 ): Promise<BinancePayPaymentResponse> {
-  const res = await api.post('/api/user/binance-pay/pay', request, {
-    skipBusinessError: true,
-  } as Record<string, unknown>)
+  const res = await api.post(
+    '/api/user/binance-pay/pay',
+    withFirstTouchAttribution(request),
+    {
+      skipBusinessError: true,
+    } as Record<string, unknown>
+  )
   return res.data
 }
 

@@ -158,3 +158,10 @@ export function getFirstTouchAttribution(): FirstTouchAttribution | undefined {
   const attribution = readStoredAttribution()
   return attribution || undefined
 }
+
+export function withFirstTouchAttribution<T extends object>(
+  request: T
+): T & { attribution?: FirstTouchAttribution } {
+  const attribution = getFirstTouchAttribution()
+  return attribution ? { ...request, attribution } : request
+}

@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { FirstTouchAttribution } from '@/lib/first-touch-attribution'
+
 // ============================================================================
 // Wallet Type Definitions
 // ============================================================================
@@ -87,6 +89,7 @@ export interface CreemPaymentRequest {
   product_id: string
   /** Payment method identifier */
   payment_method: 'creem'
+  attribution?: FirstTouchAttribution
 }
 
 /**
@@ -185,6 +188,7 @@ export interface PaymentRequest {
   amount: number
   /** Payment method identifier */
   payment_method: string
+  attribution?: FirstTouchAttribution
 }
 
 /**
@@ -195,6 +199,7 @@ export interface WaffoPaymentRequest {
   amount: number
   /** Optional server-side Waffo payment method index */
   pay_method_index?: number
+  attribution?: FirstTouchAttribution
 }
 
 /**
@@ -203,6 +208,7 @@ export interface WaffoPaymentRequest {
 export interface WaffoPancakePaymentRequest {
   /** Topup amount */
   amount: number
+  attribution?: FirstTouchAttribution
 }
 
 /**
@@ -211,6 +217,7 @@ export interface WaffoPancakePaymentRequest {
 export interface BinancePayPaymentRequest {
   /** Topup amount */
   amount: number
+  attribution?: FirstTouchAttribution
 }
 
 /**
