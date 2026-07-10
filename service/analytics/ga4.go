@@ -33,6 +33,7 @@ const (
 	defaultVoucherSource      = "lizh_ai"
 	defaultRedeemSource       = "voucher"
 	defaultTimeoutMS          = 1500
+	defaultEngagementTimeMS   = 1
 	developmentHashSalt       = "ga4-development-hash-salt"
 	maxAttributionValueLength = 256
 	maxAttributionURLLength   = 2048
@@ -171,7 +172,8 @@ var (
 
 	httpSender sender = &http.Client{Timeout: config.Timeout}
 
-	regexpGA4APISecret = regexp.MustCompile(`([?&]api_secret=)[^&\s]+`)
+	regexpGA4APISecret     = regexp.MustCompile(`([?&]api_secret=)[^&\s]+`)
+	regexpGA4MeasurementID = regexp.MustCompile(`(?i)^G-([a-z0-9]+)$`)
 )
 
 func loadConfigFromEnv() Config {
@@ -471,11 +473,7 @@ func trackPurchaseEventWithResult(c *gin.Context, userID int, eventName string, 
 		params["quota_amount"] = attrs.QuotaAmount
 	}
 	browserAttribution := NormalizeSignUpAttribution(attrs.Attribution)
-	if browserAttribution.SessionID != "" {
-		if sessionID, err := strconv.ParseUint(browserAttribution.SessionID, 10, 64); err == nil {
-			params["session_id"] = sessionID
-		}
-	}
+	addSessionContext(params, browserAttribution.SessionID)
 	addStringParam(params, "source", browserAttribution.Source)
 	addStringParam(params, "medium", browserAttribution.Medium)
 	addStringParam(params, "campaign", browserAttribution.Campaign)
@@ -522,6 +520,11 @@ func TrackSignUp(c *gin.Context, userID int, attrs SignUpAttribution) {
 		"method": method,
 	}
 	addUserIDParam(params, userID)
+	sessionID := attrs.SessionID
+	if sessionID == "" {
+		sessionID = resolveGASessionID(c, cfg.MeasurementID)
+	}
+	addSessionContext(params, sessionID)
 	addPageContext(c, params, attrs.PageLocation, attrs.PageReferrer, "/sign-up")
 	addStringParam(params, "source", attrs.Source)
 	addStringParam(params, "medium", attrs.Medium)
@@ -594,6 +597,57 @@ func addUserIDParam(params EventParams, userID int) {
 	if userID > 0 {
 		params["user_id"] = userID
 	}
+}
+
+func addSessionContext(params EventParams, sessionID string) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return
+	}
+	parsedSessionID, err := strconv.ParseUint(sessionID, 10, 64)
+	if err != nil {
+		return
+	}
+	params["session_id"] = parsedSessionID
+	params["engagement_time_msec"] = defaultEngagementTimeMS
+}
+
+func resolveGASessionID(c *gin.Context, measurementID string) string {
+	if c == nil {
+		return ""
+	}
+	match := regexpGA4MeasurementID.FindStringSubmatch(strings.TrimSpace(measurementID))
+	if len(match) != 2 {
+		return ""
+	}
+	cookieValue, err := c.Cookie("_ga_" + match[1])
+	if err != nil {
+		return ""
+	}
+	return parseGASessionID(cookieValue)
+}
+
+func parseGASessionID(cookieValue string) string {
+	cookieValue = strings.TrimSpace(cookieValue)
+	if decoded, err := url.QueryUnescape(cookieValue); err == nil {
+		cookieValue = decoded
+	}
+	if strings.HasPrefix(cookieValue, "GS2.") {
+		for _, part := range strings.FieldsFunc(cookieValue, func(r rune) bool {
+			return r == '.' || r == '$'
+		}) {
+			if len(part) > 1 && part[0] == 's' {
+				if sessionID := normalizeNumericAttribution(part[1:], 20); sessionID != "" {
+					return sessionID
+				}
+			}
+		}
+	}
+	parts := strings.Split(cookieValue, ".")
+	if len(parts) >= 3 && strings.HasPrefix(parts[0], "GS") && normalizeNumericAttribution(parts[0][2:], 4) != "" {
+		return normalizeNumericAttribution(parts[2], 20)
+	}
+	return ""
 }
 
 func firstNonEmpty(values ...string) string {

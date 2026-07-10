@@ -238,7 +238,7 @@ func TestTrackPurchaseUsesStoredBrowserAttribution(t *testing.T) {
 		t.Fatalf("client id = %q, want stored browser id", decoded.ClientID)
 	}
 	params := decoded.Events[0].Params
-	if params["session_id"] != float64(789) || params["source"] != "google" || params["gclid"] != "click-123" {
+	if params["session_id"] != float64(789) || params["engagement_time_msec"] != float64(1) || params["source"] != "google" || params["gclid"] != "click-123" {
 		t.Fatalf("browser attribution missing: %#v", params)
 	}
 }
@@ -436,6 +436,7 @@ func TestTrackSignUpIncludesAttributionWithoutPII(t *testing.T) {
 
 	TrackSignUp(ctx, 42, SignUpAttribution{
 		ClientID:     "111.222",
+		SessionID:    "333",
 		PageLocation: "https://lizh.ai/?utm_source=plati",
 		PageReferrer: "https://plati.market/",
 		Source:       "plati",
@@ -474,7 +475,7 @@ func TestTrackSignUpIncludesAttributionWithoutPII(t *testing.T) {
 		t.Fatalf("unexpected events: %#v", decoded.Events)
 	}
 	params := decoded.Events[0].Params
-	if params["method"] != "email" || params["source"] != "plati" || params["gclid"] != "gclid-value" {
+	if params["method"] != "email" || params["session_id"] != float64(333) || params["engagement_time_msec"] != float64(1) || params["source"] != "plati" || params["gclid"] != "gclid-value" {
 		t.Fatalf("attribution params missing: %#v", params)
 	}
 	if params["user_id"] != float64(42) || params["hostname"] != "lizh.ai" {
@@ -487,6 +488,59 @@ func TestTrackSignUpIncludesAttributionWithoutPII(t *testing.T) {
 		if strings.Contains(sender.bodies[0], forbidden+"@") {
 			t.Fatalf("sign_up payload appears to leak private value: %s", sender.bodies[0])
 		}
+	}
+}
+
+func TestTrackSignUpUsesRequestSessionCookieWhenAttributionMissing(t *testing.T) {
+	tests := []struct {
+		name          string
+		cookieValue   string
+		wantSessionID float64
+	}{
+		{name: "GS1 cookie", cookieValue: "GS1.1.1700000000.1.1.1700000100.0.0.0", wantSessionID: 1700000000},
+		{name: "GS2 cookie", cookieValue: "GS2.1.s1700000001$o1$g0$t1700000100$j60$l0$h0", wantSessionID: 1700000001},
+		{name: "invalid prefix", cookieValue: "garbage.s1700000002", wantSessionID: 0},
+		{name: "invalid GS1 prefix", cookieValue: "GSX.1.1700000003.1", wantSessionID: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sender := &captureSender{done: make(chan struct{}, 1)}
+			restore := ConfigureForTest(testConfig(), sender)
+			defer restore()
+
+			gin.SetMode(gin.TestMode)
+			ctx, _ := gin.CreateTestContext(nil)
+			ctx.Request, _ = http.NewRequest(http.MethodGet, "/api/oauth/github", nil)
+			ctx.Request.AddCookie(&http.Cookie{Name: "_ga", Value: "GA1.1.111.222"})
+			ctx.Request.AddCookie(&http.Cookie{Name: "_ga_TEST", Value: tt.cookieValue})
+
+			TrackSignUp(ctx, 42, SignUpAttribution{Method: "github"})
+
+			select {
+			case <-sender.done:
+			case <-time.After(time.Second):
+				t.Fatalf("timed out waiting for sign_up send")
+			}
+
+			var decoded ga4Payload
+			if err := common.Unmarshal([]byte(sender.bodies[0]), &decoded); err != nil {
+				t.Fatalf("payload is not valid json: %v", err)
+			}
+			params := decoded.Events[0].Params
+			if tt.wantSessionID == 0 {
+				if _, ok := params["session_id"]; ok {
+					t.Fatalf("invalid cookie produced session context: %#v", params)
+				}
+				if _, ok := params["engagement_time_msec"]; ok {
+					t.Fatalf("invalid cookie produced engagement context: %#v", params)
+				}
+				return
+			}
+			if params["session_id"] != tt.wantSessionID || params["engagement_time_msec"] != float64(1) {
+				t.Fatalf("request session context missing: %#v", params)
+			}
+		})
 	}
 }
 
