@@ -29,6 +29,22 @@ const UTM_PARAMS = [
   'utm_content',
 ]
 const SAFE_URL_PARAMS = [...UTM_PARAMS, ...CLICK_ID_PARAMS, 'aff']
+const ATTRIBUTION_FIELDS = [
+  'client_id',
+  'session_id',
+  'page_location',
+  'page_referrer',
+  'source',
+  'medium',
+  'campaign',
+  'term',
+  'content',
+  'gclid',
+  'fbclid',
+  'ttclid',
+  'yclid',
+  'first_visit_at',
+] as const
 
 export interface FirstTouchAttribution {
   client_id?: string
@@ -51,7 +67,7 @@ function readGAClientID(): string {
   if (typeof document === 'undefined') return ''
   const match = document.cookie.match(/(?:^|;\s*)_ga=([^;]+)/)
   if (!match) return ''
-  const parts = decodeURIComponent(match[1]).split('.')
+  const parts = safeDecodeURIComponent(match[1]).split('.')
   if (parts.length < 4) return ''
   const first = parts[parts.length - 2]
   const second = parts[parts.length - 1]
@@ -69,7 +85,7 @@ function readGASessionID(): string {
     if (separator <= 0 || cookie.slice(0, separator) !== sessionCookieName) {
       continue
     }
-    const value = decodeURIComponent(cookie.slice(separator + 1))
+    const value = safeDecodeURIComponent(cookie.slice(separator + 1))
     const gs2Session = value.match(/(?:^|\$)s(\d+)(?:\$|$)/)?.[1]
     if (gs2Session) return gs2Session
 
@@ -81,15 +97,38 @@ function readGASessionID(): string {
   return ''
 }
 
-function readStoredAttribution(): FirstTouchAttribution | null {
-  if (typeof localStorage === 'undefined') return null
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return ''
+  }
+}
+
+function readStoredAttribution(): FirstTouchAttribution | null | undefined {
+  if (typeof localStorage === 'undefined') return undefined
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
+    if (raw === null) return undefined
     const parsed = JSON.parse(raw)
-    return parsed && typeof parsed === 'object'
-      ? (parsed as FirstTouchAttribution)
-      : null
+    if (
+      parsed === null ||
+      typeof parsed !== 'object' ||
+      Array.isArray(parsed) ||
+      Object.getPrototypeOf(parsed) !== Object.prototype
+    ) {
+      return null
+    }
+
+    const attribution: FirstTouchAttribution = {}
+    let hasAttributionField = false
+    for (const field of ATTRIBUTION_FIELDS) {
+      if (!Object.prototype.hasOwnProperty.call(parsed, field)) continue
+      hasAttributionField = true
+      if (typeof parsed[field] !== 'string') return null
+      attribution[field] = parsed[field]
+    }
+    return hasAttributionField ? attribution : null
   } catch {
     return null
   }
@@ -128,6 +167,7 @@ export function initializeFirstTouchAttribution(): void {
   const existing = readStoredAttribution()
   const clientID = readGAClientID()
   const sessionID = readGASessionID()
+  if (existing === null) return
   if (existing) {
     const refreshed = { ...existing }
     let changed = false

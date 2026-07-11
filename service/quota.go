@@ -465,11 +465,19 @@ func trackFirstAPICallIfNeeded(relayInfo *relaycommon.RelayInfo, quota int) {
 	if markID <= 0 {
 		return
 	}
+	var browserAttribution analytics.SignUpAttribution
+	if rawAttribution, err := model.GetTokenAnalyticsAttribution(relayInfo.TokenId); err == nil && rawAttribution != "" {
+		var decoded analytics.SignUpAttribution
+		if err := common.Unmarshal([]byte(rawAttribution), &decoded); err == nil {
+			browserAttribution = decoded
+		}
+	}
 	analytics.TrackFirstAPIRequestSuccessWithResult(nil, relayInfo.UserId, relayInfo.TokenId, relayInfo.TokenKey, analytics.FirstAPIRequestAttribution{
-		Model:      relayInfo.OriginModelName,
-		Endpoint:   relayInfo.RequestURLPath,
-		StatusCode: 200,
-		QuotaSpent: quota,
+		Model:       relayInfo.OriginModelName,
+		Endpoint:    relayInfo.RequestURLPath,
+		StatusCode:  200,
+		QuotaSpent:  quota,
+		Attribution: browserAttribution,
 	}, func(err error) {
 		if err != nil {
 			model.MarkAnalyticsEventFailed(markID)

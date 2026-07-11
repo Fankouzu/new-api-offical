@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
-
 import * as firstTouchAttribution from '../src/lib/first-touch-attribution'
 
 const values = new Map<string, string>()
@@ -101,6 +100,21 @@ describe('first-touch attribution', () => {
     )
   })
 
+  test('ignores malformed encoded GA cookies without throwing', () => {
+    Object.defineProperty(document, 'cookie', {
+      configurable: true,
+      value: '_ga=%E0%A4%A; _ga_TEST=%E0%A4%A',
+    })
+
+    expect(() => firstTouchAttribution.getFirstTouchAttribution()).not.toThrow()
+    expect(firstTouchAttribution.getFirstTouchAttribution()).toEqual(
+      expect.not.objectContaining({
+        client_id: expect.anything(),
+        session_id: expect.anything(),
+      })
+    )
+  })
+
   test('adds the current attribution only to an explicitly enriched request', () => {
     const enrich = (
       firstTouchAttribution as typeof firstTouchAttribution & {
@@ -116,6 +130,51 @@ describe('first-touch attribution', () => {
         session_id: '1740000000',
         gclid: 'click-123',
       }),
+    })
+  })
+
+  test('does not attach invalid stored attribution values', () => {
+    const request = { amount: 10 }
+    const invalidValues = [[], 'not-an-attribution', { source: 123 }, {}]
+
+    for (const value of invalidValues) {
+      localStorage.setItem(
+        'lizh_first_touch_attribution',
+        JSON.stringify(value)
+      )
+
+      expect(firstTouchAttribution.withFirstTouchAttribution(request)).toBe(
+        request
+      )
+    }
+  })
+
+  test('does not attach a stored null attribution', () => {
+    const request = { amount: 10 }
+    localStorage.setItem('lizh_first_touch_attribution', 'null')
+
+    expect(firstTouchAttribution.withFirstTouchAttribution(request)).toBe(
+      request
+    )
+  })
+
+  test('copies only known string fields from stored attribution', () => {
+    const request = { amount: 10 }
+    localStorage.setItem(
+      'lizh_first_touch_attribution',
+      JSON.stringify({
+        source: 'google',
+        unexpected_private_value: 'secret',
+      })
+    )
+
+    expect(firstTouchAttribution.withFirstTouchAttribution(request)).toEqual({
+      amount: 10,
+      attribution: {
+        source: 'google',
+        client_id: '123456789.987654321',
+        session_id: '1740000000',
+      },
     })
   })
 })

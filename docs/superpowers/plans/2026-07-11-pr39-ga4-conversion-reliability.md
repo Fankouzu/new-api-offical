@@ -502,3 +502,240 @@ Expected: PR #39 head advances to the final local commit.
 - [ ] **Step 5: Review the pushed PR head**
 
 Review `origin/main...origin/feature/lizh-ads-conversion-tracking`, rerun the direct URL/referrer reproductions, inspect GitHub checks, and report findings first. Approve only if no CRITICAL or HIGH issues remain.
+
+### Task 7: Close Frontend Privacy And Navigation Gaps
+
+**Files:**
+- Modify: `web/default/src/lib/analytics.ts`
+- Modify: `web/default/src/lib/first-touch-attribution.ts`
+- Modify: `web/default/tests/analytics.test.ts`
+- Modify: `web/default/tests/first-touch-attribution.test.ts`
+
+- [x] **Step 1: Add failing regression tests**
+
+Add cases for encoded OAuth callbacks in `redirect`/`next`, usage-log token filters, sequential SPA referrers, malformed GA cookies, array-shaped localStorage, and the legitimate self-similar nested URL:
+
+```ts
+trackPageView(
+  '/sign-in?redirect=%2Foauth%2Fgithub%3Fcode%3Dsecret%26state%3Dsecret'
+)
+expect(lastPageView.page_location).toBe('http://localhost/sign-in')
+
+trackPageView('/usage-logs/common?token=production-key&page=2')
+expect(lastPageView.page_path).toBe('/usage-logs/common?page=2')
+
+trackPageView('/pricing')
+trackPageView('/wallet')
+expect(lastPageView.page_referrer).toBe('http://localhost/pricing')
+
+document.cookie = '_ga_TEST=%E0%A4%A'
+expect(() => getFirstTouchAttribution()).not.toThrow()
+
+localStorage.setItem('lizh_first_touch_attribution', '[]')
+expect(withFirstTouchAttribution({ amount: 10 })).toEqual({ amount: 10 })
+
+expect(
+  normalizeAnalyticsPagePath(
+    '/callback?next=https://example.com/path?next=https://example.com/path'
+  )
+).toBe('/callback?next=https://example.com/path?next=https://example.com/path')
+```
+
+- [x] **Step 2: Run the focused tests and confirm RED**
+
+Run:
+
+```bash
+cd web/default
+bun test tests/analytics.test.ts tests/first-touch-attribution.test.ts
+```
+
+Expected: the new cases fail because nested navigation values and usage-log tokens are retained, page referrer is static, cookie decoding throws, arrays pass the storage check, and exact duplicate repair truncates a nested URL.
+
+- [x] **Step 3: Implement the narrow frontend fixes**
+
+Treat `redirect`, `next`, `return_url`, and `return_to` as sensitive page-view keys. Remove the usage-log token exception. Track the sanitized automatic initial page location and each later successfully queued page view, then reset that state in `resetAnalyticsForTests`. Wrap cookie decoding in a helper that returns an empty string on malformed encoding. Accept stored attribution only when it is a non-array object whose present known fields are strings, and project only the known fields into outgoing requests. Preserve all query text exactly; rely on the existing `urlToString` source fix to prevent app-owned duplicate query concatenation.
+
+- [x] **Step 4: Run focused tests and confirm GREEN**
+
+```bash
+cd web/default
+bun test tests/analytics.test.ts tests/first-touch-attribution.test.ts
+```
+
+Expected: PASS with the direct reproductions sanitized or preserved as specified.
+
+### Task 8: Preserve API-Key Attribution Through The First Billable Call
+
+**Files:**
+- Modify: `web/default/src/features/keys/api.ts`
+- Create: `web/default/tests/keys-api.test.ts`
+- Modify: `controller/token.go`
+- Modify: `controller/token_test.go`
+- Modify: `model/token.go`
+- Modify: `service/analytics/ga4.go`
+- Modify: `service/analytics/ga4_test.go`
+- Modify: `service/quota.go`
+- Modify: `service/quota_analytics_test.go`
+
+- [x] **Step 1: Add failing frontend and backend attribution tests**
+
+Require `createApiKey` to enrich only the create body, require token creation to store normalized attribution without exposing it in API JSON, and require `first_api_call` to reuse the stored client/session/campaign values:
+
+```go
+if token.AnalyticsAttribution == "" {
+    t.Fatal("token did not persist browser attribution")
+}
+if decoded.ClientID != "123.456" || decoded.SessionID != "789" {
+    t.Fatalf("stored attribution = %#v", decoded)
+}
+
+if payload.ClientID != "123.456" || params["session_id"] != float64(789) {
+    t.Fatalf("first_api_call lost browser attribution: %#v", payload)
+}
+```
+
+- [x] **Step 2: Run the focused tests and confirm RED**
+
+```bash
+cd web/default && bun test tests/keys-api.test.ts
+go test ./controller -run 'TestAddToken.*Attribution' -count=1
+go test ./service -run 'TestTrackFirstAPICall.*Attribution' -count=1
+go test ./service/analytics -run 'TestTrack(APIKeyCreated|FirstAPICall).*Session' -count=1
+```
+
+Expected: FAIL because token creation neither receives nor stores the snapshot and first-call tracking still builds a synthetic client ID.
+
+- [x] **Step 3: Implement scoped token attribution**
+
+Wrap only `createApiKey` with `withFirstTouchAttribution`. Add `AnalyticsAttribution string \`json:"-" gorm:"type:text"\`` to `model.Token`, and clear it in `Token.Clean()` before Redis caching. Bind token creation through a request DTO containing `analytics.SignUpAttribution`, normalize it through the existing controller encoding helper, and store it on the new token. Add a model selector that reads only `analytics_attribution` by token ID after the first-call delivery mark is acquired. Extend the API-key and first-call analytics attributes to use the stored browser client/session and campaign fields while keeping existing cookie/server fallbacks.
+
+- [x] **Step 4: Run focused tests and confirm GREEN**
+
+```bash
+cd web/default && bun test tests/keys-api.test.ts tests/first-touch-attribution.test.ts
+go test ./controller -run 'TestAddToken' -count=1
+go test ./service -run 'TestTrackFirstAPICall' -count=1
+go test ./service/analytics -run 'TestTrack(APIKeyCreated|FirstAPICall)' -count=1
+```
+
+Expected: PASS; raw token keys and stored attribution remain absent from API responses and GA payloads.
+
+### Task 9: Complete Browser Session And Registration Events
+
+**Files:**
+- Modify: `service/analytics/ga4.go`
+- Modify: `service/analytics/ga4_test.go`
+- Modify: `controller/wechat.go`
+- Create: `controller/wechat_test.go`
+
+- [x] **Step 1: Add failing event tests**
+
+Require `voucher_redeem_success` and `api_key_created` to contain numeric `session_id` plus `engagement_time_msec`, and require only a newly inserted WeChat user to emit `sign_up` with method `wechat`.
+
+- [x] **Step 2: Run tests and confirm RED**
+
+```bash
+go test ./service/analytics -run 'TestTrack(VoucherRedeemSuccess|APIKeyCreated).*Session' -count=1
+go test ./controller -run 'TestWeChatAuth.*SignUp' -count=1
+```
+
+Expected: FAIL because the key events omit session context and WeChat registration does not call `TrackSignUp`.
+
+- [x] **Step 3: Add session context and the new-user hook**
+
+Resolve the GA session cookie for voucher events. For API-key events, prefer the stored attribution session and fall back to the request cookie. In `WeChatAuth`, retain an `isNewUser` flag and call:
+
+```go
+analytics.TrackSignUp(c, user.Id, analytics.SignUpAttribution{Method: "wechat"})
+```
+
+only after a successful new-user insert. Use `common.DecodeJson` for the WeChat service response while touching this file.
+
+- [x] **Step 4: Run tests and confirm GREEN**
+
+```bash
+go test ./service/analytics -run 'TestTrack(VoucherRedeemSuccess|APIKeyCreated)' -count=1
+go test ./controller -run 'TestWeChatAuth' -count=1
+```
+
+Expected: PASS without emitting `sign_up` for existing WeChat users or failed registration.
+
+### Task 10: Emit Idempotent Stripe Renewal Purchases
+
+**Files:**
+- Modify: `model/subscription.go`
+- Modify: `controller/ga4_payment_events.go`
+- Modify: `controller/ga4_payment_events_test.go`
+- Modify: `controller/topup_stripe.go`
+- Modify: `controller/stripe_webhook_subscription_test.go`
+
+- [x] **Step 1: Add failing renewal conversion tests**
+
+Configure a capture sender and require a processed `subscription_cycle` invoice to emit one event with:
+
+```go
+"name":"purchase"
+"transaction_id":"in_webhook_renewal"
+"value":10
+"currency":"USD"
+"payment_method":"stripe"
+```
+
+Replay the same webhook input and assert no second request. Add initial-invoice coverage asserting zero renewal purchase requests.
+
+- [x] **Step 2: Run the focused tests and confirm RED**
+
+```bash
+go test ./controller -run 'TestStripeInvoicePaidWebhook.*Purchase' -count=1
+```
+
+Expected: FAIL because the processed invoice is logged but never handed to the analytics sender.
+
+- [x] **Step 3: Implement invoice-row idempotency**
+
+Return the persisted invoice row ID and renewal eligibility in `StripeSubscriptionInvoiceResult`. Rely on the invoice unique index; on conflict, roll back and load the existing row outside the transaction. Add a `stripe_invoice` analytics subject and begin a `purchase` delivery only for a persisted eligible `subscription_cycle` row. Send with the invoice ID as trade number, `float64(input.AmountPaid) / 100`, normalized currency, Stripe provider/method, and subscription item type. Sent marks suppress duplicate delivery, while failed marks can be reclaimed by a duplicate webhook without creating another invoice or subscription. Initial and ignored invoice rows remain ineligible.
+
+- [x] **Step 4: Run tests and confirm GREEN**
+
+```bash
+go test ./model -run 'TestCompleteStripeSubscriptionInvoice' -count=1
+go test ./controller -run 'TestStripeInvoice' -count=1
+```
+
+Expected: PASS with one successful renewal purchase and no duplicate or initial-invoice conversion.
+
+### Task 11: Verify And Publish Third-Review Fixes
+
+**Files:**
+- Verify Tasks 7-10 and the complete PR diff
+
+- [x] **Step 1: Run backend verification**
+
+```bash
+go test ./service/analytics ./controller ./model ./router -count=1
+go test ./service -run 'TestTrackFirstAPICall' -count=1
+go test -race ./service/analytics -count=1
+go vet ./service/analytics ./controller ./model ./router
+```
+
+- [x] **Step 2: Run frontend verification**
+
+```bash
+cd web/default
+bun test tests/analytics.test.ts tests/first-touch-attribution.test.ts tests/keys-api.test.ts src/components/layout/lib/url-utils.test.ts
+bun run typecheck
+bun run build
+```
+
+- [ ] **Step 3: Verify diff, commit with Lore trailers, and push**
+
+```bash
+git diff --check
+git status --short
+git push origin feature/lizh-ads-conversion-tracking
+```
+
+- [ ] **Step 4: Re-review the pushed PR head**
+
+Review `origin/main...origin/feature/lizh-ads-conversion-tracking`, rerun the nine direct regression cases, and inspect PR checks. Report findings first; do not claim readiness while any confirmed issue remains.

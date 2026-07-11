@@ -350,6 +350,40 @@ func TestTrackVoucherRedeemSuccessUsesRedemptionIdAndOmitsRawCode(t *testing.T) 
 	}
 }
 
+func TestTrackVoucherRedeemSuccessUsesRequestCookieSessionContext(t *testing.T) {
+	sender := &captureSender{done: make(chan struct{}, 1)}
+	restore := ConfigureForTest(testConfig(), sender)
+	defer restore()
+
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(nil)
+	ctx.Request, _ = http.NewRequest(http.MethodPost, "/api/user/topup", nil)
+	ctx.Request.AddCookie(&http.Cookie{Name: "_ga", Value: "GA1.1.123.456"})
+	ctx.Request.AddCookie(&http.Cookie{Name: "_ga_TEST", Value: "GS1.1.1740000000.1.1.1740000000.0.0.0"})
+
+	TrackVoucherRedeemSuccess(ctx, 42, "raw-voucher-code", int(10*common.QuotaPerUnit), RedemptionAttribution{
+		TransactionID: "redemption:987",
+	})
+
+	select {
+	case <-sender.done:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for voucher_redeem_success send")
+	}
+
+	var decoded ga4Payload
+	if err := common.Unmarshal([]byte(sender.bodies[0]), &decoded); err != nil {
+		t.Fatalf("payload is not valid json: %v", err)
+	}
+	if decoded.ClientID != "123.456" {
+		t.Fatalf("client id = %q, want request cookie client id", decoded.ClientID)
+	}
+	params := decoded.Events[0].Params
+	if params["session_id"] != float64(1740000000) || params["engagement_time_msec"] != float64(1) {
+		t.Fatalf("voucher_redeem_success request cookie session context missing: %#v", params)
+	}
+}
+
 func TestTrackAPIKeyCreatedIncludesKeyTypeAndContextOnly(t *testing.T) {
 	sender := &captureSender{done: make(chan struct{}, 1)}
 	cfg := testConfig()
@@ -378,6 +412,116 @@ func TestTrackAPIKeyCreatedIncludesKeyTypeAndContextOnly(t *testing.T) {
 	params := decoded.Events[0].Params
 	if params["key_type"] != "api_key" || params["user_id"] != float64(42) || params["hostname"] != "lizh.ai" || params["page_location"] != "https://lizh.ai/keys" {
 		t.Fatalf("api_key_created context missing: %#v", params)
+	}
+	if strings.Contains(sender.bodies[0], "sk-secret-api-key") {
+		t.Fatalf("api_key_created payload leaked raw API key: %s", sender.bodies[0])
+	}
+}
+
+func TestTrackAPIKeyCreatedUsesBrowserAttributionContext(t *testing.T) {
+	sender := &captureSender{done: make(chan struct{}, 1)}
+	restore := ConfigureForTest(testConfig(), sender)
+	defer restore()
+
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(nil)
+	ctx.Request, _ = http.NewRequest(http.MethodPost, "/api/token/", nil)
+	ctx.Request.AddCookie(&http.Cookie{Name: "_ga", Value: "GA1.1.999.888"})
+	ctx.Request.AddCookie(&http.Cookie{Name: "_ga_TEST", Value: "GS1.1.999.1.1.999.0.0.0"})
+
+	attrs := UserAttribution{
+		KeyType: "api_key",
+		Attribution: SignUpAttribution{
+			ClientID:     "123.456",
+			SessionID:    "789",
+			PageLocation: "https://lizh.ai/console/token?utm_source=google",
+			Source:       "google",
+			Campaign:     "launch",
+			GCLID:        "click",
+		},
+	}
+	TrackAPIKeyCreated(ctx, 42, 7, "sk-secret-api-key", attrs)
+
+	select {
+	case <-sender.done:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for api_key_created send")
+	}
+
+	var decoded ga4Payload
+	if err := common.Unmarshal([]byte(sender.bodies[0]), &decoded); err != nil {
+		t.Fatalf("payload is not valid json: %v", err)
+	}
+	if decoded.ClientID != "123.456" {
+		t.Fatalf("client id = %q, want browser attribution client id", decoded.ClientID)
+	}
+	params := decoded.Events[0].Params
+	if params["session_id"] != float64(789) || params["engagement_time_msec"] != float64(1) || params["source"] != "google" || params["campaign"] != "launch" || params["gclid"] != "click" {
+		t.Fatalf("api_key_created browser attribution missing: %#v", params)
+	}
+	if params["page_location"] != "https://lizh.ai/console/token?utm_source=google" {
+		t.Fatalf("page location = %#v, want browser attribution page", params["page_location"])
+	}
+	if strings.Contains(sender.bodies[0], "sk-secret-api-key") {
+		t.Fatalf("api_key_created payload leaked raw API key: %s", sender.bodies[0])
+	}
+}
+
+func TestTrackAPIKeyCreatedFallsBackToRequestCookiesWithoutAttribution(t *testing.T) {
+	sender := &captureSender{done: make(chan struct{}, 1)}
+	restore := ConfigureForTest(testConfig(), sender)
+	defer restore()
+
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(nil)
+	ctx.Request, _ = http.NewRequest(http.MethodPost, "/api/token/", nil)
+	ctx.Request.AddCookie(&http.Cookie{Name: "_ga", Value: "GA1.1.123.456"})
+	ctx.Request.AddCookie(&http.Cookie{Name: "_ga_TEST", Value: "GS1.1.789.1.1.999.0.0.0"})
+
+	TrackAPIKeyCreated(ctx, 42, 7, "sk-secret-api-key", UserAttribution{KeyType: "api_key"})
+
+	select {
+	case <-sender.done:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for api_key_created send")
+	}
+
+	var decoded ga4Payload
+	if err := common.Unmarshal([]byte(sender.bodies[0]), &decoded); err != nil {
+		t.Fatalf("payload is not valid json: %v", err)
+	}
+	params := decoded.Events[0].Params
+	if decoded.ClientID != "123.456" || params["session_id"] != float64(789) || params["engagement_time_msec"] != float64(1) {
+		t.Fatalf("api_key_created request cookie fallback missing: %#v", decoded)
+	}
+}
+
+func TestTrackAPIKeyCreatedFallsBackToServerClientWithoutContext(t *testing.T) {
+	sender := &captureSender{done: make(chan struct{}, 1)}
+	restore := ConfigureForTest(testConfig(), sender)
+	defer restore()
+
+	TrackAPIKeyCreated(nil, 42, 7, "sk-secret-api-key", UserAttribution{KeyType: "api_key"})
+
+	select {
+	case <-sender.done:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for api_key_created send")
+	}
+
+	var decoded ga4Payload
+	if err := common.Unmarshal([]byte(sender.bodies[0]), &decoded); err != nil {
+		t.Fatalf("payload is not valid json: %v", err)
+	}
+	if !strings.HasPrefix(decoded.ClientID, "server.") {
+		t.Fatalf("client id = %q, want server fallback", decoded.ClientID)
+	}
+	params := decoded.Events[0].Params
+	if _, ok := params["session_id"]; ok {
+		t.Fatalf("nil context unexpectedly produced session id: %#v", params)
+	}
+	if _, ok := params["engagement_time_msec"]; ok {
+		t.Fatalf("nil context unexpectedly produced engagement context: %#v", params)
 	}
 	if strings.Contains(sender.bodies[0], "sk-secret-api-key") {
 		t.Fatalf("api_key_created payload leaked raw API key: %s", sender.bodies[0])
@@ -418,6 +562,58 @@ func TestTrackFirstAPICallIncludesEndpointStatusAndContext(t *testing.T) {
 	}
 	if params["user_id"] != float64(42) || params["hostname"] != "lizh.ai" || params["page_location"] != "https://lizh.ai/v1/chat/completions" {
 		t.Fatalf("first_api_call context missing: %#v", params)
+	}
+	if !strings.HasPrefix(decoded.ClientID, "server.") {
+		t.Fatalf("client id = %q, want server fallback", decoded.ClientID)
+	}
+	if _, ok := params["session_id"]; ok {
+		t.Fatalf("nil context unexpectedly produced session id: %#v", params)
+	}
+	if _, ok := params["engagement_time_msec"]; ok {
+		t.Fatalf("nil context unexpectedly produced engagement context: %#v", params)
+	}
+	if strings.Contains(sender.bodies[0], "sk-secret-api-key") {
+		t.Fatalf("first_api_call payload leaked raw API key: %s", sender.bodies[0])
+	}
+}
+
+func TestTrackFirstAPICallUsesBrowserAttributionContext(t *testing.T) {
+	sender := &captureSender{done: make(chan struct{}, 1)}
+	restore := ConfigureForTest(testConfig(), sender)
+	defer restore()
+
+	attrs := FirstAPIRequestAttribution{
+		Model:      "glm-5.2",
+		Endpoint:   "/v1/chat/completions",
+		StatusCode: http.StatusOK,
+		QuotaSpent: 100,
+		Attribution: SignUpAttribution{
+			ClientID:     "123.456",
+			SessionID:    "789",
+			PageLocation: "https://lizh.ai/console/token?utm_source=google",
+			Source:       "google",
+			Campaign:     "launch",
+			GCLID:        "click",
+		},
+	}
+	TrackFirstAPIRequestSuccessWithResult(nil, 42, 7, "sk-secret-api-key", attrs, nil)
+
+	select {
+	case <-sender.done:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for first_api_call send")
+	}
+
+	var decoded ga4Payload
+	if err := common.Unmarshal([]byte(sender.bodies[0]), &decoded); err != nil {
+		t.Fatalf("payload is not valid json: %v", err)
+	}
+	if decoded.ClientID != "123.456" {
+		t.Fatalf("client id = %q, want browser attribution client id", decoded.ClientID)
+	}
+	params := decoded.Events[0].Params
+	if params["session_id"] != float64(789) || params["engagement_time_msec"] != float64(1) || params["source"] != "google" || params["campaign"] != "launch" || params["gclid"] != "click" {
+		t.Fatalf("first_api_call browser attribution missing: %#v", params)
 	}
 	if strings.Contains(sender.bodies[0], "sk-secret-api-key") {
 		t.Fatalf("first_api_call payload leaked raw API key: %s", sender.bodies[0])

@@ -102,3 +102,16 @@ Final verification will include targeted Go tests, `go test -race ./service/anal
 - Retryable GA failures receive bounded retries before the event mark is failed.
 - A published Docker image can enable default-theme analytics with runtime `GOOGLE_ANALYTICS_ID` alone.
 - Existing payment completion, event naming, transaction IDs, and analytics idempotency keys remain unchanged.
+
+## Third-Review Addendum
+
+The next review exposed four additional boundaries that the original design did not cover:
+
+1. Analytics page URLs must drop navigation containers such as `redirect`, `next`, and `return_url` entirely. Sanitizing only top-level credential names is insufficient because an encoded OAuth callback can carry `code` and `state` inside those values. Usage-log `token` filters are also sensitive and must not be sent to GA4.
+2. Browser attribution reads must fail open. Malformed percent-encoded GA cookies and non-record localStorage JSON must be ignored instead of throwing or being attached to registration, token, or payment requests. SPA page views use the previous successfully tracked page as the next page's referrer; only the first tracked view may use `document.referrer`.
+3. A frontend-created API key stores the normalized first-touch snapshot on the token row. `api_key_created` uses that browser client/session context, and the first billable API call reloads the same token snapshot before emitting `first_api_call`. The private snapshot is cleared by `Token.Clean()` so Redis token caches and debug output never contain it. API clients and administrator-created tokens without a snapshot retain the existing server fallback.
+4. WeChat registration emits `sign_up` only on the new-user branch. A processed Stripe `subscription_cycle` invoice emits one `purchase` keyed by the persisted invoice row, with the Stripe invoice ID as `transaction_id` and `amount_paid / 100` as value. Initial and ignored invoices do not emit a renewal purchase. Duplicate webhook deliveries reuse the persisted invoice row: a sent mark suppresses delivery, while a failed mark can be reclaimed without creating another invoice or subscription.
+
+Analytics no longer repairs duplicate query separators. The navigation helper already prevents app-owned pathname/search values from being concatenated twice, while the analytics layer cannot distinguish a duplicated query from a legitimate raw value such as `q=foo?q=foo`. Analytics therefore preserves query text exactly and only removes sensitive top-level keys.
+
+Stripe invoice insertion relies directly on the provider/invoice unique index instead of a preflight count. A unique conflict rolls back the transaction before the existing row is loaded, which keeps PostgreSQL aborted-transaction behavior correct and removes the check-then-insert race. Invoice result IDs and renewal eligibility are published only after a successful commit.

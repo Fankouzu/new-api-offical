@@ -1,8 +1,13 @@
 package controller
 
 import (
+	"bytes"
+	"io"
+	"net/http"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -12,6 +17,43 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
+
+type paymentGA4CaptureSender struct {
+	mu     sync.Mutex
+	bodies []string
+	done   chan struct{}
+	status int
+}
+
+func (s *paymentGA4CaptureSender) Do(req *http.Request) (*http.Response, error) {
+	body, _ := io.ReadAll(req.Body)
+	s.mu.Lock()
+	s.bodies = append(s.bodies, string(body))
+	status := s.status
+	s.mu.Unlock()
+	if s.done != nil {
+		s.done <- struct{}{}
+	}
+	if status == 0 {
+		status = http.StatusNoContent
+	}
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(bytes.NewReader(nil)),
+	}, nil
+}
+
+func (s *paymentGA4CaptureSender) snapshotBodies() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.bodies...)
+}
+
+func (s *paymentGA4CaptureSender) setStatus(status int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.status = status
+}
 
 func TestResolveGA4PaymentCurrencyPreservesExplicitCurrency(t *testing.T) {
 	tests := []struct {
@@ -111,6 +153,142 @@ func TestBeginGA4TopUpDeliveryKeepsLegacyIdempotencyKey(t *testing.T) {
 	if err != nil || mark.Id != newID {
 		t.Fatalf("new delivery did not use legacy top_up key: mark=%#v err=%v", mark, err)
 	}
+}
+
+func TestGA4StripeRenewalPurchaseRequiresCompletedSubscriptionCycle(t *testing.T) {
+	setupGA4PaymentEventTestDB(t)
+	sender := &paymentGA4CaptureSender{done: make(chan struct{}, 1)}
+	restore := analytics.ConfigureForTest(analytics.Config{
+		Enabled:       true,
+		MeasurementID: "G-TEST",
+		APISecret:     "secret",
+		HashSalt:      "salt",
+		Timeout:       50 * time.Millisecond,
+		Endpoint:      "https://example.test/mp/collect",
+	}, sender)
+	t.Cleanup(restore)
+
+	input := model.StripeSubscriptionInvoiceInput{
+		InvoiceId:     "in_helper_renewal",
+		BillingReason: "subscription_cycle",
+		AmountPaid:    1000,
+		Currency:      "USD",
+	}
+	result := model.StripeSubscriptionInvoiceResult{
+		Created:                 false,
+		Status:                  model.StripeInvoiceResultDuplicate,
+		UserId:                  901,
+		InvoiceRecordId:         77,
+		RenewalPurchaseEligible: true,
+	}
+
+	trackGA4StripeRenewalPurchase(input, result)
+	waitForPaymentGA4Send(t, sender.done)
+	mark := waitForPaymentGA4MarkTerminal(t, ga4SubjectTypeStripeInvoice, result.InvoiceRecordId)
+	if mark.Status != model.AnalyticsEventStatusSent {
+		t.Fatalf("stripe renewal mark status = %q, want sent", mark.Status)
+	}
+	if bodies := sender.snapshotBodies(); len(bodies) != 1 {
+		t.Fatalf("stripe renewal sent %d requests, want 1", len(bodies))
+	}
+}
+
+func TestGA4StripeRenewalPurchaseRejectsIneligibleResults(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*model.StripeSubscriptionInvoiceInput, *model.StripeSubscriptionInvoiceResult)
+	}{
+		{name: "not eligible", mutate: func(_ *model.StripeSubscriptionInvoiceInput, result *model.StripeSubscriptionInvoiceResult) {
+			result.RenewalPurchaseEligible = false
+		}},
+		{name: "missing invoice record", mutate: func(_ *model.StripeSubscriptionInvoiceInput, result *model.StripeSubscriptionInvoiceResult) {
+			result.InvoiceRecordId = 0
+		}},
+		{name: "missing user", mutate: func(_ *model.StripeSubscriptionInvoiceInput, result *model.StripeSubscriptionInvoiceResult) {
+			result.UserId = 0
+		}},
+		{name: "missing invoice id", mutate: func(input *model.StripeSubscriptionInvoiceInput, _ *model.StripeSubscriptionInvoiceResult) {
+			input.InvoiceId = ""
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupGA4PaymentEventTestDB(t)
+			db := model.DB
+			sender := &paymentGA4CaptureSender{done: make(chan struct{}, 1)}
+			restore := analytics.ConfigureForTest(analytics.Config{
+				Enabled:       true,
+				MeasurementID: "G-TEST",
+				APISecret:     "secret",
+				HashSalt:      "salt",
+				Timeout:       50 * time.Millisecond,
+				Endpoint:      "https://example.test/mp/collect",
+			}, sender)
+			t.Cleanup(restore)
+
+			input := model.StripeSubscriptionInvoiceInput{
+				InvoiceId:     "in_ineligible",
+				BillingReason: "subscription_cycle",
+				AmountPaid:    1000,
+				Currency:      "USD",
+			}
+			result := model.StripeSubscriptionInvoiceResult{
+				Created:                 false,
+				Status:                  model.StripeInvoiceResultDuplicate,
+				UserId:                  901,
+				InvoiceRecordId:         77,
+				RenewalPurchaseEligible: true,
+			}
+			tt.mutate(&input, &result)
+
+			trackGA4StripeRenewalPurchase(input, result)
+
+			var markCount int64
+			if err := db.Model(&model.AnalyticsEventMark{}).Count(&markCount).Error; err != nil {
+				t.Fatalf("count analytics marks: %v", err)
+			}
+			if markCount != 0 {
+				t.Fatalf("ineligible renewal created %d analytics marks", markCount)
+			}
+			if bodies := sender.snapshotBodies(); len(bodies) != 0 {
+				t.Fatalf("ineligible renewal sent %d requests", len(bodies))
+			}
+		})
+	}
+}
+
+func waitForPaymentGA4Send(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for payment GA4 send")
+	}
+}
+
+func waitForPaymentGA4MarkTerminal(t *testing.T, subjectType string, subjectID int) *model.AnalyticsEventMark {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	var last *model.AnalyticsEventMark
+	for time.Now().Before(deadline) {
+		mark, err := model.GetAnalyticsEventMark(subjectType, subjectID, ga4EventPurchase)
+		if err == nil {
+			last = mark
+			if mark.Status == model.AnalyticsEventStatusSent || mark.Status == model.AnalyticsEventStatusFailed {
+				return mark
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if last != nil {
+		return last
+	}
+	mark, err := model.GetAnalyticsEventMark(subjectType, subjectID, ga4EventPurchase)
+	if err != nil {
+		t.Fatalf("get payment GA4 mark: %v", err)
+	}
+	return mark
 }
 
 func TestGA4OrderAttributionRoundTripsSanitizedBrowserContext(t *testing.T) {

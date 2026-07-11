@@ -51,6 +51,8 @@ const stripeInvoiceBillingReasonSubscriptionCreate = "subscription_create"
 const stripeInvoiceBillingReasonSubscriptionCycle = "subscription_cycle"
 const stripeInvoiceBillingReasonSubscriptionLegacy = "subscription"
 
+var errStripeSubscriptionInvoiceDuplicate = errors.New("stripe subscription invoice duplicate")
+
 const (
 	subscriptionPlanCacheNamespace     = "new-api:subscription_plan:v1"
 	subscriptionPlanInfoCacheNamespace = "new-api:subscription_plan_info:v1"
@@ -319,10 +321,12 @@ type StripeSubscriptionInvoiceInput struct {
 }
 
 type StripeSubscriptionInvoiceResult struct {
-	Created bool
-	Status  string
-	UserId  int
-	PlanId  int
+	Created                 bool
+	Status                  string
+	UserId                  int
+	PlanId                  int
+	InvoiceRecordId         int
+	RenewalPurchaseEligible bool
 }
 
 func (s *UserSubscription) BeforeCreate(tx *gorm.DB) error {
@@ -497,17 +501,6 @@ func CompleteStripeSubscriptionInvoice(input StripeSubscriptionInvoiceInput) (St
 		input.EventType = "invoice.paid"
 	}
 
-	var duplicateCount int64
-	if err := DB.Model(&StripeSubscriptionInvoice{}).
-		Where("provider = ? AND invoice_id = ?", PaymentProviderStripe, input.InvoiceId).
-		Count(&duplicateCount).Error; err != nil {
-		return result, err
-	}
-	if duplicateCount > 0 {
-		result.Status = StripeInvoiceResultDuplicate
-		return result, nil
-	}
-
 	status := StripeInvoiceResultProcessed
 	var user *User
 	var plan *SubscriptionPlan
@@ -536,6 +529,15 @@ func CompleteStripeSubscriptionInvoice(input StripeSubscriptionInvoiceInput) (St
 		}
 	}
 
+	result.Status = status
+	if user != nil {
+		result.UserId = user.Id
+	}
+	if plan != nil {
+		result.PlanId = plan.Id
+	}
+	persistedInvoiceRecordID := 0
+	createdSubscription := false
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		record := &StripeSubscriptionInvoice{
 			Provider:       PaymentProviderStripe,
@@ -553,34 +555,52 @@ func CompleteStripeSubscriptionInvoice(input StripeSubscriptionInvoiceInput) (St
 		}
 		if user != nil {
 			record.UserId = user.Id
-			result.UserId = user.Id
 		}
 		if plan != nil {
 			record.PlanId = plan.Id
-			result.PlanId = plan.Id
 		}
 		if err := tx.Create(record).Error; err != nil {
 			if isUniqueConstraintError(err) {
-				result.Status = StripeInvoiceResultDuplicate
-				return nil
+				return errStripeSubscriptionInvoiceDuplicate
 			}
 			return err
 		}
+		persistedInvoiceRecordID = record.Id
 		if status != StripeInvoiceResultProcessed {
-			result.Status = status
 			return nil
 		}
 		_, err := createUserSubscriptionFromPlanTx(tx, user.Id, plan, "stripe_invoice", false)
 		if err != nil {
-			record.Status = StripeInvoiceResultFailed
-			_ = tx.Save(record).Error
 			return err
 		}
-		result.Created = true
-		result.Status = StripeInvoiceResultProcessed
+		createdSubscription = true
 		return nil
 	})
-	return result, err
+	if errors.Is(err, errStripeSubscriptionInvoiceDuplicate) {
+		return getExistingStripeSubscriptionInvoiceResult(input.InvoiceId)
+	}
+	if err != nil {
+		return result, err
+	}
+	result.Created = createdSubscription
+	result.InvoiceRecordId = persistedInvoiceRecordID
+	result.RenewalPurchaseEligible = status == StripeInvoiceResultProcessed &&
+		input.BillingReason == stripeInvoiceBillingReasonSubscriptionCycle
+	return result, nil
+}
+
+func getExistingStripeSubscriptionInvoiceResult(invoiceId string) (StripeSubscriptionInvoiceResult, error) {
+	var invoice StripeSubscriptionInvoice
+	if err := DB.Where("provider = ? AND invoice_id = ?", PaymentProviderStripe, invoiceId).First(&invoice).Error; err != nil {
+		return StripeSubscriptionInvoiceResult{Status: StripeInvoiceResultDuplicate}, err
+	}
+	return StripeSubscriptionInvoiceResult{
+		Status:                  StripeInvoiceResultDuplicate,
+		UserId:                  invoice.UserId,
+		PlanId:                  invoice.PlanId,
+		InvoiceRecordId:         invoice.Id,
+		RenewalPurchaseEligible: invoice.Status == StripeInvoiceResultProcessed && invoice.BillingReason == stripeInvoiceBillingReasonSubscriptionCycle,
+	}, nil
 }
 
 func isUniqueConstraintError(err error) bool {

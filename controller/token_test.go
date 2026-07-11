@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -52,6 +53,7 @@ type sqliteColumnInfo struct {
 }
 
 type tokenGA4CaptureSender struct {
+	mu     sync.Mutex
 	status int
 	bodies []string
 	done   chan struct{}
@@ -59,11 +61,13 @@ type tokenGA4CaptureSender struct {
 
 func (s *tokenGA4CaptureSender) Do(req *http.Request) (*http.Response, error) {
 	body, _ := io.ReadAll(req.Body)
+	s.mu.Lock()
 	s.bodies = append(s.bodies, string(body))
+	status := s.status
+	s.mu.Unlock()
 	if s.done != nil {
 		s.done <- struct{}{}
 	}
-	status := s.status
 	if status == 0 {
 		status = http.StatusNoContent
 	}
@@ -71,6 +75,12 @@ func (s *tokenGA4CaptureSender) Do(req *http.Request) (*http.Response, error) {
 		StatusCode: status,
 		Body:       io.NopCloser(bytes.NewReader(nil)),
 	}, nil
+}
+
+func (s *tokenGA4CaptureSender) snapshotBodies() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.bodies...)
 }
 
 type legacyToken struct {
@@ -452,6 +462,30 @@ func TestTokenAutoMigrateUsesVarchar128KeyColumn(t *testing.T) {
 	}
 }
 
+func TestTokenAnalyticsAttributionMigrationUsesTextColumn(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+
+	if got := getSQLiteColumnType(t, db, "tokens", "analytics_attribution"); got != "text" {
+		t.Fatalf("expected analytics_attribution column type text, got %q", got)
+	}
+}
+
+func TestTokenCleanDropsKeyAndAnalyticsAttribution(t *testing.T) {
+	token := model.Token{
+		Key:                  "raw-token-key",
+		AnalyticsAttribution: `{"client_id":"123.456","gclid":"secret-click"}`,
+	}
+
+	token.Clean()
+
+	if token.Key != "" {
+		t.Fatalf("Clean retained token key: %q", token.Key)
+	}
+	if token.AnalyticsAttribution != "" {
+		t.Fatalf("Clean retained analytics attribution: %q", token.AnalyticsAttribution)
+	}
+}
+
 func TestTokenMigrationFromChar48ToVarchar128(t *testing.T) {
 	db := openTokenControllerTestDB(t)
 	runTokenMigrationCompatibilityTest(t, db, "sqlite", nil)
@@ -660,10 +694,11 @@ func TestAddTokenMarksAPIKeyCreatedSentAfterGA4Success(t *testing.T) {
 	if mark.SubjectType != "token" || mark.SubjectId != token.Id || mark.EventName != "api_key_created" {
 		t.Fatalf("unexpected analytics mark: %#v", mark)
 	}
-	if len(sender.bodies) != 1 {
-		t.Fatalf("sent %d GA4 requests, want 1", len(sender.bodies))
+	bodies := sender.snapshotBodies()
+	if len(bodies) != 1 {
+		t.Fatalf("sent %d GA4 requests, want 1", len(bodies))
 	}
-	bodyPayload := sender.bodies[0]
+	bodyPayload := bodies[0]
 	for _, want := range []string{
 		`"name":"api_key_created"`,
 		`"user_id":42`,
@@ -678,6 +713,113 @@ func TestAddTokenMarksAPIKeyCreatedSentAfterGA4Success(t *testing.T) {
 	}
 	if strings.Contains(bodyPayload, token.Key) || strings.Contains(bodyPayload, token.GetFullKey()) {
 		t.Fatalf("api_key_created payload leaked raw token key: %s", bodyPayload)
+	}
+}
+
+func TestAddTokenPersistsNormalizedAttributionWithoutExposingIt(t *testing.T) {
+	db, sender := setupAPIKeyCreatedAnalyticsTest(t, http.StatusNoContent)
+
+	body := map[string]any{
+		"name":                 "attributed-token",
+		"expired_time":         -1,
+		"remain_quota":         100,
+		"unlimited_quota":      true,
+		"model_limits_enabled": false,
+		"model_limits":         "",
+		"group":                "default",
+		"cross_group_retry":    false,
+		"attribution": map[string]any{
+			"client_id":      " 123.456 ",
+			"session_id":     "789",
+			"page_location":  "https://lizh.ai/console/keys?utm_source=google&token=raw-token&email=user@example.com&secret=drop-me",
+			"source":         " google ",
+			"campaign":       " launch ",
+			"gclid":          "click",
+			"unknown_secret": "request-secret",
+		},
+	}
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/token/", body, 42)
+	ctx.Request.Host = "lizh.ai"
+	ctx.Request.Header.Set("X-Forwarded-Proto", "https")
+
+	AddToken(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	if !response.Success {
+		t.Fatalf("expected token creation success, got message: %s", response.Message)
+	}
+	waitForTokenGA4Send(t, sender.done)
+
+	var stored string
+	if err := db.Raw("SELECT analytics_attribution FROM tokens WHERE name = ?", "attributed-token").Scan(&stored).Error; err != nil {
+		t.Fatalf("failed to load stored attribution: %v", err)
+	}
+	if stored == "" {
+		t.Fatalf("expected persisted analytics attribution")
+	}
+	var attrs analytics.SignUpAttribution
+	if err := common.Unmarshal([]byte(stored), &attrs); err != nil {
+		t.Fatalf("stored attribution is not valid JSON: %v", err)
+	}
+	if attrs.ClientID != "123.456" || attrs.SessionID != "789" || attrs.Source != "google" || attrs.Campaign != "launch" || attrs.GCLID != "click" {
+		t.Fatalf("unexpected stored attribution: %#v", attrs)
+	}
+	if attrs.PageLocation != "https://lizh.ai/console/keys?utm_source=google" {
+		t.Fatalf("stored page location was not sanitized: %q", attrs.PageLocation)
+	}
+	for _, forbidden := range []string{"raw-token", "user@example.com", "drop-me", "unknown_secret", "request-secret"} {
+		if strings.Contains(stored, forbidden) {
+			t.Fatalf("stored attribution retained %q: %s", forbidden, stored)
+		}
+	}
+	bodies := sender.snapshotBodies()
+	if len(bodies) != 1 {
+		t.Fatalf("sent %d GA4 requests, want 1", len(bodies))
+	}
+	bodyPayload := bodies[0]
+	var eventPayload struct {
+		ClientID string `json:"client_id"`
+		Events   []struct {
+			Params map[string]any `json:"params"`
+		} `json:"events"`
+	}
+	if err := common.Unmarshal([]byte(bodyPayload), &eventPayload); err != nil {
+		t.Fatalf("failed to decode api_key_created payload: %v", err)
+	}
+	params := eventPayload.Events[0].Params
+	if eventPayload.ClientID != "123.456" || params["session_id"] != float64(789) || params["source"] != "google" || params["campaign"] != "launch" || params["gclid"] != "click" {
+		t.Fatalf("api_key_created did not use stored attribution: %#v", eventPayload)
+	}
+	for _, forbidden := range []string{"unknown_secret", "request-secret"} {
+		if strings.Contains(bodyPayload, forbidden) {
+			t.Fatalf("api_key_created payload leaked %s: %s", forbidden, bodyPayload)
+		}
+	}
+
+	for _, forbidden := range []string{"analytics_attribution", "client_id", "gclid", "unknown_secret", "request-secret"} {
+		if strings.Contains(recorder.Body.String(), forbidden) {
+			t.Fatalf("create response leaked %s: %s", forbidden, recorder.Body.String())
+		}
+	}
+
+	var token model.Token
+	if err := db.First(&token, "name = ?", "attributed-token").Error; err != nil {
+		t.Fatalf("failed to load created token: %v", err)
+	}
+	listCtx, listRecorder := newAuthenticatedContext(t, http.MethodGet, "/api/token/?p=1&size=10", nil, 42)
+	GetAllTokens(listCtx)
+	detailCtx, detailRecorder := newAuthenticatedContext(t, http.MethodGet, "/api/token/"+strconv.Itoa(token.Id), nil, 42)
+	detailCtx.Params = gin.Params{{Key: "id", Value: strconv.Itoa(token.Id)}}
+	GetToken(detailCtx)
+	for name, payload := range map[string]string{
+		"list":   listRecorder.Body.String(),
+		"detail": detailRecorder.Body.String(),
+	} {
+		for _, forbidden := range []string{"analytics_attribution", "client_id", "gclid", "unknown_secret", "request-secret"} {
+			if strings.Contains(payload, forbidden) {
+				t.Fatalf("%s response leaked %s: %s", name, forbidden, payload)
+			}
+		}
 	}
 }
 
@@ -714,10 +856,11 @@ func TestAddTokenMarksAPIKeyCreatedFailedAfterGA4Failure(t *testing.T) {
 	if mark.SubjectType != "token" || mark.SubjectId != token.Id || mark.EventName != "api_key_created" {
 		t.Fatalf("unexpected analytics mark: %#v", mark)
 	}
-	if len(sender.bodies) != 3 {
-		t.Fatalf("sent %d GA4 requests, want 3", len(sender.bodies))
+	bodies := sender.snapshotBodies()
+	if len(bodies) != 3 {
+		t.Fatalf("sent %d GA4 requests, want 3", len(bodies))
 	}
-	for _, bodyPayload := range sender.bodies {
+	for _, bodyPayload := range bodies {
 		if strings.Contains(bodyPayload, token.Key) || strings.Contains(bodyPayload, token.GetFullKey()) {
 			t.Fatalf("api_key_created payload leaked raw token key: %s", bodyPayload)
 		}

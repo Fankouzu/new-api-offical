@@ -213,6 +213,7 @@ func handleStripeInvoicePaid(ctx context.Context, event stripe.Event, callerIp s
 			event.ID, input.InvoiceId, input.CustomerId, input.SubscriptionId, input.PriceId, callerIp, err.Error()))
 		return
 	}
+	trackGA4StripeRenewalPurchase(input, result)
 	logger.LogInfo(ctx, fmt.Sprintf("Stripe invoice.paid 已处理 event_id=%s invoice_id=%s customer=%s subscription=%s price_id=%s status=%s created=%t user_id=%d plan_id=%d amount_paid=%d currency=%s client_ip=%s",
 		event.ID, input.InvoiceId, input.CustomerId, input.SubscriptionId, input.PriceId, result.Status, result.Created, result.UserId, result.PlanId, input.AmountPaid, input.Currency, callerIp))
 }

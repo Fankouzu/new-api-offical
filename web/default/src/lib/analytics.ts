@@ -33,6 +33,7 @@ declare global {
 
 let activeMeasurementId = ''
 let initialized = false
+let lastTrackedPageLocation = ''
 
 const ALWAYS_SENSITIVE_PAGE_VIEW_PARAMS = new Set([
   'access_token',
@@ -50,12 +51,16 @@ const ALWAYS_SENSITIVE_PAGE_VIEW_PARAMS = new Set([
   'password',
   'password_confirmation',
   'refresh_token',
+  'redirect',
+  'return_to',
+  'return_url',
   'secret',
   'session',
   'session_id',
   'state',
   'token',
   'verification_code',
+  'next',
 ])
 
 interface AnalyticsPageLocation {
@@ -115,6 +120,9 @@ export function initGoogleAnalytics(measurementId: string): void {
   } else {
     window.gtag('config', normalizedId)
   }
+  if (pageLocation) {
+    lastTrackedPageLocation = pageLocation
+  }
 }
 
 export function trackPageView(path: string): void {
@@ -129,16 +137,19 @@ export function trackPageView(path: string): void {
   )
   if (!pageLocation) return
 
+  const pageReferrer =
+    lastTrackedPageLocation ||
+    (typeof document.referrer === 'string' && document.referrer
+      ? sanitizeAttributionURL(document.referrer) || ''
+      : '')
   window.gtag('event', 'page_view', {
     page_path: pageLocation.path,
     page_location: pageLocation.href,
-    page_referrer:
-      typeof document.referrer === 'string' && document.referrer
-        ? sanitizeAttributionURL(document.referrer) || ''
-        : '',
+    page_referrer: pageReferrer,
     hostname: pageLocation.hostname,
     page_title: document.title,
   })
+  lastTrackedPageLocation = pageLocation.href
 }
 
 function resolveAnalyticsPageLocation(
@@ -147,10 +158,7 @@ function resolveAnalyticsPageLocation(
 ): AnalyticsPageLocation | null {
   try {
     const url = base ? new URL(raw, base) : new URL(raw)
-    const search = removeSensitivePageViewParams(
-      normalizeSearchParams(url.search),
-      url.pathname
-    )
+    const search = removeSensitivePageViewParams(url.search)
     const path = `${url.pathname}${search}`
     return {
       href: `${url.origin}${path}`,
@@ -162,10 +170,7 @@ function resolveAnalyticsPageLocation(
   }
 }
 
-function removeSensitivePageViewParams(
-  search: string,
-  pathname: string
-): string {
+function removeSensitivePageViewParams(search: string): string {
   if (!search) return ''
 
   const keptSegments = search
@@ -174,21 +179,13 @@ function removeSensitivePageViewParams(
     .filter((segment) => {
       const separator = segment.indexOf('=')
       const rawKey = separator >= 0 ? segment.slice(0, separator) : segment
-      return !isSensitivePageViewParam(pathname, decodeQueryKey(rawKey))
+      return !isSensitivePageViewParam(decodeQueryKey(rawKey))
     })
   const filteredSearch = keptSegments.join('&')
   return filteredSearch ? `?${filteredSearch}` : ''
 }
 
-function isSensitivePageViewParam(pathname: string, key: string): boolean {
-  const normalizedPathname = pathname.replace(/\/+$/, '') || '/'
-  if (
-    key === 'token' &&
-    (normalizedPathname === '/usage-logs' ||
-      normalizedPathname.startsWith('/usage-logs/'))
-  ) {
-    return false
-  }
+function isSensitivePageViewParam(key: string): boolean {
   return ALWAYS_SENSITIVE_PAGE_VIEW_PARAMS.has(key)
 }
 
@@ -221,24 +218,10 @@ export function normalizeAnalyticsPagePath(path: string): string | null {
 
   try {
     const url = new URL(candidate, window.location.origin)
-    const normalizedSearch = normalizeSearchParams(url.search)
-    return `${url.pathname}${normalizedSearch}`
+    return `${url.pathname}${url.search}`
   } catch {
     return null
   }
-}
-
-function normalizeSearchParams(search: string): string {
-  if (!search) return ''
-  const raw = search.slice(1)
-  const duplicateSeparator = raw.indexOf('?')
-  if (
-    duplicateSeparator > 0 &&
-    raw.slice(0, duplicateSeparator) === raw.slice(duplicateSeparator + 1)
-  ) {
-    return `?${raw.slice(0, duplicateSeparator)}`
-  }
-  return search
 }
 
 export function trackAnalyticsEvent(
@@ -254,4 +237,5 @@ export function trackAnalyticsEvent(
 export function resetAnalyticsForTests(): void {
   activeMeasurementId = ''
   initialized = false
+  lastTrackedPageLocation = ''
 }

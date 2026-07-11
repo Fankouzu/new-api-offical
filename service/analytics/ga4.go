@@ -77,6 +77,7 @@ type UserAttribution struct {
 	KeyType       string
 	PageLocation  string
 	PageReferrer  string
+	Attribution   SignUpAttribution
 }
 
 type PurchaseAttribution struct {
@@ -118,6 +119,7 @@ type FirstAPIRequestAttribution struct {
 	QuotaSpent   int
 	PageLocation string
 	PageReferrer string
+	Attribution  SignUpAttribution
 }
 
 type Config struct {
@@ -385,6 +387,7 @@ func TrackVoucherRedeemSuccess(c *gin.Context, userID int, voucherCode string, q
 		"voucher_source":     firstNonEmpty(attrs.VoucherSource, source),
 		"redeem_result":      "success",
 	}
+	addSessionContext(params, resolveGASessionID(c, cfg.MeasurementID))
 	addUserIDParam(params, userID)
 	addStringParam(params, "digiseller_invoice_id", attrs.DigisellerInvoiceID)
 	addStringParam(params, "digiseller_product_id", attrs.DigisellerProductID)
@@ -416,8 +419,8 @@ func TrackAPIKeyCreatedWithResult(c *gin.Context, userID int, tokenID int, token
 	}
 	addUserIDParam(params, userID)
 	addStringParam(params, "key_type", attrs.KeyType)
-	addPageContext(c, params, attrs.PageLocation, attrs.PageReferrer, "/keys")
-	trackWithResult(c, cfg, userID, tokenID, eventAPIKeyCreated, params, onResult)
+	browserAttribution := addBrowserAttributionContext(c, cfg, params, attrs.Attribution, attrs.PageLocation, attrs.PageReferrer, "/keys")
+	trackWithClientID(c, cfg, userID, tokenID, eventAPIKeyCreated, params, browserAttribution.ClientID, onResult)
 }
 
 func TrackTopUp(c *gin.Context, userID int, attrs PurchaseAttribution) {
@@ -578,8 +581,29 @@ func TrackFirstAPIRequestSuccessWithResult(c *gin.Context, userID int, tokenID i
 		"voucher_source":  defaultVoucherSource,
 	}
 	addUserIDParam(params, userID)
-	addPageContext(c, params, attrs.PageLocation, attrs.PageReferrer, normalizeEndpoint(attrs.Endpoint))
-	trackWithResult(c, cfg, userID, tokenID, eventFirstAPICall, params, onResult)
+	browserAttribution := addBrowserAttributionContext(c, cfg, params, attrs.Attribution, attrs.PageLocation, attrs.PageReferrer, normalizeEndpoint(attrs.Endpoint))
+	trackWithClientID(c, cfg, userID, tokenID, eventFirstAPICall, params, browserAttribution.ClientID, onResult)
+}
+
+func addBrowserAttributionContext(c *gin.Context, cfg Config, params EventParams, attrs SignUpAttribution, pageLocation string, pageReferrer string, fallbackPath string) SignUpAttribution {
+	attrs = NormalizeSignUpAttribution(attrs)
+	sessionID := attrs.SessionID
+	if sessionID == "" {
+		sessionID = resolveGASessionID(c, cfg.MeasurementID)
+	}
+	addSessionContext(params, sessionID)
+	addPageContext(c, params, firstNonEmpty(attrs.PageLocation, pageLocation), firstNonEmpty(attrs.PageReferrer, pageReferrer), fallbackPath)
+	addStringParam(params, "source", attrs.Source)
+	addStringParam(params, "medium", attrs.Medium)
+	addStringParam(params, "campaign", attrs.Campaign)
+	addStringParam(params, "term", attrs.Term)
+	addStringParam(params, "content", attrs.Content)
+	addStringParam(params, "gclid", attrs.GCLID)
+	addStringParam(params, "fbclid", attrs.FBCLID)
+	addStringParam(params, "ttclid", attrs.TTCLID)
+	addStringParam(params, "yclid", attrs.YCLID)
+	addStringParam(params, "first_visit_at", attrs.FirstVisitAt)
+	return attrs
 }
 
 func addStringParam(params EventParams, key string, value string) {

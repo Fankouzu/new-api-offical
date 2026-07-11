@@ -13,13 +13,14 @@ import (
 )
 
 const (
-	ga4SubjectTypeTopUp       = "top_up"
-	ga4SubjectTypePurchase    = "purchase"
-	ga4EventPurchase          = "purchase"
-	ga4DeliveryKeyTopUp       = "top_up"
-	ga4ItemTypeTopUp          = "top_up"
-	ga4ItemTypeSubscription   = "subscription"
-	defaultPaymentCurrencyUSD = "USD"
+	ga4SubjectTypeTopUp         = "top_up"
+	ga4SubjectTypePurchase      = "purchase"
+	ga4SubjectTypeStripeInvoice = "stripe_invoice"
+	ga4EventPurchase            = "purchase"
+	ga4DeliveryKeyTopUp         = "top_up"
+	ga4ItemTypeTopUp            = "top_up"
+	ga4ItemTypeSubscription     = "subscription"
+	defaultPaymentCurrencyUSD   = "USD"
 )
 
 type ga4Attribution = analytics.SignUpAttribution
@@ -104,6 +105,25 @@ func trackGA4PurchaseSuccessWithCurrency(c *gin.Context, tradeNo string, currenc
 		PaymentMethod:   order.PaymentMethod,
 		ItemType:        ga4ItemTypeSubscription,
 		Attribution:     decodeGA4Attribution(order.AnalyticsAttribution),
+	}, trackAnalyticsMarkResult(markID))
+}
+
+func trackGA4StripeRenewalPurchase(input model.StripeSubscriptionInvoiceInput, result model.StripeSubscriptionInvoiceResult) {
+	if !analytics.Enabled() || !result.RenewalPurchaseEligible ||
+		result.InvoiceRecordId <= 0 || result.UserId <= 0 || input.InvoiceId == "" {
+		return
+	}
+	markID := model.BeginAnalyticsEventDelivery(ga4SubjectTypeStripeInvoice, result.InvoiceRecordId, ga4EventPurchase)
+	if markID <= 0 {
+		return
+	}
+	analytics.TrackPurchaseWithResult(nil, result.UserId, analytics.PurchaseAttribution{
+		TradeNo:         input.InvoiceId,
+		Value:           float64(input.AmountPaid) / 100,
+		Currency:        input.Currency,
+		PaymentProvider: model.PaymentProviderStripe,
+		PaymentMethod:   model.PaymentProviderStripe,
+		ItemType:        ga4ItemTypeSubscription,
 	}, trackAnalyticsMarkResult(markID))
 }
 
