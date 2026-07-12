@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { z } from 'zod'
+import type { FirstTouchAttribution } from '@/lib/first-touch-attribution'
 
 // ============================================================================
 // Subscription Plan Schema & Types
@@ -88,6 +89,7 @@ export interface PlanPayload {
 export interface SubscriptionPayRequest {
   plan_id: number
   payment_method?: string
+  attribution?: FirstTouchAttribution
 }
 
 export interface SubscriptionPayResponse {

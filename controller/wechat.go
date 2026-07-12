@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service/analytics"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -21,6 +21,8 @@ type wechatLoginResponse struct {
 	Message string `json:"message"`
 	Data    string `json:"data"`
 }
+
+var trackWeChatSignUp = analytics.TrackSignUp
 
 func getWeChatIdByCode(code string) (string, error) {
 	if code == "" {
@@ -40,8 +42,7 @@ func getWeChatIdByCode(code string) (string, error) {
 	}
 	defer httpResponse.Body.Close()
 	var res wechatLoginResponse
-	err = json.NewDecoder(httpResponse.Body).Decode(&res)
-	if err != nil {
+	if err := common.DecodeJson(httpResponse.Body, &res); err != nil {
 		return "", err
 	}
 	if !res.Success {
@@ -73,6 +74,7 @@ func WeChatAuth(c *gin.Context) {
 	user := model.User{
 		WeChatId: wechatId,
 	}
+	isNewUser := false
 	if model.IsWeChatIdAlreadyTaken(wechatId) {
 		err := user.FillUserByWeChatId()
 		if err != nil {
@@ -110,6 +112,7 @@ func WeChatAuth(c *gin.Context) {
 				})
 				return
 			}
+			isNewUser = true
 		} else {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
@@ -125,6 +128,11 @@ func WeChatAuth(c *gin.Context) {
 			"success": false,
 		})
 		return
+	}
+	if isNewUser {
+		trackWeChatSignUp(c, user.Id, analytics.SignUpAttribution{
+			Method: "wechat",
+		})
 	}
 	setupLogin(&user, c)
 }

@@ -37,7 +37,8 @@ type StripePayRequest struct {
 	SuccessURL string `json:"success_url,omitempty"`
 	// CancelURL is the optional custom URL to redirect when payment is canceled.
 	// If empty, defaults to the server's console topup page.
-	CancelURL string `json:"cancel_url,omitempty"`
+	CancelURL   string         `json:"cancel_url,omitempty"`
+	Attribution ga4Attribution `json:"attribution"`
 }
 
 type StripeAdaptor struct {
@@ -101,14 +102,15 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 	}
 
 	topUp := &model.TopUp{
-		UserId:          id,
-		Amount:          req.Amount,
-		Money:           chargedMoney,
-		TradeNo:         referenceId,
-		PaymentMethod:   model.PaymentMethodStripe,
-		PaymentProvider: model.PaymentProviderStripe,
-		CreateTime:      time.Now().Unix(),
-		Status:          common.TopUpStatusPending,
+		UserId:               id,
+		Amount:               req.Amount,
+		Money:                chargedMoney,
+		TradeNo:              referenceId,
+		PaymentMethod:        model.PaymentMethodStripe,
+		PaymentProvider:      model.PaymentProviderStripe,
+		CreateTime:           time.Now().Unix(),
+		Status:               common.TopUpStatusPending,
+		AnalyticsAttribution: encodeGA4Attribution(req.Attribution),
 	}
 	err = topUp.Insert()
 	if err != nil {
@@ -211,6 +213,7 @@ func handleStripeInvoicePaid(ctx context.Context, event stripe.Event, callerIp s
 			event.ID, input.InvoiceId, input.CustomerId, input.SubscriptionId, input.PriceId, callerIp, err.Error()))
 		return
 	}
+	trackGA4StripeRenewalPurchase(input, result)
 	logger.LogInfo(ctx, fmt.Sprintf("Stripe invoice.paid 已处理 event_id=%s invoice_id=%s customer=%s subscription=%s price_id=%s status=%s created=%t user_id=%d plan_id=%d amount_paid=%d currency=%s client_ip=%s",
 		event.ID, input.InvoiceId, input.CustomerId, input.SubscriptionId, input.PriceId, result.Status, result.Created, result.UserId, result.PlanId, input.AmountPaid, input.Currency, callerIp))
 }
@@ -392,6 +395,7 @@ func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, c
 
 	err := model.Recharge(referenceId, customerId, callerIp)
 	if err != nil {
+		retryGA4TopUpDeliveryIfCompleted(nil, referenceId, model.PaymentProviderStripe, currency)
 		logger.LogError(ctx, fmt.Sprintf("Stripe 充值处理失败 trade_no=%s event_type=%s client_ip=%s error=%q", referenceId, string(event.Type), callerIp, err.Error()))
 		return
 	}

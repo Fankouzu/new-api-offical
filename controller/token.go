@@ -166,12 +166,16 @@ func GetTokenUsage(c *gin.Context) {
 }
 
 func AddToken(c *gin.Context) {
-	token := model.Token{}
-	err := c.ShouldBindJSON(&token)
+	request := struct {
+		model.Token
+		Attribution analytics.SignUpAttribution `json:"attribution"`
+	}{}
+	err := c.ShouldBindJSON(&request)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	token := request.Token
 	if len(token.Name) > 50 {
 		common.ApiErrorI18n(c, i18n.MsgTokenNameTooLong)
 		return
@@ -209,28 +213,36 @@ func AddToken(c *gin.Context) {
 		return
 	}
 	cleanToken := model.Token{
-		UserId:             c.GetInt("id"),
-		Name:               token.Name,
-		Key:                key,
-		CreatedTime:        common.GetTimestamp(),
-		AccessedTime:       common.GetTimestamp(),
-		ExpiredTime:        token.ExpiredTime,
-		RemainQuota:        token.RemainQuota,
-		UnlimitedQuota:     token.UnlimitedQuota,
-		ModelLimitsEnabled: token.ModelLimitsEnabled,
-		ModelLimits:        token.ModelLimits,
-		AllowIps:           token.AllowIps,
-		Group:              token.Group,
-		CrossGroupRetry:    token.CrossGroupRetry,
+		UserId:               c.GetInt("id"),
+		Name:                 token.Name,
+		Key:                  key,
+		CreatedTime:          common.GetTimestamp(),
+		AccessedTime:         common.GetTimestamp(),
+		ExpiredTime:          token.ExpiredTime,
+		RemainQuota:          token.RemainQuota,
+		UnlimitedQuota:       token.UnlimitedQuota,
+		ModelLimitsEnabled:   token.ModelLimitsEnabled,
+		ModelLimits:          token.ModelLimits,
+		AnalyticsAttribution: encodeGA4Attribution(request.Attribution),
+		AllowIps:             token.AllowIps,
+		Group:                token.Group,
+		CrossGroupRetry:      token.CrossGroupRetry,
 	}
 	err = cleanToken.Insert()
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	analytics.TrackAPIKeyCreated(c, cleanToken.UserId, cleanToken.Id, cleanToken.Key, analytics.UserAttribution{
-		VoucherSource: "lizh_ai",
-	})
+	if analytics.Enabled() {
+		markID := model.BeginAnalyticsEventDelivery("token", cleanToken.Id, "api_key_created")
+		if markID > 0 {
+			analytics.TrackAPIKeyCreatedWithResult(c, cleanToken.UserId, cleanToken.Id, cleanToken.Key, analytics.UserAttribution{
+				VoucherSource: "lizh_ai",
+				KeyType:       "api_key",
+				Attribution:   decodeGA4Attribution(cleanToken.AnalyticsAttribution),
+			}, trackAnalyticsMarkResult(markID))
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

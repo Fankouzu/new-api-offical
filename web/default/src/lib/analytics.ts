@@ -16,11 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { sanitizeAttributionURL } from './first-touch-attribution'
+import { getGoogleAnalyticsMeasurementId } from './google-analytics-config'
+
+export { getGoogleAnalyticsMeasurementId } from './google-analytics-config'
 
 type GtagCommand = [command: string, ...args: unknown[]]
 type GtagDataLayerItem = GtagCommand | IArguments
-
-const DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID = 'G-9693VBP1VM'
 
 declare global {
   interface Window {
@@ -31,12 +33,40 @@ declare global {
 
 let activeMeasurementId = ''
 let initialized = false
+let lastTrackedPageLocation = ''
 
-export function getGoogleAnalyticsMeasurementId(): string {
-  return (
-    import.meta.env.VITE_GOOGLE_ANALYTICS_ID ||
-    DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID
-  ).trim()
+const ALWAYS_SENSITIVE_PAGE_VIEW_PARAMS = new Set([
+  'access_token',
+  'api_key',
+  'authorization',
+  'client_secret',
+  'code',
+  'confirm_password',
+  'email',
+  'id_token',
+  'key',
+  'new_password',
+  'old_password',
+  'otp',
+  'password',
+  'password_confirmation',
+  'refresh_token',
+  'redirect',
+  'return_to',
+  'return_url',
+  'secret',
+  'session',
+  'session_id',
+  'state',
+  'token',
+  'verification_code',
+  'next',
+])
+
+interface AnalyticsPageLocation {
+  href: string
+  hostname: string
+  path: string
 }
 
 export function initConfiguredGoogleAnalytics(): void {
@@ -74,20 +104,124 @@ export function initGoogleAnalytics(measurementId: string): void {
   }
 
   window.gtag('js', new Date())
-  window.gtag('config', normalizedId)
+  const pageLocation =
+    typeof window.location?.href === 'string'
+      ? resolveAnalyticsPageLocation(window.location.href)?.href
+      : undefined
+  const pageReferrer =
+    typeof document.referrer === 'string' && document.referrer
+      ? sanitizeAttributionURL(document.referrer)
+      : undefined
+  if (pageLocation || pageReferrer) {
+    window.gtag('config', normalizedId, {
+      ...(pageLocation ? { page_location: pageLocation } : {}),
+      ...(pageReferrer ? { page_referrer: pageReferrer } : {}),
+    })
+  } else {
+    window.gtag('config', normalizedId)
+  }
+  if (pageLocation) {
+    lastTrackedPageLocation = pageLocation
+  }
 }
 
 export function trackPageView(path: string): void {
   if (!initialized || !activeMeasurementId || !window.gtag) return
 
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  const pageLocation = new URL(normalizedPath, window.location.origin).href
+  const normalizedPath = normalizeAnalyticsPagePath(path)
+  if (!normalizedPath) return
 
+  const pageLocation = resolveAnalyticsPageLocation(
+    normalizedPath,
+    window.location.origin
+  )
+  if (!pageLocation) return
+
+  const pageReferrer =
+    lastTrackedPageLocation ||
+    (typeof document.referrer === 'string' && document.referrer
+      ? sanitizeAttributionURL(document.referrer) || ''
+      : '')
   window.gtag('event', 'page_view', {
-    page_path: normalizedPath,
-    page_location: pageLocation,
+    page_path: pageLocation.path,
+    page_location: pageLocation.href,
+    page_referrer: pageReferrer,
+    hostname: pageLocation.hostname,
     page_title: document.title,
   })
+  lastTrackedPageLocation = pageLocation.href
+}
+
+function resolveAnalyticsPageLocation(
+  raw: string,
+  base?: string
+): AnalyticsPageLocation | null {
+  try {
+    const url = base ? new URL(raw, base) : new URL(raw)
+    const search = removeSensitivePageViewParams(url.search)
+    const path = `${url.pathname}${search}`
+    return {
+      href: `${url.origin}${path}`,
+      hostname: url.hostname,
+      path,
+    }
+  } catch {
+    return null
+  }
+}
+
+function removeSensitivePageViewParams(search: string): string {
+  if (!search) return ''
+
+  const keptSegments = search
+    .slice(1)
+    .split('&')
+    .filter((segment) => {
+      const separator = segment.indexOf('=')
+      const rawKey = separator >= 0 ? segment.slice(0, separator) : segment
+      return !isSensitivePageViewParam(decodeQueryKey(rawKey))
+    })
+  const filteredSearch = keptSegments.join('&')
+  return filteredSearch ? `?${filteredSearch}` : ''
+}
+
+function isSensitivePageViewParam(key: string): boolean {
+  return ALWAYS_SENSITIVE_PAGE_VIEW_PARAMS.has(key)
+}
+
+function decodeQueryKey(rawKey: string): string {
+  try {
+    return decodeURIComponent(rawKey.replace(/\+/g, ' ')).trim().toLowerCase()
+  } catch {
+    return rawKey.trim().toLowerCase()
+  }
+}
+
+export function normalizeAnalyticsPagePath(path: string): string | null {
+  const rawPath = String(path ?? '').trim()
+  if (rawPath === '') return null
+
+  const lowerPath = rawPath.toLowerCase()
+  if (
+    lowerPath === 'undefined' ||
+    lowerPath === '/undefined' ||
+    lowerPath === 'null' ||
+    lowerPath === '/null'
+  ) {
+    return null
+  }
+
+  const candidate =
+    rawPath.startsWith('/') || /^[a-z][a-z0-9+.-]*:\/\//i.test(rawPath)
+      ? rawPath
+      : `/${rawPath}`
+
+  try {
+    const url = new URL(candidate, window.location.origin)
+    return `${url.pathname}${url.search}`
+  } catch {
+    return null
+  }
 }
 
 export function trackAnalyticsEvent(
@@ -103,4 +237,5 @@ export function trackAnalyticsEvent(
 export function resetAnalyticsForTests(): void {
   activeMeasurementId = ''
   initialized = false
+  lastTrackedPageLocation = ''
 }

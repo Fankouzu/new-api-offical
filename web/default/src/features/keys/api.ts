@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { withFirstTouchAttribution } from '@/lib/first-touch-attribution'
 import type {
   ApiKey,
   ApiResponse,
@@ -63,7 +64,7 @@ export async function getApiKey(id: number): Promise<ApiResponse<ApiKey>> {
 export async function createApiKey(
   data: ApiKeyFormData
 ): Promise<ApiResponse<ApiKey>> {
-  const res = await api.post('/api/token/', data)
+  const res = await api.post('/api/token/', withFirstTouchAttribution(data))
   return res.data
 }
 

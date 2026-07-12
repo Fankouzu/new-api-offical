@@ -20,7 +20,8 @@ import (
 )
 
 type WaffoPancakePayRequest struct {
-	Amount int64 `json:"amount"`
+	Amount      int64          `json:"amount"`
+	Attribution ga4Attribution `json:"attribution"`
 }
 
 func RequestWaffoPancakeAmount(c *gin.Context) {
@@ -159,14 +160,15 @@ func RequestWaffoPancakePay(c *gin.Context) {
 
 	tradeNo := fmt.Sprintf("WAFFO_PANCAKE-%d-%d-%s", id, time.Now().UnixMilli(), randstr.String(6))
 	topUp := &model.TopUp{
-		UserId:          id,
-		Amount:          normalizeWaffoPancakeTopUpAmount(req.Amount),
-		Money:           payMoney,
-		TradeNo:         tradeNo,
-		PaymentMethod:   model.PaymentMethodWaffoPancake,
-		PaymentProvider: model.PaymentProviderWaffoPancake,
-		CreateTime:      time.Now().Unix(),
-		Status:          common.TopUpStatusPending,
+		UserId:               id,
+		Amount:               normalizeWaffoPancakeTopUpAmount(req.Amount),
+		Money:                payMoney,
+		TradeNo:              tradeNo,
+		PaymentMethod:        model.PaymentMethodWaffoPancake,
+		PaymentProvider:      model.PaymentProviderWaffoPancake,
+		CreateTime:           time.Now().Unix(),
+		Status:               common.TopUpStatusPending,
+		AnalyticsAttribution: encodeGA4Attribution(req.Attribution),
 	}
 	if err := topUp.Insert(); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Waffo Pancake 创建充值订单失败 user_id=%d trade_no=%s amount=%d error=%q", id, tradeNo, req.Amount, err.Error()))

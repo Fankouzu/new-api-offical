@@ -32,21 +32,27 @@ func SetWebRouter(router *gin.Engine, assets ThemeAssets) {
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.GlobalWebRateLimit())
 	router.Use(middleware.Cache())
-	router.GET("/robots.txt", func(c *gin.Context) {
+	robotsHandler := func(c *gin.Context) {
 		c.Set(middleware.RouteTagKey, "web")
 		c.Header("Cache-Control", "public, max-age=3600")
 		c.String(http.StatusOK, webseo.BuildRobotsTxt(system_setting.ServerAddress))
-	})
-	router.GET("/llms.txt", func(c *gin.Context) {
+	}
+	router.GET("/robots.txt", robotsHandler)
+	router.HEAD("/robots.txt", robotsHandler)
+	llmsHandler := func(c *gin.Context) {
 		c.Set(middleware.RouteTagKey, "web")
 		c.Header("Cache-Control", "public, max-age=3600")
 		c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(webseo.BuildLLMSTxt()))
-	})
-	router.GET("/sitemap.xml", func(c *gin.Context) {
+	}
+	router.GET("/llms.txt", llmsHandler)
+	router.HEAD("/llms.txt", llmsHandler)
+	sitemapHandler := func(c *gin.Context) {
 		c.Set(middleware.RouteTagKey, "web")
 		c.Header("Cache-Control", "public, max-age=3600")
 		c.Data(http.StatusOK, "application/xml; charset=utf-8", []byte(webseo.BuildSitemapXMLForTheme(system_setting.ServerAddress, model.GetPricing(), common.GetTheme())))
-	})
+	}
+	router.GET("/sitemap.xml", sitemapHandler)
+	router.HEAD("/sitemap.xml", sitemapHandler)
 	router.Use(static.Serve("/", themeFS))
 	router.NoRoute(func(c *gin.Context) {
 		c.Set(middleware.RouteTagKey, "web")

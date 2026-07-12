@@ -1,11 +1,14 @@
 package model
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func insertStripeInvoiceUserForTest(t *testing.T, id int, stripeCustomer string) {
@@ -72,6 +75,8 @@ func TestCompleteStripeSubscriptionInvoiceCreatesRenewalSubscription(t *testing.
 
 	require.NoError(t, err)
 	assert.True(t, result.Created)
+	assert.True(t, result.RenewalPurchaseEligible)
+	assert.Positive(t, result.InvoiceRecordId)
 	assert.Equal(t, 701, result.UserId)
 	assert.Equal(t, plan.Id, result.PlanId)
 	assert.Equal(t, int64(1), countStripeInvoiceSubscriptionsForTest(t, 701))
@@ -80,6 +85,10 @@ func TestCompleteStripeSubscriptionInvoiceCreatesRenewalSubscription(t *testing.
 	require.NoError(t, DB.Where("user_id = ?", 701).First(&sub).Error)
 	assert.Equal(t, "stripe_invoice", sub.Source)
 	assert.Equal(t, plan.TotalAmount, sub.AmountTotal)
+
+	var invoice StripeSubscriptionInvoice
+	require.NoError(t, DB.First(&invoice, result.InvoiceRecordId).Error)
+	assert.Equal(t, "in_renewal_1", invoice.InvoiceId)
 
 	assert.Equal(t, int64(1), countStripeInvoiceRecordsForTest(t))
 }
@@ -106,13 +115,57 @@ func TestCompleteStripeSubscriptionInvoiceIsIdempotentByInvoiceId(t *testing.T) 
 	first, err := CompleteStripeSubscriptionInvoice(input)
 	require.NoError(t, err)
 	assert.True(t, first.Created)
+	assert.Positive(t, first.InvoiceRecordId)
 
 	input.EventId = "evt_invoice_paid_replay"
 	second, err := CompleteStripeSubscriptionInvoice(input)
 	require.NoError(t, err)
 	assert.False(t, second.Created)
+	assert.Equal(t, StripeInvoiceResultDuplicate, second.Status)
+	assert.Equal(t, first.InvoiceRecordId, second.InvoiceRecordId)
+	assert.Equal(t, first.UserId, second.UserId)
+	assert.Equal(t, first.PlanId, second.PlanId)
+	assert.True(t, second.RenewalPurchaseEligible)
 	assert.Equal(t, int64(1), countStripeInvoiceSubscriptionsForTest(t, 702))
 	assert.Equal(t, int64(1), countStripeInvoiceRecordsForTest(t))
+}
+
+func TestCompleteStripeSubscriptionInvoiceRollsBackInvoiceWhenSubscriptionCreateFails(t *testing.T) {
+	truncateTables(t)
+
+	insertStripeInvoiceUserForTest(t, 707, "cus_rollback")
+	insertStripeInvoicePlanForTest(t, 807, "price_rollback")
+	sentinel := errors.New("sentinel stripe subscription create failure")
+	callbackName := "test:fail_stripe_subscription_create:" + strings.ReplaceAll(t.Name(), "/", "_")
+	require.NoError(t, DB.Callback().Create().Before("gorm:create").Register(callbackName, func(tx *gorm.DB) {
+		subscription, ok := tx.Statement.Dest.(*UserSubscription)
+		if ok && subscription.Source == "stripe_invoice" {
+			tx.AddError(sentinel)
+		}
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, DB.Callback().Create().Remove(callbackName))
+	})
+
+	result, err := CompleteStripeSubscriptionInvoice(StripeSubscriptionInvoiceInput{
+		EventId:        "evt_rollback",
+		EventType:      "invoice.paid",
+		InvoiceId:      "in_rollback",
+		SubscriptionId: "sub_rollback",
+		CustomerId:     "cus_rollback",
+		PriceId:        "price_rollback",
+		BillingReason:  "subscription_cycle",
+		AmountPaid:     1000,
+		Currency:       "usd",
+		Payload:        `{"id":"in_rollback"}`,
+	})
+
+	require.ErrorIs(t, err, sentinel)
+	assert.False(t, result.Created)
+	assert.Zero(t, result.InvoiceRecordId)
+	assert.False(t, result.RenewalPurchaseEligible)
+	assert.Equal(t, int64(0), countStripeInvoiceRecordsForTest(t))
+	assert.Equal(t, int64(0), countStripeInvoiceSubscriptionsForTest(t, 707))
 }
 
 func TestCompleteStripeSubscriptionInvoiceBypassesPurchaseLimitForRenewal(t *testing.T) {
@@ -236,9 +289,28 @@ func TestCompleteStripeSubscriptionInvoiceSkipsInitialSubscriptionCreate(t *test
 
 	require.NoError(t, err)
 	assert.False(t, result.Created)
+	assert.Positive(t, result.InvoiceRecordId)
+	assert.False(t, result.RenewalPurchaseEligible)
 	assert.Equal(t, StripeInvoiceResultInitialInvoice, result.Status)
 	assert.Equal(t, int64(0), countStripeInvoiceSubscriptionsForTest(t, 704))
 	assert.Equal(t, int64(1), countStripeInvoiceRecordsForTest(t))
+
+	duplicate, err := CompleteStripeSubscriptionInvoice(StripeSubscriptionInvoiceInput{
+		EventId:        "evt_initial_invoice_replay",
+		EventType:      "invoice.paid",
+		InvoiceId:      "in_initial",
+		SubscriptionId: "sub_initial",
+		CustomerId:     "cus_initial",
+		PriceId:        "price_initial",
+		BillingReason:  "subscription_create",
+		AmountPaid:     333,
+		Currency:       "usd",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, StripeInvoiceResultDuplicate, duplicate.Status)
+	assert.Equal(t, result.InvoiceRecordId, duplicate.InvoiceRecordId)
+	assert.False(t, duplicate.Created)
+	assert.False(t, duplicate.RenewalPurchaseEligible)
 }
 
 func TestCompleteStripeSubscriptionInvoiceIgnoresSubscriptionUpdateInvoices(t *testing.T) {
@@ -262,7 +334,25 @@ func TestCompleteStripeSubscriptionInvoiceIgnoresSubscriptionUpdateInvoices(t *t
 
 	require.NoError(t, err)
 	assert.False(t, result.Created)
+	assert.False(t, result.RenewalPurchaseEligible)
 	assert.Equal(t, StripeInvoiceResultIgnored, result.Status)
 	assert.Equal(t, int64(0), countStripeInvoiceSubscriptionsForTest(t, 706))
 	assert.Equal(t, int64(1), countStripeInvoiceRecordsForTest(t))
+
+	duplicate, err := CompleteStripeSubscriptionInvoice(StripeSubscriptionInvoiceInput{
+		EventId:        "evt_update_invoice_replay",
+		EventType:      "invoice.paid",
+		InvoiceId:      "in_update",
+		SubscriptionId: "sub_update",
+		CustomerId:     "cus_update",
+		PriceId:        "price_update",
+		BillingReason:  "subscription_update",
+		AmountPaid:     444,
+		Currency:       "usd",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, StripeInvoiceResultDuplicate, duplicate.Status)
+	assert.Equal(t, result.InvoiceRecordId, duplicate.InvoiceRecordId)
+	assert.False(t, duplicate.Created)
+	assert.False(t, duplicate.RenewalPurchaseEligible)
 }

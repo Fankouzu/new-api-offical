@@ -6,6 +6,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
@@ -25,12 +27,16 @@ const (
 	eventSignUp               = "sign_up"
 	eventVoucherRedeemSuccess = "voucher_redeem_success"
 	eventAPIKeyCreated        = "api_key_created"
-	eventFirstAPICall         = "first_api_call"
-	eventTopUp                = "top_up"
 	eventPurchase             = "purchase"
+	eventFirstAPICall         = "first_api_call"
+	eventTopUp                = eventPurchase
 	defaultVoucherSource      = "lizh_ai"
+	defaultRedeemSource       = "voucher"
 	defaultTimeoutMS          = 1500
+	defaultEngagementTimeMS   = 1
 	developmentHashSalt       = "ga4-development-hash-salt"
+	maxAttributionValueLength = 256
+	maxAttributionURLLength   = 2048
 )
 
 var attributionURLParamAllowlist = map[string]struct{}{
@@ -46,9 +52,20 @@ var attributionURLParamAllowlist = map[string]struct{}{
 	"aff":          {},
 }
 
+var defaultGA4RetryBackoffs = [...]time.Duration{
+	100 * time.Millisecond,
+	300 * time.Millisecond,
+}
+
 type EventParams map[string]any
 
 type RedemptionAttribution struct {
+	TransactionID       string
+	Value               float64
+	Currency            string
+	Source              string
+	PageLocation        string
+	PageReferrer        string
 	VoucherSource       string
 	DigisellerInvoiceID string
 	DigisellerProductID string
@@ -57,6 +74,10 @@ type RedemptionAttribution struct {
 
 type UserAttribution struct {
 	VoucherSource string
+	KeyType       string
+	PageLocation  string
+	PageReferrer  string
+	Attribution   SignUpAttribution
 }
 
 type PurchaseAttribution struct {
@@ -67,23 +88,38 @@ type PurchaseAttribution struct {
 	PaymentMethod   string
 	ItemType        string
 	QuotaAmount     int64
+	PageLocation    string
+	PageReferrer    string
+	FallbackPath    string
+	Attribution     SignUpAttribution
 }
 
 type SignUpAttribution struct {
-	ClientID     string `json:"client_id"`
-	PageLocation string `json:"page_location"`
-	PageReferrer string `json:"page_referrer"`
-	Source       string `json:"source"`
-	Medium       string `json:"medium"`
-	Campaign     string `json:"campaign"`
-	Term         string `json:"term"`
-	Content      string `json:"content"`
-	GCLID        string `json:"gclid"`
-	FBCLID       string `json:"fbclid"`
-	TTCLID       string `json:"ttclid"`
-	YCLID        string `json:"yclid"`
-	FirstVisitAt string `json:"first_visit_at"`
-	Method       string `json:"method"`
+	ClientID     string `json:"client_id,omitempty"`
+	SessionID    string `json:"session_id,omitempty"`
+	PageLocation string `json:"page_location,omitempty"`
+	PageReferrer string `json:"page_referrer,omitempty"`
+	Source       string `json:"source,omitempty"`
+	Medium       string `json:"medium,omitempty"`
+	Campaign     string `json:"campaign,omitempty"`
+	Term         string `json:"term,omitempty"`
+	Content      string `json:"content,omitempty"`
+	GCLID        string `json:"gclid,omitempty"`
+	FBCLID       string `json:"fbclid,omitempty"`
+	TTCLID       string `json:"ttclid,omitempty"`
+	YCLID        string `json:"yclid,omitempty"`
+	FirstVisitAt string `json:"first_visit_at,omitempty"`
+	Method       string `json:"method,omitempty"`
+}
+
+type FirstAPIRequestAttribution struct {
+	Model        string
+	Endpoint     string
+	StatusCode   int
+	QuotaSpent   int
+	PageLocation string
+	PageReferrer string
+	Attribution  SignUpAttribution
 }
 
 type Config struct {
@@ -112,13 +148,34 @@ type sender interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+type ga4StatusError struct {
+	StatusCode int
+}
+
+func (e *ga4StatusError) Error() string {
+	return fmt.Sprintf("status=%d", e.StatusCode)
+}
+
+type ga4TransportError struct {
+	err error
+}
+
+func (e *ga4TransportError) Error() string {
+	return e.err.Error()
+}
+
+func (e *ga4TransportError) Unwrap() error {
+	return e.err
+}
+
 var (
 	configMu sync.RWMutex
 	config   = loadConfigFromEnv()
 
 	httpSender sender = &http.Client{Timeout: config.Timeout}
 
-	regexpGA4APISecret = regexp.MustCompile(`([?&]api_secret=)[^&\s]+`)
+	regexpGA4APISecret     = regexp.MustCompile(`([?&]api_secret=)[^&\s]+`)
+	regexpGA4MeasurementID = regexp.MustCompile(`(?i)^G-([a-z0-9]+)$`)
 )
 
 func loadConfigFromEnv() Config {
@@ -223,6 +280,70 @@ func ParseGAClientID(cookieValue string) string {
 	return first + "." + second
 }
 
+func NormalizeSignUpAttribution(attrs SignUpAttribution) SignUpAttribution {
+	attrs.ClientID = normalizeGAClientID(attrs.ClientID)
+	attrs.SessionID = normalizeNumericAttribution(attrs.SessionID, 20)
+	attrs.PageLocation = normalizeAttributionURL(attrs.PageLocation)
+	attrs.PageReferrer = normalizeAttributionURL(attrs.PageReferrer)
+	attrs.Source = normalizeAttributionValue(attrs.Source, maxAttributionValueLength)
+	attrs.Medium = normalizeAttributionValue(attrs.Medium, maxAttributionValueLength)
+	attrs.Campaign = normalizeAttributionValue(attrs.Campaign, maxAttributionValueLength)
+	attrs.Term = normalizeAttributionValue(attrs.Term, maxAttributionValueLength)
+	attrs.Content = normalizeAttributionValue(attrs.Content, maxAttributionValueLength)
+	attrs.GCLID = normalizeAttributionValue(attrs.GCLID, maxAttributionValueLength)
+	attrs.FBCLID = normalizeAttributionValue(attrs.FBCLID, maxAttributionValueLength)
+	attrs.TTCLID = normalizeAttributionValue(attrs.TTCLID, maxAttributionValueLength)
+	attrs.YCLID = normalizeAttributionValue(attrs.YCLID, maxAttributionValueLength)
+	attrs.FirstVisitAt = normalizeAttributionValue(attrs.FirstVisitAt, 64)
+	attrs.Method = normalizeAttributionValue(attrs.Method, 64)
+	return attrs
+}
+
+func normalizeGAClientID(value string) string {
+	value = strings.TrimSpace(value)
+	parts := strings.Split(value, ".")
+	if len(parts) != 2 {
+		return ""
+	}
+	for _, part := range parts {
+		if _, err := strconv.ParseUint(part, 10, 64); err != nil {
+			return ""
+		}
+	}
+	return value
+}
+
+func normalizeNumericAttribution(value string, maxLength int) string {
+	value = normalizeAttributionValue(value, maxLength)
+	if value == "" {
+		return ""
+	}
+	if _, err := strconv.ParseUint(value, 10, 64); err != nil {
+		return ""
+	}
+	return value
+}
+
+func normalizeAttributionValue(value string, maxLength int) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > maxLength {
+		return ""
+	}
+	return value
+}
+
+func normalizeAttributionURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > maxAttributionURLLength {
+		return ""
+	}
+	value = sanitizeAttributionURL(value)
+	if len(value) > maxAttributionURLLength {
+		return ""
+	}
+	return value
+}
+
 func ResolveGAClientID(c *gin.Context, userID int, tokenID int) string {
 	if c != nil {
 		if cookieValue, err := c.Cookie("_ga"); err == nil {
@@ -244,23 +365,42 @@ func TrackVoucherRedeemSuccess(c *gin.Context, userID int, voucherCode string, q
 	if !trackingEnabled(cfg) {
 		return
 	}
-	source := strings.TrimSpace(attrs.VoucherSource)
+	source := strings.TrimSpace(attrs.Source)
 	if source == "" {
-		source = defaultVoucherSource
+		source = defaultRedeemSource
+	}
+	value := attrs.Value
+	if value <= 0 && quota > 0 {
+		value = float64(quota) / common.QuotaPerUnit
+	}
+	transactionID := strings.TrimSpace(attrs.TransactionID)
+	if transactionID == "" {
+		transactionID = "voucher:" + HashIdentifier(voucherCode)
 	}
 	params := EventParams{
+		"transaction_id":     transactionID,
+		"value":              value,
+		"currency":           normalizeCurrency(attrs.Currency),
+		"source":             source,
 		"voucher_code_hash":  HashIdentifier(voucherCode),
-		"voucher_amount_usd": float64(quota) / common.QuotaPerUnit,
-		"voucher_source":     source,
+		"voucher_amount_usd": value,
+		"voucher_source":     firstNonEmpty(attrs.VoucherSource, source),
 		"redeem_result":      "success",
 	}
+	addSessionContext(params, resolveGASessionID(c, cfg.MeasurementID))
+	addUserIDParam(params, userID)
 	addStringParam(params, "digiseller_invoice_id", attrs.DigisellerInvoiceID)
 	addStringParam(params, "digiseller_product_id", attrs.DigisellerProductID)
 	addStringParam(params, "plati_campaign", attrs.PlatiCampaign)
+	addPageContext(c, params, attrs.PageLocation, attrs.PageReferrer, "/wallet")
 	track(c, cfg, userID, 0, eventVoucherRedeemSuccess, params)
 }
 
 func TrackAPIKeyCreated(c *gin.Context, userID int, tokenID int, tokenKey string, attrs UserAttribution) {
+	TrackAPIKeyCreatedWithResult(c, userID, tokenID, tokenKey, attrs, nil)
+}
+
+func TrackAPIKeyCreatedWithResult(c *gin.Context, userID int, tokenID int, tokenKey string, attrs UserAttribution, onResult func(error)) {
 	cfg := currentConfig()
 	if !trackingEnabled(cfg) {
 		return
@@ -277,7 +417,10 @@ func TrackAPIKeyCreated(c *gin.Context, userID int, tokenID int, tokenKey string
 		"api_key_id_hash": HashIdentifier(hashSource),
 		"voucher_source":  source,
 	}
-	track(c, cfg, userID, tokenID, eventAPIKeyCreated, params)
+	addUserIDParam(params, userID)
+	addStringParam(params, "key_type", attrs.KeyType)
+	browserAttribution := addBrowserAttributionContext(c, cfg, params, attrs.Attribution, attrs.PageLocation, attrs.PageReferrer, "/keys")
+	trackWithClientID(c, cfg, userID, tokenID, eventAPIKeyCreated, params, browserAttribution.ClientID, onResult)
 }
 
 func TrackTopUp(c *gin.Context, userID int, attrs PurchaseAttribution) {
@@ -301,18 +444,69 @@ func trackPurchaseEventWithResult(c *gin.Context, userID int, eventName string, 
 	if !trackingEnabled(cfg) {
 		return
 	}
-	params := EventParams{
-		"transaction_id_hash": HashIdentifier(attrs.TradeNo),
-		"value":               attrs.Value,
-		"currency":            normalizeCurrency(attrs.Currency),
+	paymentMethod := strings.TrimSpace(attrs.PaymentProvider)
+	if paymentMethod == "" {
+		paymentMethod = strings.TrimSpace(attrs.PaymentMethod)
 	}
+	params := EventParams{
+		"transaction_id": attrs.TradeNo,
+		"value":          attrs.Value,
+		"currency":       normalizeCurrency(attrs.Currency),
+		"payment_method": paymentMethod,
+	}
+	itemID := strings.TrimSpace(attrs.ItemType)
+	if itemID == "" {
+		itemID = "purchase"
+	}
+	params["items"] = []EventParams{
+		{
+			"item_id":   itemID,
+			"item_name": purchaseItemName(itemID),
+			"price":     attrs.Value,
+			"quantity":  1,
+		},
+	}
+	addUserIDParam(params, userID)
 	addStringParam(params, "payment_provider", attrs.PaymentProvider)
-	addStringParam(params, "payment_method", attrs.PaymentMethod)
+	if strings.TrimSpace(attrs.PaymentMethod) != "" && strings.TrimSpace(attrs.PaymentMethod) != paymentMethod {
+		addStringParam(params, "payment_method_detail", attrs.PaymentMethod)
+	}
 	addStringParam(params, "item_type", attrs.ItemType)
 	if attrs.QuotaAmount > 0 {
 		params["quota_amount"] = attrs.QuotaAmount
 	}
-	trackWithResult(c, cfg, userID, 0, eventName, params, onResult)
+	browserAttribution := NormalizeSignUpAttribution(attrs.Attribution)
+	addSessionContext(params, browserAttribution.SessionID)
+	addStringParam(params, "source", browserAttribution.Source)
+	addStringParam(params, "medium", browserAttribution.Medium)
+	addStringParam(params, "campaign", browserAttribution.Campaign)
+	addStringParam(params, "term", browserAttribution.Term)
+	addStringParam(params, "content", browserAttribution.Content)
+	addStringParam(params, "gclid", browserAttribution.GCLID)
+	addStringParam(params, "fbclid", browserAttribution.FBCLID)
+	addStringParam(params, "ttclid", browserAttribution.TTCLID)
+	addStringParam(params, "yclid", browserAttribution.YCLID)
+	addStringParam(params, "first_visit_at", browserAttribution.FirstVisitAt)
+	fallbackPath := firstNonEmpty(attrs.FallbackPath, "/wallet")
+	addPageContext(
+		c,
+		params,
+		firstNonEmpty(browserAttribution.PageLocation, attrs.PageLocation),
+		firstNonEmpty(browserAttribution.PageReferrer, attrs.PageReferrer),
+		fallbackPath,
+	)
+	trackWithClientID(c, cfg, userID, 0, eventName, params, browserAttribution.ClientID, onResult)
+}
+
+func purchaseItemName(itemID string) string {
+	switch itemID {
+	case "top_up":
+		return "Balance top-up"
+	case "subscription":
+		return "Subscription"
+	default:
+		return itemID
+	}
 }
 
 func TrackSignUp(c *gin.Context, userID int, attrs SignUpAttribution) {
@@ -320,6 +514,7 @@ func TrackSignUp(c *gin.Context, userID int, attrs SignUpAttribution) {
 	if !trackingEnabled(cfg) {
 		return
 	}
+	attrs = NormalizeSignUpAttribution(attrs)
 	method := strings.TrimSpace(attrs.Method)
 	if method == "" {
 		method = "unknown"
@@ -327,8 +522,13 @@ func TrackSignUp(c *gin.Context, userID int, attrs SignUpAttribution) {
 	params := EventParams{
 		"method": method,
 	}
-	addStringParam(params, "page_location", sanitizeAttributionURL(attrs.PageLocation))
-	addStringParam(params, "page_referrer", sanitizeAttributionURL(attrs.PageReferrer))
+	addUserIDParam(params, userID)
+	sessionID := attrs.SessionID
+	if sessionID == "" {
+		sessionID = resolveGASessionID(c, cfg.MeasurementID)
+	}
+	addSessionContext(params, sessionID)
+	addPageContext(c, params, attrs.PageLocation, attrs.PageReferrer, "/sign-up")
 	addStringParam(params, "source", attrs.Source)
 	addStringParam(params, "medium", attrs.Medium)
 	addStringParam(params, "campaign", attrs.Campaign)
@@ -343,10 +543,22 @@ func TrackSignUp(c *gin.Context, userID int, attrs SignUpAttribution) {
 }
 
 func TrackFirstAPICall(c *gin.Context, userID int, tokenID int, tokenKey string, modelID string, quotaSpent int) {
-	TrackFirstAPICallWithResult(c, userID, tokenID, tokenKey, modelID, quotaSpent, nil)
+	TrackFirstAPIRequestSuccessWithResult(c, userID, tokenID, tokenKey, FirstAPIRequestAttribution{
+		Model:      modelID,
+		QuotaSpent: quotaSpent,
+		StatusCode: http.StatusOK,
+	}, nil)
 }
 
 func TrackFirstAPICallWithResult(c *gin.Context, userID int, tokenID int, tokenKey string, modelID string, quotaSpent int, onResult func(error)) {
+	TrackFirstAPIRequestSuccessWithResult(c, userID, tokenID, tokenKey, FirstAPIRequestAttribution{
+		Model:      modelID,
+		QuotaSpent: quotaSpent,
+		StatusCode: http.StatusOK,
+	}, onResult)
+}
+
+func TrackFirstAPIRequestSuccessWithResult(c *gin.Context, userID int, tokenID int, tokenKey string, attrs FirstAPIRequestAttribution, onResult func(error)) {
 	cfg := currentConfig()
 	if !trackingEnabled(cfg) {
 		return
@@ -355,13 +567,43 @@ func TrackFirstAPICallWithResult(c *gin.Context, userID int, tokenID int, tokenK
 	if tokenID <= 0 {
 		hashSource = tokenKey
 	}
+	statusCode := attrs.StatusCode
+	if statusCode <= 0 {
+		statusCode = http.StatusOK
+	}
 	params := EventParams{
 		"api_key_id_hash": HashIdentifier(hashSource),
-		"model_id":        modelID,
-		"quota_spent":     quotaSpent,
+		"model":           attrs.Model,
+		"model_id":        attrs.Model,
+		"endpoint":        normalizeEndpoint(attrs.Endpoint),
+		"status_code":     statusCode,
+		"quota_spent":     attrs.QuotaSpent,
 		"voucher_source":  defaultVoucherSource,
 	}
-	trackWithResult(c, cfg, userID, tokenID, eventFirstAPICall, params, onResult)
+	addUserIDParam(params, userID)
+	browserAttribution := addBrowserAttributionContext(c, cfg, params, attrs.Attribution, attrs.PageLocation, attrs.PageReferrer, normalizeEndpoint(attrs.Endpoint))
+	trackWithClientID(c, cfg, userID, tokenID, eventFirstAPICall, params, browserAttribution.ClientID, onResult)
+}
+
+func addBrowserAttributionContext(c *gin.Context, cfg Config, params EventParams, attrs SignUpAttribution, pageLocation string, pageReferrer string, fallbackPath string) SignUpAttribution {
+	attrs = NormalizeSignUpAttribution(attrs)
+	sessionID := attrs.SessionID
+	if sessionID == "" {
+		sessionID = resolveGASessionID(c, cfg.MeasurementID)
+	}
+	addSessionContext(params, sessionID)
+	addPageContext(c, params, firstNonEmpty(attrs.PageLocation, pageLocation), firstNonEmpty(attrs.PageReferrer, pageReferrer), fallbackPath)
+	addStringParam(params, "source", attrs.Source)
+	addStringParam(params, "medium", attrs.Medium)
+	addStringParam(params, "campaign", attrs.Campaign)
+	addStringParam(params, "term", attrs.Term)
+	addStringParam(params, "content", attrs.Content)
+	addStringParam(params, "gclid", attrs.GCLID)
+	addStringParam(params, "fbclid", attrs.FBCLID)
+	addStringParam(params, "ttclid", attrs.TTCLID)
+	addStringParam(params, "yclid", attrs.YCLID)
+	addStringParam(params, "first_visit_at", attrs.FirstVisitAt)
+	return attrs
 }
 
 func addStringParam(params EventParams, key string, value string) {
@@ -369,6 +611,77 @@ func addStringParam(params EventParams, key string, value string) {
 	if value != "" {
 		params[key] = value
 	}
+}
+
+func setStringParam(params EventParams, key string, value string) {
+	params[key] = strings.TrimSpace(value)
+}
+
+func addUserIDParam(params EventParams, userID int) {
+	if userID > 0 {
+		params["user_id"] = userID
+	}
+}
+
+func addSessionContext(params EventParams, sessionID string) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return
+	}
+	parsedSessionID, err := strconv.ParseUint(sessionID, 10, 64)
+	if err != nil {
+		return
+	}
+	params["session_id"] = parsedSessionID
+	params["engagement_time_msec"] = defaultEngagementTimeMS
+}
+
+func resolveGASessionID(c *gin.Context, measurementID string) string {
+	if c == nil {
+		return ""
+	}
+	match := regexpGA4MeasurementID.FindStringSubmatch(strings.TrimSpace(measurementID))
+	if len(match) != 2 {
+		return ""
+	}
+	cookieValue, err := c.Cookie("_ga_" + match[1])
+	if err != nil {
+		return ""
+	}
+	return parseGASessionID(cookieValue)
+}
+
+func parseGASessionID(cookieValue string) string {
+	cookieValue = strings.TrimSpace(cookieValue)
+	if decoded, err := url.QueryUnescape(cookieValue); err == nil {
+		cookieValue = decoded
+	}
+	if strings.HasPrefix(cookieValue, "GS2.") {
+		for _, part := range strings.FieldsFunc(cookieValue, func(r rune) bool {
+			return r == '.' || r == '$'
+		}) {
+			if len(part) > 1 && part[0] == 's' {
+				if sessionID := normalizeNumericAttribution(part[1:], 20); sessionID != "" {
+					return sessionID
+				}
+			}
+		}
+	}
+	parts := strings.Split(cookieValue, ".")
+	if len(parts) >= 3 && strings.HasPrefix(parts[0], "GS") && normalizeNumericAttribution(parts[0][2:], 4) != "" {
+		return normalizeNumericAttribution(parts[2], 20)
+	}
+	return ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func normalizeCurrency(currency string) string {
@@ -389,9 +702,10 @@ func sanitizeAttributionURL(raw string) string {
 		return ""
 	}
 	clean := url.URL{
-		Scheme: parsed.Scheme,
-		Host:   parsed.Host,
-		Path:   parsed.EscapedPath(),
+		Scheme:  parsed.Scheme,
+		Host:    parsed.Host,
+		Path:    parsed.Path,
+		RawPath: parsed.RawPath,
 	}
 	query := url.Values{}
 	for key, values := range parsed.Query() {
@@ -408,6 +722,147 @@ func sanitizeAttributionURL(raw string) string {
 	return clean.String()
 }
 
+func addPageContext(c *gin.Context, params EventParams, pageLocation string, pageReferrer string, fallbackPath string) {
+	resolvedLocation := resolvePageLocation(c, pageLocation, fallbackPath)
+	setStringParam(params, "page_location", resolvedLocation)
+	setStringParam(params, "page_referrer", sanitizeAttributionURL(pageReferrer))
+	setStringParam(params, "hostname", resolveHostname(c, resolvedLocation))
+}
+
+func resolvePageLocation(c *gin.Context, pageLocation string, fallbackPath string) string {
+	if sanitized := sanitizeAttributionURL(pageLocation); sanitized != "" {
+		return sanitized
+	}
+	base := configuredSiteBaseURL()
+	if base == nil {
+		base = requestBaseURL(c)
+	}
+	if base == nil {
+		return ""
+	}
+	fallbackPath, fallbackRawPath := normalizePagePath(fallbackPath)
+	if fallbackPath == "" {
+		return base.String()
+	}
+	resolved := *base
+	resolved.Path = fallbackPath
+	resolved.RawPath = fallbackRawPath
+	resolved.RawQuery = ""
+	resolved.Fragment = ""
+	return resolved.String()
+}
+
+func resolveHostname(c *gin.Context, pageLocation string) string {
+	if parsed, err := url.Parse(strings.TrimSpace(pageLocation)); err == nil && parsed.Hostname() != "" {
+		return parsed.Hostname()
+	}
+	if base := configuredSiteBaseURL(); base != nil {
+		return base.Hostname()
+	}
+	if base := requestBaseURL(c); base != nil {
+		return base.Hostname()
+	}
+	return ""
+}
+
+func configuredSiteBaseURL() *url.URL {
+	raw := strings.TrimSpace(system_setting.ServerAddress)
+	if raw == "" {
+		return nil
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return nil
+	}
+	return cleanBaseURL(parsed)
+}
+
+func requestBaseURL(c *gin.Context) *url.URL {
+	if c == nil || c.Request == nil {
+		return nil
+	}
+	host := strings.TrimSpace(c.GetHeader("X-Forwarded-Host"))
+	if host == "" {
+		host = strings.TrimSpace(c.Request.Host)
+	}
+	if host == "" {
+		return nil
+	}
+	scheme := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto"))
+	if scheme == "" {
+		if c.Request.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	parsed := &url.URL{Scheme: scheme, Host: host}
+	return cleanBaseURL(parsed)
+}
+
+func cleanBaseURL(parsed *url.URL) *url.URL {
+	if parsed == nil {
+		return nil
+	}
+	clean := *parsed
+	clean.Path = ""
+	clean.RawPath = ""
+	clean.RawQuery = ""
+	clean.Fragment = ""
+	return &clean
+}
+
+func normalizePagePath(path string) (string, string) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", ""
+	}
+	rawPath := ""
+	if parsed, err := url.Parse(path); err == nil {
+		path = parsed.Path
+		rawPath = parsed.RawPath
+	} else if idx := strings.Index(path, "?"); idx >= 0 {
+		path = path[:idx]
+	}
+	if path == "" {
+		return "", ""
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+		if rawPath != "" {
+			rawPath = "/" + rawPath
+		}
+	}
+	return path, rawPath
+}
+
+func normalizeEndpoint(endpoint string) string {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		return ""
+	}
+	if parsed, err := url.Parse(endpoint); err == nil {
+		if parsed.Scheme != "" && parsed.Host != "" {
+			endpoint = parsed.Path
+		} else if parsed.Path != "" {
+			endpoint = parsed.Path
+		}
+	}
+	if endpoint == "" {
+		return ""
+	}
+	if !strings.HasPrefix(endpoint, "/") {
+		endpoint = "/" + endpoint
+	}
+	if idx := strings.Index(endpoint, "?"); idx >= 0 {
+		endpoint = endpoint[:idx]
+	}
+	return endpoint
+}
+
 func track(c *gin.Context, cfg Config, userID int, tokenID int, eventName string, params EventParams) {
 	trackWithResult(c, cfg, userID, tokenID, eventName, params, nil)
 }
@@ -419,7 +874,7 @@ func trackWithResult(c *gin.Context, cfg Config, userID int, tokenID int, eventN
 func trackWithClientID(c *gin.Context, cfg Config, userID int, tokenID int, eventName string, params EventParams, clientID string, onResult func(error)) {
 	payload := buildPayloadWithClientID(c, userID, tokenID, eventName, params, clientID)
 	gopool.Go(func() {
-		if err := sendPayload(context.Background(), cfg, payload); err != nil {
+		if err := sendPayloadWithRetry(context.Background(), cfg, payload, defaultGA4RetryBackoffs[:]); err != nil {
 			common.SysLog(fmt.Sprintf("GA4 event send failed: event=%s error=%s", eventName, sanitizeError(err).Error()))
 			if onResult != nil {
 				onResult(err)
@@ -430,6 +885,39 @@ func trackWithClientID(c *gin.Context, cfg Config, userID int, tokenID int, even
 			onResult(nil)
 		}
 	})
+}
+
+func sendPayloadWithRetry(ctx context.Context, cfg Config, payload ga4Payload, backoffs []time.Duration) error {
+	for attempt := 0; ; attempt++ {
+		err := sendPayload(ctx, cfg, payload)
+		if err == nil || !isRetryableDeliveryError(err) || attempt >= len(backoffs) {
+			return err
+		}
+		delay := backoffs[attempt]
+		if delay <= 0 {
+			continue
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func isRetryableDeliveryError(err error) bool {
+	var statusErr *ga4StatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.StatusCode == http.StatusRequestTimeout ||
+			statusErr.StatusCode == http.StatusTooManyRequests ||
+			statusErr.StatusCode >= http.StatusInternalServerError
+	}
+	var transportErr *ga4TransportError
+	return errors.As(err, &transportErr)
 }
 
 func buildPayload(c *gin.Context, userID int, tokenID int, eventName string, params EventParams) ga4Payload {
@@ -482,11 +970,11 @@ func sendPayload(ctx context.Context, cfg Config, payload ga4Payload) error {
 	}
 	resp, err := s.Do(req)
 	if err != nil {
-		return err
+		return &ga4TransportError{err: err}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("status=%d", resp.StatusCode)
+		return &ga4StatusError{StatusCode: resp.StatusCode}
 	}
 	return nil
 }

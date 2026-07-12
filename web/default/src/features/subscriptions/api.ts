@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { withFirstTouchAttribution } from '@/lib/first-touch-attribution'
 import type {
   ApiResponse,
   PlanRecord,
@@ -111,21 +112,30 @@ export async function deleteUserSubscription(
 export async function paySubscriptionStripe(
   data: SubscriptionPayRequest
 ): Promise<SubscriptionPayResponse> {
-  const res = await api.post('/api/subscription/stripe/pay', data)
+  const res = await api.post(
+    '/api/subscription/stripe/pay',
+    withFirstTouchAttribution(data)
+  )
   return res.data
 }
 
 export async function paySubscriptionCreem(
   data: SubscriptionPayRequest
 ): Promise<SubscriptionPayResponse> {
-  const res = await api.post('/api/subscription/creem/pay', data)
+  const res = await api.post(
+    '/api/subscription/creem/pay',
+    withFirstTouchAttribution(data)
+  )
   return res.data
 }
 
 export async function paySubscriptionEpay(
   data: SubscriptionPayRequest & { payment_method: string }
 ): Promise<SubscriptionPayResponse & { url?: string }> {
-  const res = await api.post('/api/subscription/epay/pay', data)
+  const res = await api.post(
+    '/api/subscription/epay/pay',
+    withFirstTouchAttribution(data)
+  )
   return {
     ...res.data,
     url: res.data.url || (res as unknown as { url?: string }).url,
