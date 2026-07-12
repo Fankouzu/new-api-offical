@@ -2,19 +2,25 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/Calcium-Ion/go-epay/epay"
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service/analytics"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/stripe/stripe-go/v81"
 	"gorm.io/gorm"
 )
 
@@ -155,6 +161,196 @@ func TestBeginGA4TopUpDeliveryKeepsLegacyIdempotencyKey(t *testing.T) {
 	}
 }
 
+func TestEpayNotifyReclaimsFailedTopUpAnalyticsMark(t *testing.T) {
+	setupGA4PaymentEventTestDB(t)
+	sender, topUp := setupFailedTopUpAnalyticsReplay(t, model.PaymentProviderEpay, "epay-replay")
+
+	originalPayAddress := operation_setting.PayAddress
+	originalEpayID := operation_setting.EpayId
+	originalEpayKey := operation_setting.EpayKey
+	originalPayMethods := operation_setting.PayMethods
+	t.Cleanup(func() {
+		operation_setting.PayAddress = originalPayAddress
+		operation_setting.EpayId = originalEpayID
+		operation_setting.EpayKey = originalEpayKey
+		operation_setting.PayMethods = originalPayMethods
+	})
+	operation_setting.PayAddress = "https://payments.example.test"
+	operation_setting.EpayId = "merchant-test"
+	operation_setting.EpayKey = "epay-test-key"
+	operation_setting.PayMethods = []map[string]string{{"type": model.PaymentProviderEpay}}
+
+	params := epay.GenerateParams(map[string]string{
+		"pid":          operation_setting.EpayId,
+		"type":         "alipay",
+		"out_trade_no": topUp.TradeNo,
+		"trade_no":     "provider-epay-replay",
+		"trade_status": epay.StatusTradeSuccess,
+		"money":        "10.00",
+	}, operation_setting.EpayKey)
+	query := url.Values{}
+	for key, value := range params {
+		query.Set(key, value)
+	}
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/user/pay/notify?"+query.Encode(), nil)
+	EpayNotify(c)
+
+	waitForPaymentGA4Send(t, sender.done)
+	mark := waitForTopUpGA4MarkTerminal(t, topUp.Id)
+	if mark.Status != model.AnalyticsEventStatusSent {
+		t.Fatalf("Epay replay mark status = %q, want sent", mark.Status)
+	}
+}
+
+func TestEpayNotifyDoesNotCreateAnalyticsMarkForUnverifiedCompletedOrder(t *testing.T) {
+	setupGA4PaymentEventTestDB(t)
+	topUp := &model.TopUp{
+		UserId:          902,
+		Amount:          2,
+		Money:           10,
+		TradeNo:         "epay-no-mark",
+		PaymentMethod:   "alipay",
+		PaymentProvider: model.PaymentProviderEpay,
+		Status:          common.TopUpStatusSuccess,
+		CreateTime:      common.GetTimestamp(),
+		CompleteTime:    common.GetTimestamp(),
+	}
+	if err := model.DB.Create(topUp).Error; err != nil {
+		t.Fatalf("create completed Epay top-up: %v", err)
+	}
+
+	originalPayAddress := operation_setting.PayAddress
+	originalEpayID := operation_setting.EpayId
+	originalEpayKey := operation_setting.EpayKey
+	originalPayMethods := operation_setting.PayMethods
+	t.Cleanup(func() {
+		operation_setting.PayAddress = originalPayAddress
+		operation_setting.EpayId = originalEpayID
+		operation_setting.EpayKey = originalEpayKey
+		operation_setting.PayMethods = originalPayMethods
+	})
+	operation_setting.PayAddress = "https://payments.example.test"
+	operation_setting.EpayId = "merchant-test"
+	operation_setting.EpayKey = "epay-test-key"
+	operation_setting.PayMethods = []map[string]string{{"type": model.PaymentProviderEpay}}
+
+	sender := &paymentGA4CaptureSender{done: make(chan struct{}, 1)}
+	restore := analytics.ConfigureForTest(analytics.Config{
+		Enabled:       true,
+		MeasurementID: "G-TEST",
+		APISecret:     "secret",
+		HashSalt:      "salt",
+		Timeout:       50 * time.Millisecond,
+		Endpoint:      "https://example.test/mp/collect",
+	}, sender)
+	t.Cleanup(restore)
+
+	params := epay.GenerateParams(map[string]string{
+		"pid":          operation_setting.EpayId,
+		"type":         "alipay",
+		"out_trade_no": topUp.TradeNo,
+		"trade_no":     "provider-epay-no-mark",
+		"trade_status": epay.StatusTradeSuccess,
+		"money":        "10.00",
+	}, operation_setting.EpayKey)
+	query := url.Values{}
+	for key, value := range params {
+		query.Set(key, value)
+	}
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/user/pay/notify?"+query.Encode(), nil)
+
+	EpayNotify(c)
+
+	select {
+	case <-sender.done:
+		t.Fatal("Epay replay without a failed mark sent a GA4 event")
+	case <-time.After(100 * time.Millisecond):
+	}
+	if _, err := model.GetAnalyticsEventMark(ga4SubjectTypeTopUp, topUp.Id, ga4DeliveryKeyTopUp); err == nil {
+		t.Fatal("Epay replay without a prior delivery created an analytics mark")
+	}
+}
+
+func TestStripeTopUpReplayReclaimsFailedAnalyticsMark(t *testing.T) {
+	setupGA4PaymentEventTestDB(t)
+	sender, topUp := setupFailedTopUpAnalyticsReplay(t, model.PaymentProviderStripe, "stripe-replay")
+	event := stripeWebhookTestEvent(stripe.EventTypeCheckoutSessionCompleted, `{
+		"amount_total": 1000,
+		"currency": "usd"
+	}`)
+
+	fulfillOrder(context.Background(), event, topUp.TradeNo, "cus_replay", "127.0.0.1")
+
+	waitForPaymentGA4Send(t, sender.done)
+	mark := waitForTopUpGA4MarkTerminal(t, topUp.Id)
+	if mark.Status != model.AnalyticsEventStatusSent {
+		t.Fatalf("Stripe replay mark status = %q, want sent", mark.Status)
+	}
+}
+
+func TestCreemTopUpReplayReclaimsFailedAnalyticsMark(t *testing.T) {
+	setupGA4PaymentEventTestDB(t)
+	sender, topUp := setupFailedTopUpAnalyticsReplay(t, model.PaymentProviderCreem, "creem-replay")
+
+	event := &CreemWebhookEvent{}
+	event.Object.RequestId = topUp.TradeNo
+	event.Object.Order.Id = "creem-order-replay"
+	event.Object.Order.Status = "paid"
+	event.Object.Order.Type = "onetime"
+	event.Object.Order.Currency = "USD"
+	event.Object.Order.AmountPaid = 1000
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/user/creem/webhook", nil)
+
+	handleCheckoutCompleted(c, event)
+
+	waitForPaymentGA4Send(t, sender.done)
+	mark := waitForTopUpGA4MarkTerminal(t, topUp.Id)
+	if mark.Status != model.AnalyticsEventStatusSent {
+		t.Fatalf("Creem replay mark status = %q, want sent", mark.Status)
+	}
+}
+
+func setupFailedTopUpAnalyticsReplay(t *testing.T, provider string, tradeNo string) (*paymentGA4CaptureSender, *model.TopUp) {
+	t.Helper()
+	topUp := &model.TopUp{
+		UserId:          901,
+		Amount:          2,
+		Money:           10,
+		TradeNo:         tradeNo,
+		PaymentMethod:   provider,
+		PaymentProvider: provider,
+		Status:          common.TopUpStatusSuccess,
+		CreateTime:      common.GetTimestamp(),
+		CompleteTime:    common.GetTimestamp(),
+	}
+	if err := model.DB.Create(topUp).Error; err != nil {
+		t.Fatalf("create completed top-up: %v", err)
+	}
+	markID := beginGA4TopUpDelivery(topUp.Id)
+	if markID <= 0 || !model.MarkAnalyticsEventFailed(markID) {
+		t.Fatalf("seed failed top-up analytics mark")
+	}
+
+	sender := &paymentGA4CaptureSender{done: make(chan struct{}, 1)}
+	restore := analytics.ConfigureForTest(analytics.Config{
+		Enabled:       true,
+		MeasurementID: "G-TEST",
+		APISecret:     "secret",
+		HashSalt:      "salt",
+		Timeout:       50 * time.Millisecond,
+		Endpoint:      "https://example.test/mp/collect",
+	}, sender)
+	t.Cleanup(restore)
+	return sender, topUp
+}
+
 func TestGA4StripeRenewalPurchaseRequiresCompletedSubscriptionCycle(t *testing.T) {
 	setupGA4PaymentEventTestDB(t)
 	sender := &paymentGA4CaptureSender{done: make(chan struct{}, 1)}
@@ -287,6 +483,30 @@ func waitForPaymentGA4MarkTerminal(t *testing.T, subjectType string, subjectID i
 	mark, err := model.GetAnalyticsEventMark(subjectType, subjectID, ga4EventPurchase)
 	if err != nil {
 		t.Fatalf("get payment GA4 mark: %v", err)
+	}
+	return mark
+}
+
+func waitForTopUpGA4MarkTerminal(t *testing.T, topUpID int) *model.AnalyticsEventMark {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	var last *model.AnalyticsEventMark
+	for time.Now().Before(deadline) {
+		mark, err := model.GetAnalyticsEventMark(ga4SubjectTypeTopUp, topUpID, ga4DeliveryKeyTopUp)
+		if err == nil {
+			last = mark
+			if mark.Status == model.AnalyticsEventStatusSent || mark.Status == model.AnalyticsEventStatusFailed {
+				return mark
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if last != nil {
+		return last
+	}
+	mark, err := model.GetAnalyticsEventMark(ga4SubjectTypeTopUp, topUpID, ga4DeliveryKeyTopUp)
+	if err != nil {
+		t.Fatalf("get top-up GA4 mark: %v", err)
 	}
 	return mark
 }

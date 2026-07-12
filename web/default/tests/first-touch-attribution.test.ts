@@ -100,6 +100,20 @@ describe('first-touch attribution', () => {
     )
   })
 
+  test('reads the session id from the GA4 GS2 cookie format', () => {
+    Object.defineProperty(document, 'cookie', {
+      configurable: true,
+      value:
+        '_ga=GA1.1.123456789.987654321; _ga_TEST=GS2.1.s1740000001$o1$g0$t1740000100$j60$l0$h0',
+    })
+
+    expect(firstTouchAttribution.getFirstTouchAttribution()).toEqual(
+      expect.objectContaining({
+        session_id: '1740000001',
+      })
+    )
+  })
+
   test('ignores malformed encoded GA cookies without throwing', () => {
     Object.defineProperty(document, 'cookie', {
       configurable: true,

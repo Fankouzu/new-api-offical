@@ -86,8 +86,11 @@ function readGASessionID(): string {
       continue
     }
     const value = safeDecodeURIComponent(cookie.slice(separator + 1))
-    const gs2Session = value.match(/(?:^|\$)s(\d+)(?:\$|$)/)?.[1]
-    if (gs2Session) return gs2Session
+    if (value.startsWith('GS2.')) {
+      for (const part of value.split(/[.$]/)) {
+        if (/^s\d+$/.test(part)) return part.slice(1)
+      }
+    }
 
     const parts = value.split('.')
     if (/^GS\d+$/.test(parts[0]) && /^\d+$/.test(parts[2] || '')) {

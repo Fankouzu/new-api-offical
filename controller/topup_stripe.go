@@ -395,6 +395,7 @@ func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, c
 
 	err := model.Recharge(referenceId, customerId, callerIp)
 	if err != nil {
+		retryGA4TopUpDeliveryIfCompleted(nil, referenceId, model.PaymentProviderStripe, currency)
 		logger.LogError(ctx, fmt.Sprintf("Stripe 充值处理失败 trade_no=%s event_type=%s client_ip=%s error=%q", referenceId, string(event.Type), callerIp, err.Error()))
 		return
 	}

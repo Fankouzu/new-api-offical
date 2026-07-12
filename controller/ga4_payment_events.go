@@ -81,6 +81,26 @@ func beginGA4TopUpDelivery(topUpID int) int {
 	return model.BeginAnalyticsEventDelivery(ga4SubjectTypeTopUp, topUpID, ga4DeliveryKeyTopUp)
 }
 
+func retryGA4TopUpDeliveryIfCompleted(c *gin.Context, tradeNo string, expectedProvider string, currency string) {
+	topUp := model.GetTopUpByTradeNo(tradeNo)
+	if topUp == nil || topUp.Status != common.TopUpStatusSuccess || topUp.PaymentProvider != expectedProvider {
+		return
+	}
+	trackGA4TopUpSuccessWithCurrency(c, tradeNo, currency)
+}
+
+func retryFailedGA4TopUpDeliveryIfCompleted(c *gin.Context, tradeNo string, expectedProvider string, currency string) {
+	topUp := model.GetTopUpByTradeNo(tradeNo)
+	if topUp == nil || topUp.Status != common.TopUpStatusSuccess || topUp.PaymentProvider != expectedProvider {
+		return
+	}
+	mark, err := model.GetAnalyticsEventMark(ga4SubjectTypeTopUp, topUp.Id, ga4DeliveryKeyTopUp)
+	if err != nil || mark.Status != model.AnalyticsEventStatusFailed {
+		return
+	}
+	trackGA4TopUpSuccessWithCurrency(c, tradeNo, currency)
+}
+
 func trackGA4PurchaseSuccess(c *gin.Context, tradeNo string) {
 	trackGA4PurchaseSuccessWithCurrency(c, tradeNo, "")
 }
