@@ -291,6 +291,12 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	// Repair analytics_attribution on tokens/top_ups/subscription_orders if AutoMigrate
+	// left it missing (older databases or partial migration), otherwise token creation
+	// fails with SQLSTATE 42703.
+	if err := migrateAnalyticsAttributionColumns(DB); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -370,6 +376,12 @@ func migrateDBFast() error {
 		if err := DB.AutoMigrate(&SubscriptionPlan{}); err != nil {
 			return err
 		}
+	}
+	// Repair analytics_attribution on tokens/top_ups/subscription_orders if AutoMigrate
+	// left it missing (older databases or partial migration), otherwise token creation
+	// fails with SQLSTATE 42703.
+	if err := migrateAnalyticsAttributionColumns(DB); err != nil {
+		return err
 	}
 	common.SysLog("database migrated")
 	return nil
@@ -508,6 +520,31 @@ func migrateTokenModelLimitsToText() error {
 			return fmt.Errorf("failed to migrate %s.%s to text: %w", tableName, columnName, err)
 		}
 		common.SysLog(fmt.Sprintf("Successfully migrated %s.%s to text", tableName, columnName))
+	}
+	return nil
+}
+
+// migrateAnalyticsAttributionColumns ensures the analytics_attribution column exists on
+// every table that stores GA4 conversion attribution (tokens, top_ups, subscription_orders).
+//
+// AutoMigrate normally adds this column, but it migrates an entire model's columns as a
+// single operation, so a failure or type conflict on any sibling column — or a database
+// created by an older binary that predates the field — can leave analytics_attribution
+// missing. A missing column breaks token / top-up / subscription creation at INSERT time
+// with SQLSTATE 42703 ("column ... does not exist"). This idempotent step isolates the
+// column so it is always repaired, independently of AutoMigrate's all-or-nothing run.
+//
+// Safe to run multiple times: it only acts when the column is absent.
+func migrateAnalyticsAttributionColumns(db *gorm.DB) error {
+	attributionModels := []interface{}{&Token{}, &TopUp{}, &SubscriptionOrder{}}
+	for _, m := range attributionModels {
+		if db.Migrator().HasColumn(m, "AnalyticsAttribution") {
+			continue
+		}
+		if err := db.Migrator().AddColumn(m, "AnalyticsAttribution"); err != nil {
+			return fmt.Errorf("failed to add analytics_attribution column: %w", err)
+		}
+		common.SysLog("Successfully added missing analytics_attribution column")
 	}
 	return nil
 }
