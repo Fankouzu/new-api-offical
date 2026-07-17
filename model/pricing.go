@@ -36,6 +36,17 @@ type Pricing struct {
 	BillingMode            string                  `json:"billing_mode,omitempty"`
 	BillingExpr            string                  `json:"billing_expr,omitempty"`
 	PricingVersion         string                  `json:"pricing_version,omitempty"`
+
+	// Model catalog metadata sourced from models.dev (see model_catalog.go).
+	// Populated only when the model is found in the catalog; otherwise omitted so
+	// the frontend renders an empty value rather than a mock.
+	ContextLength    int      `json:"context_length,omitempty"`
+	MaxOutputTokens  int      `json:"max_output_tokens,omitempty"`
+	KnowledgeCutoff  string   `json:"knowledge_cutoff,omitempty"`
+	ReleaseDate      string   `json:"release_date,omitempty"`
+	InputModalities  []string `json:"input_modalities,omitempty"`
+	OutputModalities []string `json:"output_modalities,omitempty"`
+	Capabilities     []string `json:"capabilities,omitempty"`
 }
 
 type PricingVendor struct {
@@ -303,6 +314,17 @@ func updatePricing() {
 			pricing.Icon = meta.Icon
 			pricing.Tags = meta.Tags
 			pricing.VendorID = meta.VendorID
+		}
+		// 补充 models.dev 模型目录元数据（上下文/截止/发布/模态/能力），
+		// 未命中目录时字段留空（前端显示为空，不再使用 mock）
+		if spec, ok := GetModelCatalogSpec(model); ok && spec != nil {
+			pricing.ContextLength = spec.ContextLength
+			pricing.MaxOutputTokens = spec.MaxOutputTokens
+			pricing.KnowledgeCutoff = spec.KnowledgeCutoff
+			pricing.ReleaseDate = spec.ReleaseDate
+			pricing.InputModalities = spec.InputModalities
+			pricing.OutputModalities = spec.OutputModalities
+			pricing.Capabilities = spec.Capabilities
 		}
 		modelPrice, findPrice := ratio_setting.GetModelPrice(model, false)
 		if findPrice {
