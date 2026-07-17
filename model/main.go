@@ -524,6 +524,11 @@ func migrateTokenModelLimitsToText() error {
 	return nil
 }
 
+// analyticsAttributionModels lists every model whose table stores GA4 conversion
+// attribution in the analytics_attribution column. Defined once here and reused by the
+// repair migration and its tests, so adding a new attribution table only touches this list.
+var analyticsAttributionModels = []interface{}{&Token{}, &TopUp{}, &SubscriptionOrder{}}
+
 // migrateAnalyticsAttributionColumns ensures the analytics_attribution column exists on
 // every table that stores GA4 conversion attribution (tokens, top_ups, subscription_orders).
 //
@@ -534,10 +539,14 @@ func migrateTokenModelLimitsToText() error {
 // with SQLSTATE 42703 ("column ... does not exist"). This idempotent step isolates the
 // column so it is always repaired, independently of AutoMigrate's all-or-nothing run.
 //
-// Safe to run multiple times: it only acts when the column is absent.
+// Safe to run multiple times: it only acts when the column is absent. Tables that have not
+// been created yet (a partially-migrated schema) are skipped, mirroring the HasTable guard
+// used by migrateTokenModelLimitsToText / migrateSubscriptionPlanPriceAmount.
 func migrateAnalyticsAttributionColumns(db *gorm.DB) error {
-	attributionModels := []interface{}{&Token{}, &TopUp{}, &SubscriptionOrder{}}
-	for _, m := range attributionModels {
+	for _, m := range analyticsAttributionModels {
+		if !db.Migrator().HasTable(m) {
+			continue
+		}
 		if db.Migrator().HasColumn(m, "AnalyticsAttribution") {
 			continue
 		}

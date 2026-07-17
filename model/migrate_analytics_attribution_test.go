@@ -60,7 +60,7 @@ func TestMigrateAnalyticsAttributionColumns_AddsMissingColumn(t *testing.T) {
 
 	// Simulate a database created before analytics_attribution existed by dropping
 	// the column from every table, the exact state that triggers SQLSTATE 42703.
-	for _, m := range []interface{}{&Token{}, &TopUp{}, &SubscriptionOrder{}} {
+	for _, m := range analyticsAttributionModels {
 		require.NoError(t, db.Migrator().DropColumn(m, "AnalyticsAttribution"),
 			"failed to drop analytics_attribution to simulate stale schema")
 		require.False(t, db.Migrator().HasColumn(m, "AnalyticsAttribution"),
@@ -70,10 +70,25 @@ func TestMigrateAnalyticsAttributionColumns_AddsMissingColumn(t *testing.T) {
 	// The repair must add the missing column to every affected table.
 	require.NoError(t, migrateAnalyticsAttributionColumns(db))
 
-	for _, m := range []interface{}{&Token{}, &TopUp{}, &SubscriptionOrder{}} {
+	for _, m := range analyticsAttributionModels {
 		require.True(t, db.Migrator().HasColumn(m, "AnalyticsAttribution"),
 			"analytics_attribution was not restored after migration")
 	}
+}
+
+// TestMigrateAnalyticsAttributionColumns_SkipsMissingTables confirms the migration never
+// errors when a target table has not been created yet (e.g. a partially-migrated schema).
+// It must skip absent tables gracefully rather than emitting a confusing
+// "relation ... does not exist" from AddColumn — matching the HasTable guard used by the
+// sibling migrations migrateTokenModelLimitsToText / migrateSubscriptionPlanPriceAmount.
+func TestMigrateAnalyticsAttributionColumns_SkipsMissingTables(t *testing.T) {
+	db := setupAnalyticsAttributionTestDB(t)
+
+	// No AutoMigrate — none of the attribution tables exist yet.
+	require.False(t, db.Migrator().HasTable(&Token{}), "precondition: tokens table should not exist")
+
+	// Must return nil: every absent table is skipped, not treated as a hard error.
+	require.NoError(t, migrateAnalyticsAttributionColumns(db))
 }
 
 // TestMigrateAnalyticsAttributionColumns_Idempotent confirms the migration is a safe
@@ -85,7 +100,7 @@ func TestMigrateAnalyticsAttributionColumns_Idempotent(t *testing.T) {
 	// Column already present -> migration must succeed without changing anything.
 	require.NoError(t, migrateAnalyticsAttributionColumns(db))
 
-	for _, m := range []interface{}{&Token{}, &TopUp{}, &SubscriptionOrder{}} {
+	for _, m := range analyticsAttributionModels {
 		require.True(t, db.Migrator().HasColumn(m, "AnalyticsAttribution"),
 			"analytics_attribution should remain present after idempotent run")
 	}
