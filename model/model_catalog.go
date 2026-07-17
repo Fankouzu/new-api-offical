@@ -95,6 +95,39 @@ func normalizeModelName(name string) string {
 	return dateSuffixRe.ReplaceAllString(s, "")
 }
 
+// catalogModalityAllowlist maps models.dev modality strings to the frontend
+// Modality vocabulary (text/image/audio/video/file). Unknown values are dropped
+// so the UI's icon lookup (MODALITY_META) never receives a key it has no entry
+// for — models.dev sends e.g. "pdf" which would otherwise crash ModalityIcons.
+var catalogModalityAllowlist = map[string]string{
+	"text":     "text",
+	"image":    "image",
+	"audio":    "audio",
+	"video":    "video",
+	"file":     "file",
+	"pdf":      "file",
+	"document": "file",
+}
+
+// normalizeModalities maps/dedups modality values to the known vocabulary,
+// dropping anything unrecognized.
+func normalizeModalities(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, m := range in {
+		mapped, ok := catalogModalityAllowlist[strings.ToLower(strings.TrimSpace(m))]
+		if !ok {
+			continue
+		}
+		if _, dup := seen[mapped]; dup {
+			continue
+		}
+		seen[mapped] = struct{}{}
+		out = append(out, mapped)
+	}
+	return out
+}
+
 func containsString(slice []string, v string) bool {
 	for _, s := range slice {
 		if s == v {
@@ -118,8 +151,8 @@ func buildSpec(raw rawCatalogModel) *ModelCatalogSpec {
 		spec.MaxOutputTokens = raw.Limit.Output
 	}
 	if raw.Modalities != nil {
-		spec.InputModalities = raw.Modalities.Input
-		spec.OutputModalities = raw.Modalities.Output
+		spec.InputModalities = normalizeModalities(raw.Modalities.Input)
+		spec.OutputModalities = normalizeModalities(raw.Modalities.Output)
 	}
 
 	caps := make([]string, 0, 8)

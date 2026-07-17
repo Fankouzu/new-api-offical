@@ -102,6 +102,16 @@ func TestParseCatalogBuildsNormalizedIndex(t *testing.T) {
 	}
 }
 
+func TestNormalizeModalities(t *testing.T) {
+	// "pdf"/"document" map to the frontend's "file"; unknown values drop;
+	// duplicates collapse. This guards the UI's MODALITY_META icon lookup.
+	got := normalizeModalities([]string{"text", "image", "pdf", "PDF", "bogus", "audio", "document"})
+	want := []string{"text", "image", "file", "audio"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("normalizeModalities = %v, want %v", got, want)
+	}
+}
+
 func TestParseCatalogInvalidJSON(t *testing.T) {
 	if _, err := parseCatalog([]byte("{not json")); err == nil {
 		t.Fatalf("expected error for invalid json, got nil")
