@@ -294,7 +294,7 @@ func migrateDB() error {
 	// Repair analytics_attribution on tokens/top_ups/subscription_orders if AutoMigrate
 	// left it missing (older databases or partial migration), otherwise token creation
 	// fails with SQLSTATE 42703.
-	if err := migrateAnalyticsAttributionColumns(DB); err != nil {
+	if err := migrateAnalyticsAttributionColumns(); err != nil {
 		return err
 	}
 	if common.UsingSQLite {
@@ -380,7 +380,7 @@ func migrateDBFast() error {
 	// Repair analytics_attribution on tokens/top_ups/subscription_orders if AutoMigrate
 	// left it missing (older databases or partial migration), otherwise token creation
 	// fails with SQLSTATE 42703.
-	if err := migrateAnalyticsAttributionColumns(DB); err != nil {
+	if err := migrateAnalyticsAttributionColumns(); err != nil {
 		return err
 	}
 	common.SysLog("database migrated")
@@ -542,15 +542,15 @@ var analyticsAttributionModels = []interface{}{&Token{}, &TopUp{}, &Subscription
 // Safe to run multiple times: it only acts when the column is absent. Tables that have not
 // been created yet (a partially-migrated schema) are skipped, mirroring the HasTable guard
 // used by migrateTokenModelLimitsToText / migrateSubscriptionPlanPriceAmount.
-func migrateAnalyticsAttributionColumns(db *gorm.DB) error {
+func migrateAnalyticsAttributionColumns() error {
 	for _, m := range analyticsAttributionModels {
-		if !db.Migrator().HasTable(m) {
+		if !DB.Migrator().HasTable(m) {
 			continue
 		}
-		if db.Migrator().HasColumn(m, "AnalyticsAttribution") {
+		if DB.Migrator().HasColumn(m, "AnalyticsAttribution") {
 			continue
 		}
-		if err := db.Migrator().AddColumn(m, "AnalyticsAttribution"); err != nil {
+		if err := DB.Migrator().AddColumn(m, "AnalyticsAttribution"); err != nil {
 			return fmt.Errorf("failed to add analytics_attribution column: %w", err)
 		}
 		common.SysLog("Successfully added missing analytics_attribution column")

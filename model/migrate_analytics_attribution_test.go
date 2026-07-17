@@ -68,7 +68,7 @@ func TestMigrateAnalyticsAttributionColumns_AddsMissingColumn(t *testing.T) {
 	}
 
 	// The repair must add the missing column to every affected table.
-	require.NoError(t, migrateAnalyticsAttributionColumns(db))
+	require.NoError(t, migrateAnalyticsAttributionColumns())
 
 	for _, m := range analyticsAttributionModels {
 		require.True(t, db.Migrator().HasColumn(m, "AnalyticsAttribution"),
@@ -88,7 +88,7 @@ func TestMigrateAnalyticsAttributionColumns_SkipsMissingTables(t *testing.T) {
 	require.False(t, db.Migrator().HasTable(&Token{}), "precondition: tokens table should not exist")
 
 	// Must return nil: every absent table is skipped, not treated as a hard error.
-	require.NoError(t, migrateAnalyticsAttributionColumns(db))
+	require.NoError(t, migrateAnalyticsAttributionColumns())
 }
 
 // TestMigrateAnalyticsAttributionColumns_Idempotent confirms the migration is a safe
@@ -98,7 +98,7 @@ func TestMigrateAnalyticsAttributionColumns_Idempotent(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&Token{}, &TopUp{}, &SubscriptionOrder{}))
 
 	// Column already present -> migration must succeed without changing anything.
-	require.NoError(t, migrateAnalyticsAttributionColumns(db))
+	require.NoError(t, migrateAnalyticsAttributionColumns())
 
 	for _, m := range analyticsAttributionModels {
 		require.True(t, db.Migrator().HasColumn(m, "AnalyticsAttribution"),
