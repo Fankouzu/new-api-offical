@@ -49,6 +49,11 @@ func TestParseCatalogBuildsNormalizedIndex(t *testing.T) {
 					"tool_call": true,
 					"structured_output": false,
 					"reasoning": true,
+					"reasoning_options": [
+						{"type": "effort", "values": ["high", "max"]},
+						{"type": "toggle"}
+					],
+					"temperature": false,
 					"modalities": {"input": ["text"], "output": ["text"]},
 					"limit": {"context": 256000, "output": 32768}
 				}
@@ -99,6 +104,21 @@ func TestParseCatalogBuildsNormalizedIndex(t *testing.T) {
 	}
 	if contains(db.Capabilities, "vision") {
 		t.Errorf("doubao-seed-1.6 should not have vision: %v", db.Capabilities)
+	}
+
+	// temperature signal: gpt-4o supports it, doubao-seed-1.6 does not.
+	if spec.SupportsTemperature == nil || !*spec.SupportsTemperature {
+		t.Errorf("gpt-4o supports_temperature = %v, want true", spec.SupportsTemperature)
+	}
+	if db.SupportsTemperature == nil || *db.SupportsTemperature {
+		t.Errorf("doubao-seed-1.6 supports_temperature = %v, want false", db.SupportsTemperature)
+	}
+	// reasoning effort values extracted from reasoning_options (effort type only).
+	if !reflect.DeepEqual(db.ReasoningEffortValues, []string{"high", "max"}) {
+		t.Errorf("doubao-seed-1.6 reasoning_effort_values = %v, want [high max]", db.ReasoningEffortValues)
+	}
+	if len(spec.ReasoningEffortValues) != 0 {
+		t.Errorf("gpt-4o reasoning_effort_values = %v, want empty", spec.ReasoningEffortValues)
 	}
 }
 

@@ -44,9 +44,11 @@ type Pricing struct {
 	MaxOutputTokens  int      `json:"max_output_tokens,omitempty"`
 	KnowledgeCutoff  string   `json:"knowledge_cutoff,omitempty"`
 	ReleaseDate      string   `json:"release_date,omitempty"`
-	InputModalities  []string `json:"input_modalities,omitempty"`
-	OutputModalities []string `json:"output_modalities,omitempty"`
-	Capabilities     []string `json:"capabilities,omitempty"`
+	InputModalities     []string `json:"input_modalities,omitempty"`
+	OutputModalities    []string `json:"output_modalities,omitempty"`
+	Capabilities        []string `json:"capabilities,omitempty"`
+	SupportsTemperature *bool    `json:"supports_temperature,omitempty"`
+	ReasoningEffortValues []string `json:"reasoning_effort_values,omitempty"`
 }
 
 type PricingVendor struct {
@@ -325,6 +327,8 @@ func updatePricing() {
 			pricing.InputModalities = spec.InputModalities
 			pricing.OutputModalities = spec.OutputModalities
 			pricing.Capabilities = spec.Capabilities
+			pricing.SupportsTemperature = spec.SupportsTemperature
+			pricing.ReasoningEffortValues = spec.ReasoningEffortValues
 		}
 		modelPrice, findPrice := ratio_setting.GetModelPrice(model, false)
 		if findPrice {

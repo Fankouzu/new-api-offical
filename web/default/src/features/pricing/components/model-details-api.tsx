@@ -569,7 +569,7 @@ function SupportedParametersSection(props: { model: PricingModel }) {
 
   return (
     <section>
-      <SectionTitle icon={Sigma}>{t('Supported parameters')}</SectionTitle>
+      <SectionTitle icon={Sigma}>{t('Common parameters')}</SectionTitle>
       <div className='border-border/60 overflow-hidden rounded-lg border'>
         <Table>
           <TableHeader>
@@ -621,6 +621,11 @@ function SupportedParametersSection(props: { model: PricingModel }) {
           </TableBody>
         </Table>
       </div>
+      <p className='text-muted-foreground mt-2 text-[11px] leading-relaxed'>
+        {t(
+          'Common OpenAI-compatible request parameters. Availability varies by provider; parameters a model does not support are typically ignored.'
+        )}
+      </p>
     </section>
   )
 }

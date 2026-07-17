@@ -783,19 +783,49 @@ function apiCategoryOf(model: PricingModel): ApiCategory {
 }
 
 /**
+ * Apply per-model signals from the models.dev catalog to a base parameter:
+ * - drop `temperature` when the catalog explicitly says the model does not
+ *   support it;
+ * - override `reasoning_effort` enum values with the model's real options.
+ * Returns null to drop the parameter.
+ */
+function applyCatalogSignals(
+  param: SupportedParameter,
+  model: PricingModel
+): SupportedParameter | null {
+  if (param.name === 'temperature' && model.supports_temperature === false) {
+    return null
+  }
+  if (
+    param.name === 'reasoning_effort' &&
+    model.reasoning_effort_values &&
+    model.reasoning_effort_values.length > 0
+  ) {
+    return { ...param, enumValues: model.reasoning_effort_values }
+  }
+  return param
+}
+
+/**
  * Build the list of request parameters that the model accepts. The list is
  * shaped per-modality so reasoning, embedding, image, video and chat models
- * each show their relevant parameter set.
+ * each show their relevant parameter set, then refined with the model's real
+ * catalog signals (temperature support, reasoning effort options).
  */
 export function buildSupportedParameters(
   model: PricingModel
 ): SupportedParameter[] {
   const cat = apiCategoryOf(model)
-  if (cat === 'reasoning') return REASONING_PARAMS
-  if (cat === 'embedding') return EMBEDDING_PARAMS
-  if (cat === 'image') return IMAGE_PARAMS
-  if (cat === 'video') return VIDEO_PARAMS
-  return COMMON_CHAT_PARAMS
+  let base: SupportedParameter[]
+  if (cat === 'reasoning') base = REASONING_PARAMS
+  else if (cat === 'embedding') base = EMBEDDING_PARAMS
+  else if (cat === 'image') base = IMAGE_PARAMS
+  else if (cat === 'video') base = VIDEO_PARAMS
+  else base = COMMON_CHAT_PARAMS
+
+  return base
+    .map((param) => applyCatalogSignals(param, model))
+    .filter((param): param is SupportedParameter => param !== null)
 }
 
 export type RateLimit = {

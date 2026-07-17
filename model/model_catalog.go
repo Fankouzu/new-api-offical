@@ -49,15 +49,17 @@ var (
 // detail page. Field json tags intentionally match PricingModel in the frontend
 // (web/default/src/features/pricing/types.ts) so values flow through unchanged.
 type ModelCatalogSpec struct {
-	ContextLength    int      `json:"context_length,omitempty"`
-	MaxInputTokens   int      `json:"max_input_tokens,omitempty"`
-	MaxOutputTokens  int      `json:"max_output_tokens,omitempty"`
-	KnowledgeCutoff  string   `json:"knowledge_cutoff,omitempty"`
-	ReleaseDate      string   `json:"release_date,omitempty"`
-	InputModalities  []string `json:"input_modalities,omitempty"`
-	OutputModalities []string `json:"output_modalities,omitempty"`
-	Capabilities     []string `json:"capabilities,omitempty"`
-	OpenWeights      bool     `json:"open_weights,omitempty"`
+	ContextLength       int      `json:"context_length,omitempty"`
+	MaxInputTokens      int      `json:"max_input_tokens,omitempty"`
+	MaxOutputTokens     int      `json:"max_output_tokens,omitempty"`
+	KnowledgeCutoff     string   `json:"knowledge_cutoff,omitempty"`
+	ReleaseDate         string   `json:"release_date,omitempty"`
+	InputModalities     []string `json:"input_modalities,omitempty"`
+	OutputModalities    []string `json:"output_modalities,omitempty"`
+	Capabilities        []string `json:"capabilities,omitempty"`
+	OpenWeights         bool     `json:"open_weights,omitempty"`
+	SupportsTemperature *bool    `json:"supports_temperature,omitempty"`
+	ReasoningEffortValues []string `json:"reasoning_effort_values,omitempty"`
 }
 
 // raw catalog JSON shapes (a subset of the models.dev schema we care about).
@@ -66,16 +68,24 @@ type rawCatalogProvider struct {
 }
 
 type rawCatalogModel struct {
-	Limit           *rawCatalogLimit `json:"limit"`
-	Knowledge       string           `json:"knowledge"`
-	ReleaseDate     string           `json:"release_date"`
-	Modalities      *rawCatalogMod   `json:"modalities"`
-	ToolCall        bool             `json:"tool_call"`
-	StructuredOut   bool             `json:"structured_output"`
-	Reasoning       bool             `json:"reasoning"`
-	Attachment      bool             `json:"attachment"`
-	OpenWeights     bool             `json:"open_weights"`
-	Temperature     bool             `json:"temperature"`
+	Limit            *rawCatalogLimit            `json:"limit"`
+	Knowledge        string                      `json:"knowledge"`
+	ReleaseDate      string                      `json:"release_date"`
+	Modalities       *rawCatalogMod              `json:"modalities"`
+	ToolCall         bool                        `json:"tool_call"`
+	StructuredOut    bool                        `json:"structured_output"`
+	Reasoning        bool                        `json:"reasoning"`
+	ReasoningOptions []rawCatalogReasoningOption `json:"reasoning_options"`
+	Attachment       bool                        `json:"attachment"`
+	OpenWeights      bool                        `json:"open_weights"`
+	Temperature      bool                        `json:"temperature"`
+}
+
+// rawCatalogReasoningOption mirrors models.dev's reasoning_options entries,
+// e.g. {"type":"effort","values":["low","medium","high"]} or {"type":"toggle"}.
+type rawCatalogReasoningOption struct {
+	Type   string   `json:"type"`
+	Values []string `json:"values"`
 }
 
 type rawCatalogLimit struct {
@@ -137,13 +147,27 @@ func containsString(slice []string, v string) bool {
 	return false
 }
 
+// extractReasoningEffort returns the effort values (e.g. ["low","medium","high"])
+// from a models.dev reasoning_options list, or nil if it has no effort option.
+func extractReasoningEffort(opts []rawCatalogReasoningOption) []string {
+	for _, o := range opts {
+		if strings.EqualFold(o.Type, "effort") && len(o.Values) > 0 {
+			return o.Values
+		}
+	}
+	return nil
+}
+
 // buildSpec maps a raw models.dev entry to the public spec, including a
 // capabilities list expressed in the frontend's ModelCapability vocabulary.
 func buildSpec(raw rawCatalogModel) *ModelCatalogSpec {
+	supportsTemperature := raw.Temperature
 	spec := &ModelCatalogSpec{
-		KnowledgeCutoff: raw.Knowledge,
-		ReleaseDate:     raw.ReleaseDate,
-		OpenWeights:     raw.OpenWeights,
+		KnowledgeCutoff:       raw.Knowledge,
+		ReleaseDate:           raw.ReleaseDate,
+		OpenWeights:           raw.OpenWeights,
+		SupportsTemperature:   &supportsTemperature,
+		ReasoningEffortValues: extractReasoningEffort(raw.ReasoningOptions),
 	}
 	if raw.Limit != nil {
 		spec.ContextLength = raw.Limit.Context
