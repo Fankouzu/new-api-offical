@@ -18,6 +18,53 @@ func ResolveMeta(requestURI string, baseURL string, pricings []model.Pricing) Me
 	return ResolveMetaForTheme(requestURI, baseURL, pricings, "")
 }
 
+// IsKnownRoute distinguishes valid SPA routes from arbitrary paths. Returning
+// the SPA shell for arbitrary paths makes search engines classify them as soft 404s.
+func IsKnownRoute(requestURI string, pricings []model.Pricing, theme string) bool {
+	path := normalizePath(requestURI)
+	catalog := BuildCatalog(pricings)
+
+	switch {
+	case path == "/", path == "/pricing", path == "/compare/ai-api-pricing":
+		return true
+	case path == "/rankings":
+		return theme != "classic"
+	case path == "/about", path == "/privacy-policy", path == "/user-agreement":
+		return true
+	case path == "/pricing/":
+		return false
+	case strings.HasPrefix(path, "/pricing/"):
+		modelID, err := url.PathUnescape(strings.TrimPrefix(path, "/pricing/"))
+		if err != nil {
+			modelID = strings.TrimPrefix(path, "/pricing/")
+		}
+		_, ok := findModel(catalog, modelID)
+		return ok
+	case path == "/login", path == "/sign-in", path == "/register", path == "/sign-up",
+		path == "/reset", path == "/forgot-password", path == "/user/reset", path == "/setup",
+		path == "/otp", path == "/chat2link", path == "/401", path == "/403", path == "/404",
+		path == "/500", path == "/503":
+		return true
+	case strings.HasPrefix(path, "/oauth/"):
+		return true
+	case isAuthenticatedAppPath(path):
+		return true
+	case hasPathPrefix(path, "/system-settings", "/errors", "/site", "/security", "/operations", "/models", "/content", "/billing", "/auth"):
+		return true
+	default:
+		return false
+	}
+}
+
+func hasPathPrefix(path string, prefixes ...string) bool {
+	for _, prefix := range prefixes {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 func ResolveMetaForTheme(requestURI string, baseURL string, pricings []model.Pricing, theme string) Meta {
 	path := normalizePath(requestURI)
 	base := normalizeBaseURL(baseURL)

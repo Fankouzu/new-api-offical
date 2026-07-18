@@ -60,9 +60,14 @@ func SetWebRouter(router *gin.Engine, assets ThemeAssets) {
 			controller.RelayNotFound(c)
 			return
 		}
-		c.Header("Cache-Control", "no-cache")
 		theme := common.GetTheme()
-		meta := webseo.ResolveMetaForTheme(c.Request.RequestURI, system_setting.ServerAddress, model.GetPricing(), theme)
+		pricings := model.GetPricing()
+		if !webseo.IsKnownRoute(c.Request.RequestURI, pricings, theme) {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Header("Cache-Control", "no-cache")
+		meta := webseo.ResolveMetaForTheme(c.Request.RequestURI, system_setting.ServerAddress, pricings, theme)
 		if theme == "classic" {
 			c.Data(http.StatusOK, "text/html; charset=utf-8", webseo.RenderIndexHTML(assets.ClassicIndexPage, meta))
 		} else {

@@ -252,6 +252,21 @@ func TestBuildRobotsAndSitemap(t *testing.T) {
 	}
 }
 
+func TestIsKnownRouteRejectsUnknownAndMissingModelPaths(t *testing.T) {
+	if !IsKnownRoute("/pricing", nil, "") {
+		t.Fatal("pricing should be a known public route")
+	}
+	if IsKnownRoute("/pricing/missing-model", nil, "") {
+		t.Fatal("missing model page should not be treated as a valid route")
+	}
+	if IsKnownRoute("/this-page-does-not-exist", nil, "") {
+		t.Fatal("unknown paths should not fall back to the SPA shell")
+	}
+	if !IsKnownRoute("/console/topup", nil, "") {
+		t.Fatal("authenticated SPA routes should keep their fallback")
+	}
+}
+
 func TestBuildSitemapOnlyIncludesIndexableURLs(t *testing.T) {
 	sitemap := BuildSitemapXML("https://lizh.ai", testCatalog)
 	for _, url := range sitemapURLs(t, sitemap) {
