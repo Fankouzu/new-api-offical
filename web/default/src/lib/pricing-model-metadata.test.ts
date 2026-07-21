@@ -19,8 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { PricingModel } from '../types'
-import { inferModelMetadata } from './model-metadata'
+import { inferModelMetadata } from '../features/pricing/lib/model-metadata'
+import type { PricingModel } from '../features/pricing/types'
 
 function pricingModel(overrides: Partial<PricingModel> = {}): PricingModel {
   return {
