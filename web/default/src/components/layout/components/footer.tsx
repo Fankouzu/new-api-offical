@@ -18,6 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo } from 'react'
 import { Link } from '@tanstack/react-router'
+import { activeSkinBuild } from '@/skins/runtime/active-skin-build.gen'
+import type { SkinBuildManifest } from '@/skins/runtime/build-contracts'
+import { mergeSkinFooterLinks } from '@/skins/runtime/navigation'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useSystemConfig } from '@/hooks/use-system-config'
@@ -95,7 +98,7 @@ function ProjectAttribution(props: { currentYear: number }) {
   )
 }
 
-function LegalLinks() {
+function LegalLinks(props: { skinLinks?: readonly FooterLink[] }) {
   const { t } = useTranslation()
 
   return (
@@ -109,6 +112,12 @@ function LegalLinks() {
       >
         {t('Privacy Policy')}
       </Link>
+      {props.skinLinks?.map((link) => (
+        <span key={link.href} className='contents'>
+          <span aria-hidden='true'>|</span>
+          <FooterLinkItem link={link} />
+        </span>
+      ))}
       <span aria-hidden='true'>|</span>
       <Link
         to='/user-agreement'
@@ -133,7 +142,6 @@ export function Footer(props: FooterProps) {
   const displayName = systemName || props.name || 'New API'
   const isDemoSiteMode = Boolean(demoSiteEnabled)
   const currentYear = new Date().getFullYear()
-
   const fallbackColumns = useMemo<FooterColumnProps[]>(
     () => [
       {
@@ -192,6 +200,18 @@ export function Footer(props: FooterProps) {
   )
 
   const displayColumns = props.columns ?? fallbackColumns
+  const skinFooterLinks = useMemo(() => {
+    const hostLinks = [
+      { text: 'Privacy Policy', href: '/privacy-policy' },
+      { text: 'Terms of Service', href: '/user-agreement' },
+      ...displayColumns.flatMap((column) => column.links),
+    ]
+    return mergeSkinFooterLinks(
+      hostLinks,
+      (activeSkinBuild as SkinBuildManifest).routes,
+      t
+    ).slice(hostLinks.length)
+  }, [displayColumns, t])
 
   if (footerHtml) {
     return (
@@ -207,7 +227,7 @@ export function Footer(props: FooterProps) {
               className='custom-footer text-muted-foreground min-w-0 text-center text-sm sm:text-left'
               dangerouslySetInnerHTML={{ __html: footerHtml }}
             />
-            <LegalLinks />
+            <LegalLinks skinLinks={skinFooterLinks} />
             <div className='border-border/60 w-full border-t pt-4 sm:w-auto sm:border-t-0 sm:border-l sm:pt-0 sm:pl-5'>
               <ProjectAttribution currentYear={currentYear} />
             </div>
@@ -268,7 +288,7 @@ export function Footer(props: FooterProps) {
               &copy; {currentYear} {displayName}.{' '}
               {props.copyright ?? t('footer.defaultCopyright')}
             </p>
-            <LegalLinks />
+            <LegalLinks skinLinks={skinFooterLinks} />
           </div>
           <ProjectAttribution currentYear={currentYear} />
         </div>

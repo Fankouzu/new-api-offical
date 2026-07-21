@@ -12,6 +12,11 @@ type HeaderLink = {
   icon?: string
 }
 
+type FooterLink = {
+  text: string
+  href: string
+}
+
 function isValidHeaderNavigation(
   navigation: SkinRouteNavigation | undefined
 ): navigation is SkinRouteNavigation & { position: 'header' } {
@@ -50,6 +55,43 @@ export function mergeSkinHeaderLinks<T extends HeaderLink>(
 
     occupiedPaths.add(route.path)
     result.push({ title: t(route.navigation.labelKey), href: route.path })
+  }
+
+  return result
+}
+
+export function mergeSkinFooterLinks<T extends FooterLink>(
+  hostLinks: readonly T[],
+  routes: readonly SkinRouteBuildDefinition[],
+  t: (key: string) => string
+): Array<T | FooterLink> {
+  const result: Array<T | FooterLink> = [...hostLinks]
+  const occupiedPaths = new Set(hostLinks.map((link) => link.href))
+  const contributions = routes
+    .filter(
+      (route) =>
+        route.navigation?.position === 'footer' &&
+        typeof route.navigation.labelKey === 'string' &&
+        route.navigation.labelKey.trim() !== '' &&
+        (route.navigation.order === undefined ||
+          (Number.isInteger(route.navigation.order) &&
+            route.navigation.order >= 0))
+    )
+    .sort(
+      (left, right) =>
+        (left.navigation?.order ?? Number.POSITIVE_INFINITY) -
+          (right.navigation?.order ?? Number.POSITIVE_INFINITY) ||
+        left.path.localeCompare(right.path)
+    )
+
+  for (const route of contributions) {
+    if (
+      occupiedPaths.has(route.path) ||
+      route.navigation?.position !== 'footer'
+    )
+      continue
+    occupiedPaths.add(route.path)
+    result.push({ text: t(route.navigation.labelKey), href: route.path })
   }
 
   return result

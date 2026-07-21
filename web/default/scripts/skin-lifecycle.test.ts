@@ -21,7 +21,10 @@ async function createLifecycleFixture() {
     const skinDirectory = path.join(rootPath, 'src', 'skins', skinId)
     await mkdir(skinDirectory, { recursive: true })
     await Promise.all([
-      writeFile(path.join(skinDirectory, 'manifest.ts'), 'export default {}\n'),
+      writeFile(
+        path.join(skinDirectory, 'manifest.ts'),
+        `const build = { id: '${skinId}', routes: [] }; export default { id: '${skinId}', build, pages: {}, routes: [] }\n`
+      ),
       writeFile(
         path.join(skinDirectory, 'build-manifest.ts'),
         `export default { id: '${skinId}', routes: [] }\n`

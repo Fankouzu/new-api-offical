@@ -316,6 +316,82 @@ async function createSkinProjectFixture(): Promise<{
 }
 
 describe('skin generator', () => {
+  it('rejects a missing route component before replacing generated outputs', async () => {
+    const fixture = await createSkinProjectFixture()
+    try {
+      await Promise.all([
+        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `function Missing() {}
+const build = { id: 'custom', routes: [{ id: 'missing', path: '/missing', componentImport: './routes/missing' }] }
+export default { id: 'custom', build, pages: {}, routes: [{ id: 'missing', path: '/missing', component: Missing }] }\n`),
+        writeFile(path.join(fixture.skinDirectory, 'build-manifest.ts'), `export default { id: 'custom', routes: [{ id: 'missing', path: '/missing', componentImport: './routes/missing' }] }\n`),
+      ])
+      await assert.rejects(
+        generateSkin({ projectRoot: fixture.projectRoot, skinId: 'custom' }),
+        /route "missing" component import.*cannot be resolved/i
+      )
+      assert.deepEqual(await readdir(fixture.runtimeDirectory), [])
+    } finally {
+      await rm(fixture.rootPath, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects runtime route metadata drift before generation', async () => {
+    const fixture = await createSkinProjectFixture()
+    try {
+      await mkdir(path.join(fixture.skinDirectory, 'routes'), { recursive: true })
+      await Promise.all([
+        writeFile(path.join(fixture.skinDirectory, 'routes', 'solutions.ts'), 'export default function Solutions() {}\n'),
+        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `import Solutions from './routes/solutions'
+const build = { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] }
+export default { id: 'custom', build, pages: {}, routes: [{ id: 'solutions', path: '/drifted', component: Solutions }] }\n`),
+        writeFile(path.join(fixture.skinDirectory, 'build-manifest.ts'), `export default { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] }\n`),
+      ])
+      await assert.rejects(
+        generateSkin({ projectRoot: fixture.projectRoot, skinId: 'custom' }),
+        /route "solutions" runtime path mismatch.*\/drifted/i
+      )
+    } finally {
+      await rm(fixture.rootPath, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects an embedded runtime build manifest that differs from the generated build manifest', async () => {
+    const fixture = await createSkinProjectFixture()
+    try {
+      await mkdir(path.join(fixture.skinDirectory, 'routes'), { recursive: true })
+      await Promise.all([
+        writeFile(path.join(fixture.skinDirectory, 'routes', 'solutions.ts'), 'export default function Solutions() {}\n'),
+        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `import Solutions from './routes/solutions'
+const build = { id: 'custom', routes: [{ id: 'solutions', path: '/old', componentImport: './routes/solutions' }] }
+export default { id: 'custom', build, pages: {}, routes: [{ id: 'solutions', path: '/solutions', component: Solutions }] }\n`),
+        writeFile(path.join(fixture.skinDirectory, 'build-manifest.ts'), `export default { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] }\n`),
+      ])
+      await assert.rejects(
+        generateSkin({ projectRoot: fixture.projectRoot, skinId: 'custom' }),
+        /embedded build manifest.*solutions.*path/i
+      )
+    } finally {
+      await rm(fixture.rootPath, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a runtime component that differs from componentImport', async () => {
+    const fixture = await createSkinProjectFixture()
+    try {
+      await mkdir(path.join(fixture.skinDirectory, 'routes'), { recursive: true })
+      await Promise.all([
+        writeFile(path.join(fixture.skinDirectory, 'routes', 'solutions.ts'), 'export default function Imported() {}\n'),
+        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `function RuntimeOnly() {}; const build = { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] }; export default { id: 'custom', build, pages: {}, routes: [{ id: 'solutions', path: '/solutions', component: RuntimeOnly }] }\n`),
+        writeFile(path.join(fixture.skinDirectory, 'build-manifest.ts'), `export default { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] }\n`),
+      ])
+      await assert.rejects(
+        generateSkin({ projectRoot: fixture.projectRoot, skinId: 'custom' }),
+        /runtime component does not match componentImport/i
+      )
+    } finally {
+      await rm(fixture.rootPath, { recursive: true, force: true })
+    }
+  })
   it('rejects invalid navigation before replacing generated outputs', async () => {
     const fixture = await createSkinProjectFixture()
     const generatedDirectory = path.join(
@@ -327,7 +403,7 @@ describe('skin generator', () => {
     try {
       await mkdir(generatedDirectory, { recursive: true })
       await Promise.all([
-        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), 'export default {}\n'),
+        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `const build = { id: 'custom', routes: [] }; export default { id: 'custom', build, pages: {}, routes: [] }\n`),
         writeFile(
           path.join(fixture.skinDirectory, 'build-manifest.ts'),
           `export default {
@@ -396,7 +472,7 @@ describe('skin generator', () => {
     const fixture = await createSkinProjectFixture()
     try {
       await Promise.all([
-        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), 'export default {}\n'),
+        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `const build = { id: 'custom', routes: [] }; export default { id: 'custom', build, pages: {}, routes: [] }\n`),
         writeFile(
           path.join(fixture.skinDirectory, 'build-manifest.ts'),
           "export default { id: 'custom', routes: [] }\n"
@@ -424,7 +500,7 @@ describe('skin generator', () => {
     const fixture = await createSkinProjectFixture()
     try {
       await Promise.all([
-        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), 'export default {}\n'),
+        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `const build = { id: 'custom', routes: [] }; export default { id: 'custom', build, pages: {}, routes: [] }\n`),
         writeFile(
           path.join(fixture.skinDirectory, 'build-manifest.ts'),
           "export default { id: 'custom', routes: [] }\n"
@@ -453,7 +529,10 @@ describe('skin generator', () => {
     try {
       await Promise.all([
         mkdir(path.join(generatedDirectory, 'stale'), { recursive: true }),
-        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), 'export default {}\n'),
+        mkdir(path.join(fixture.skinDirectory, 'routes'), { recursive: true }),
+        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `import Solutions from './routes/solutions'; import Guide from './routes/guide';
+const build = { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }, { id: 'guide', path: '/guides/$slug', componentImport: './routes/guide' }] };
+export default { id: 'custom', build, pages: {}, routes: [{ id: 'solutions', path: '/solutions', component: Solutions }, { id: 'guide', path: '/guides/$slug', component: Guide }] }\n`),
         writeFile(
           path.join(fixture.skinDirectory, 'build-manifest.ts'),
           `export default {
@@ -466,6 +545,8 @@ describe('skin generator', () => {
         ),
       ])
       await Promise.all([
+        writeFile(path.join(fixture.skinDirectory, 'routes', 'solutions.ts'), 'export default function Solutions() {}\n'),
+        writeFile(path.join(fixture.skinDirectory, 'routes', 'guide.ts'), 'export default function Guide() {}\n'),
         writeFile(path.join(generatedDirectory, '.gitignore'), '*.tsx\n!/.gitignore\n'),
         writeFile(path.join(generatedDirectory, 'notes.txt'), 'preserve\n'),
         writeFile(path.join(generatedDirectory, 'stale', 'old.tsx'), 'stale\n'),
@@ -501,8 +582,10 @@ describe('skin generator', () => {
       'solutions.tsx'
     )
     try {
+      await mkdir(path.join(fixture.skinDirectory, 'routes'), { recursive: true })
       await Promise.all([
-        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), 'export default {}\n'),
+        writeFile(path.join(fixture.skinDirectory, 'routes', 'solutions.ts'), 'export default function Solutions() {}\n'),
+        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `import Solutions from './routes/solutions'; const build = { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] }; export default { id: 'custom', build, pages: {}, routes: [{ id: 'solutions', path: '/solutions', component: Solutions }] }\n`),
         writeFile(
           path.join(fixture.skinDirectory, 'build-manifest.ts'),
           `export default {
@@ -530,7 +613,7 @@ describe('skin generator', () => {
     try {
       await Promise.all([
         mkdir(path.join(generatedDirectory, 'nested'), { recursive: true }),
-        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), 'export default {}\n'),
+        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `const build = { id: 'custom', routes: [] }; export default { id: 'custom', build, pages: {}, routes: [] }\n`),
         writeFile(
           path.join(fixture.skinDirectory, 'build-manifest.ts'),
           "export default { id: 'custom', routes: [] }\n"
@@ -555,9 +638,11 @@ describe('skin generator', () => {
     const fixture = await createSkinProjectFixture()
     const generatedDirectory = path.join(fixture.rootPath, 'src', 'routes', '(skin-generated)')
     try {
+      await mkdir(path.join(fixture.skinDirectory, 'routes'), { recursive: true })
       await Promise.all([
         mkdir(generatedDirectory, { recursive: true }),
-        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), 'export default {}\n'),
+        writeFile(path.join(fixture.skinDirectory, 'routes', 'solutions.ts'), 'export default function Solutions() {}\n'),
+        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `import Solutions from './routes/solutions'; const build = { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] }; export default { id: 'custom', build, pages: {}, routes: [{ id: 'solutions', path: '/solutions', component: Solutions }] }\n`),
         writeFile(
           path.join(fixture.skinDirectory, 'build-manifest.ts'),
           `export default {
@@ -582,6 +667,77 @@ describe('skin generator', () => {
       assert.equal(await readFile(path.join(generatedDirectory, 'previous.tsx'), 'utf8'), 'previous\n')
       await assert.rejects(readFile(path.join(generatedDirectory, 'solutions.tsx'), 'utf8'))
       assert.deepEqual(await readdir(fixture.runtimeDirectory), [])
+    } finally {
+      await rm(fixture.rootPath, { recursive: true, force: true })
+    }
+  })
+
+  it('rolls back routes and selectors when selector publication fails', async () => {
+    const fixture = await createSkinProjectFixture()
+    const generatedDirectory = path.join(fixture.rootPath, 'src', 'routes', '(skin-generated)')
+    try {
+      await Promise.all([mkdir(generatedDirectory, { recursive: true }), mkdir(path.join(fixture.skinDirectory, 'routes'), { recursive: true })])
+      await Promise.all([
+        writeFile(path.join(generatedDirectory, 'previous.tsx'), 'previous\n'),
+        writeFile(path.join(fixture.skinDirectory, 'routes', 'solutions.ts'), 'export default function Solutions() {}\n'),
+        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `import Solutions from './routes/solutions'
+const build = { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] }
+export default { id: 'custom', build, pages: {}, routes: [{ id: 'solutions', path: '/solutions', component: Solutions }] }\n`),
+        writeFile(path.join(fixture.skinDirectory, 'build-manifest.ts'), `export default { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] }\n`),
+        writeFile(path.join(fixture.runtimeDirectory, 'active-skin.gen.ts'), 'runtime-old\n'),
+        writeFile(path.join(fixture.runtimeDirectory, 'active-skin-build.gen.ts'), 'build-old\n'),
+      ])
+      await assert.rejects(
+        generateSkin({ projectRoot: fixture.projectRoot, skinId: 'custom', afterSelectorWrite: async () => { throw new Error('selector failure') } }),
+        /selector failure/
+      )
+      assert.equal(await readFile(path.join(generatedDirectory, 'previous.tsx'), 'utf8'), 'previous\n')
+      assert.equal(await readFile(path.join(fixture.runtimeDirectory, 'active-skin.gen.ts'), 'utf8'), 'runtime-old\n')
+      assert.equal(await readFile(path.join(fixture.runtimeDirectory, 'active-skin-build.gen.ts'), 'utf8'), 'build-old\n')
+    } finally {
+      await rm(fixture.rootPath, { recursive: true, force: true })
+    }
+  })
+
+  it('recovers an interrupted published route and selector set before validating the next skin', async () => {
+    const fixture = await createSkinProjectFixture()
+    const generatedDirectory = path.join(fixture.rootPath, 'src', 'routes', '(skin-generated)')
+    const backupDirectory = path.join(fixture.rootPath, 'src', 'routes', '.interrupted-backup')
+    const runtimeSelector = path.join(fixture.runtimeDirectory, 'active-skin.gen.ts')
+    const buildSelector = path.join(fixture.runtimeDirectory, 'active-skin-build.gen.ts')
+    try {
+      await Promise.all([
+        mkdir(generatedDirectory, { recursive: true }),
+        mkdir(backupDirectory, { recursive: true }),
+      ])
+      await Promise.all([
+        writeFile(path.join(generatedDirectory, 'new.tsx'), 'new\n'),
+        writeFile(path.join(backupDirectory, 'old.tsx'), 'old\n'),
+        writeFile(runtimeSelector, 'new-runtime\n'),
+        writeFile(buildSelector, 'new-build\n'),
+        writeFile(
+          path.join(fixture.runtimeDirectory, '.skin-generation-journal.json'),
+          JSON.stringify({
+            generatedDirectory,
+            routeBackupDirectory: backupDirectory,
+            routeWasPresent: true,
+            selectors: [
+              { filePath: runtimeSelector, content: 'old-runtime\n' },
+              { filePath: buildSelector, content: 'old-build\n' },
+            ],
+          })
+        ),
+      ])
+
+      await assert.rejects(
+        generateSkin({ projectRoot: fixture.projectRoot, skinId: 'missing' }),
+        /missing required file/
+      )
+      assert.equal(await readFile(path.join(generatedDirectory, 'old.tsx'), 'utf8'), 'old\n')
+      await assert.rejects(readFile(path.join(generatedDirectory, 'new.tsx'), 'utf8'))
+      assert.equal(await readFile(runtimeSelector, 'utf8'), 'old-runtime\n')
+      assert.equal(await readFile(buildSelector, 'utf8'), 'old-build\n')
+      await assert.rejects(readFile(path.join(fixture.runtimeDirectory, '.skin-generation-journal.json'), 'utf8'))
     } finally {
       await rm(fixture.rootPath, { recursive: true, force: true })
     }

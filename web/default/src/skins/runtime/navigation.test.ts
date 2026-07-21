@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { SkinRouteBuildDefinition } from './build-contracts'
-import { mergeSkinHeaderLinks } from './navigation'
+import { mergeSkinFooterLinks, mergeSkinHeaderLinks } from './navigation'
 
 const identity = (value: string) => value
 
@@ -136,4 +136,22 @@ test('mergeSkinHeaderLinks returns equal content in a new array without header r
   assert.deepEqual(result, hostLinks)
   assert.notEqual(result, hostLinks)
   assert.equal(result[0], hostLink)
+})
+
+test('mergeSkinFooterLinks sorts contributions and omits host collisions', () => {
+  const result = mergeSkinFooterLinks(
+    [{ text: 'Host', href: '/host' }],
+    [
+      route('/later', { labelKey: 'Later', position: 'footer', order: 20 }),
+      route('/host', { labelKey: 'Skin host', position: 'footer', order: 1 }),
+      route('/first', { labelKey: 'First', position: 'footer', order: 1 }),
+    ],
+    identity
+  )
+
+  assert.deepEqual(result, [
+    { text: 'Host', href: '/host' },
+    { text: 'First', href: '/first' },
+    { text: 'Later', href: '/later' },
+  ])
 })
