@@ -17,6 +17,8 @@ describe('CustomHeroCarousel', () => {
       assert.match(markup, new RegExp(image.replaceAll('/', '\\/')))
     }
     assert.match(markup, /object-cover/)
+    assert.match(markup, /custom-hero-slide/)
+    assert.match(markup, /is-active/)
     assert.match(markup, /aria-hidden="true"/)
   })
 

@@ -2,4 +2,24 @@
   [data-skin='custom'] [data-skin-shell='custom'] {
     --skin-font-body: var(--font-sans);
   }
+
+  .custom-hero-slide.is-active {
+    animation: custom-hero-zoom 5s linear forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .custom-hero-slide.is-active {
+      animation: none;
+    }
+  }
+
+  @keyframes custom-hero-zoom {
+    from {
+      transform: scale(1);
+    }
+
+    to {
+      transform: scale(1.08);
+    }
+  }
 }

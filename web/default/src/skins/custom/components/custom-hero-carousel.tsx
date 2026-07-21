@@ -61,8 +61,8 @@ export function CustomHeroCarousel() {
         src,
         alt: '',
         fetchPriority: index === 0 ? 'high' : 'auto',
-        className: `absolute inset-0 size-full object-cover transition-opacity duration-1000 ease-in-out motion-reduce:transition-none ${
-          index === activeIndex ? 'opacity-100' : 'opacity-0'
+        className: `custom-hero-slide absolute inset-0 size-full object-cover transition-opacity duration-1000 ease-in-out motion-reduce:transition-none ${
+          index === activeIndex ? 'is-active opacity-100' : 'opacity-0'
         }`,
       })
     ),
