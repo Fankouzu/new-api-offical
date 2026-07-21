@@ -1,5 +1,7 @@
-import type { SkinNavigationLink } from './contracts'
-import { assertSkinRouteAllowed } from './route-policy'
+import type {
+  SkinRouteBuildDefinition,
+  SkinRouteNavigation,
+} from './build-contracts'
 
 type HeaderLink = {
   title: string
@@ -10,49 +12,44 @@ type HeaderLink = {
   icon?: string
 }
 
+function isValidHeaderNavigation(
+  navigation: SkinRouteNavigation | undefined
+): navigation is SkinRouteNavigation & { position: 'header' } {
+  return (
+    navigation?.position === 'header' &&
+    typeof navigation.labelKey === 'string' &&
+    navigation.labelKey.trim() !== '' &&
+    (navigation.order === undefined ||
+      (Number.isInteger(navigation.order) && navigation.order >= 0))
+  )
+}
+
 export function mergeSkinHeaderLinks<T extends HeaderLink>(
   hostLinks: readonly T[],
-  contributions: readonly SkinNavigationLink[],
-  allowedPaths: readonly string[],
+  routes: readonly SkinRouteBuildDefinition[],
   t: (key: string) => string
 ): Array<T | HeaderLink> {
   const result: Array<T | HeaderLink> = [...hostLinks]
-  const allowedPathSet = new Set(allowedPaths)
-  const hostPaths = new Set(hostLinks.map((link) => link.href))
-  const contributionPaths = new Set<string>()
+  const occupiedPaths = new Set(hostLinks.map((link) => link.href))
+  const contributions = routes
+    .filter((route) => isValidHeaderNavigation(route.navigation))
+    .sort(
+      (left, right) =>
+        (left.navigation?.order ?? Number.POSITIVE_INFINITY) -
+          (right.navigation?.order ?? Number.POSITIVE_INFINITY) ||
+        left.path.localeCompare(right.path)
+    )
 
-  for (const contribution of contributions) {
-    if (contributionPaths.has(contribution.href)) {
-      throw new Error(
-        `Duplicate skin header navigation contribution: ${contribution.href}`
-      )
-    }
-    contributionPaths.add(contribution.href)
-
-    assertSkinRouteAllowed(contribution.href)
-
-    if (!allowedPathSet.has(contribution.href)) {
-      throw new Error(
-        `Skin header navigation path is not declared in active build routes: ${contribution.href}`
-      )
+  for (const route of contributions) {
+    if (
+      occupiedPaths.has(route.path) ||
+      !isValidHeaderNavigation(route.navigation)
+    ) {
+      continue
     }
 
-    if (hostPaths.has(contribution.href)) {
-      throw new Error(
-        `Skin header navigation conflicts with a host link: ${contribution.href}`
-      )
-    }
-  }
-
-  const sortedContributions = [...contributions].sort(
-    (left, right) =>
-      (left.order ?? Number.POSITIVE_INFINITY) -
-        (right.order ?? Number.POSITIVE_INFINITY) ||
-      left.href.localeCompare(right.href)
-  )
-
-  for (const contribution of sortedContributions) {
-    result.push({ title: t(contribution.labelKey), href: contribution.href })
+    occupiedPaths.add(route.path)
+    result.push({ title: t(route.navigation.labelKey), href: route.path })
   }
 
   return result

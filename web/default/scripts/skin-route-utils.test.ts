@@ -26,6 +26,14 @@ import {
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 
+function routeDefinition(pathValue: `/${string}`) {
+  return {
+    id: pathValue.slice(1),
+    path: pathValue,
+    componentImport: `.${pathValue}`,
+  }
+}
+
 describe('skin build selection utilities', () => {
   it('defaults missing and empty skin IDs to default', () => {
     assert.equal(normalizeSkinId(undefined), 'default')
@@ -160,6 +168,51 @@ describe('skin route generation utilities', () => {
     )
   })
 
+  it('rejects invalid navigation labels, positions, and orders', () => {
+    assert.throws(
+      () =>
+        validateSkinRoutes([
+          {
+            ...routeDefinition('/empty-label'),
+            navigation: { labelKey: '   ', position: 'header' },
+          },
+        ]),
+      /navigation label.*empty-label/i
+    )
+    assert.throws(
+      () =>
+        validateSkinRoutes([
+          {
+            ...routeDefinition('/non-string-label'),
+            navigation: { labelKey: 42, position: 'header' },
+          } as never,
+        ]),
+      /navigation label.*non-string-label/i
+    )
+    assert.throws(
+      () =>
+        validateSkinRoutes([
+          {
+            ...routeDefinition('/bad-position'),
+            navigation: { labelKey: 'Bad', position: 'sidebar' },
+          } as never,
+        ]),
+      /navigation position.*bad-position/i
+    )
+    for (const order of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      assert.throws(
+        () =>
+          validateSkinRoutes([
+            {
+              ...routeDefinition('/bad-order'),
+              navigation: { labelKey: 'Bad', position: 'header', order },
+            },
+          ]),
+        /navigation order.*bad-order/i
+      )
+    }
+  })
+
   it('renders a route proxy through ActiveSkinRoute', () => {
     const source = renderGeneratedRoute({
       id: 'solutions',
@@ -263,6 +316,62 @@ async function createSkinProjectFixture(): Promise<{
 }
 
 describe('skin generator', () => {
+  it('rejects invalid navigation before replacing generated outputs', async () => {
+    const fixture = await createSkinProjectFixture()
+    const generatedDirectory = path.join(
+      fixture.rootPath,
+      'src',
+      'routes',
+      '(skin-generated)'
+    )
+    try {
+      await mkdir(generatedDirectory, { recursive: true })
+      await Promise.all([
+        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), 'export default {}\n'),
+        writeFile(
+          path.join(fixture.skinDirectory, 'build-manifest.ts'),
+          `export default {
+  id: 'custom',
+  routes: [{
+    id: 'solutions',
+    path: '/solutions',
+    componentImport: './routes/solutions',
+    navigation: { labelKey: '', position: 'header' },
+  }],
+}\n`
+        ),
+        writeFile(path.join(generatedDirectory, 'previous.tsx'), 'previous\n'),
+        writeFile(path.join(fixture.runtimeDirectory, 'active-skin.gen.ts'), 'runtime-old\n'),
+        writeFile(
+          path.join(fixture.runtimeDirectory, 'active-skin-build.gen.ts'),
+          'build-old\n'
+        ),
+      ])
+
+      await assert.rejects(
+        generateSkin({ projectRoot: fixture.projectRoot, skinId: 'custom' }),
+        /navigation label/i
+      )
+
+      assert.equal(
+        await readFile(path.join(generatedDirectory, 'previous.tsx'), 'utf8'),
+        'previous\n'
+      )
+      assert.equal(
+        await readFile(path.join(fixture.runtimeDirectory, 'active-skin.gen.ts'), 'utf8'),
+        'runtime-old\n'
+      )
+      assert.equal(
+        await readFile(
+          path.join(fixture.runtimeDirectory, 'active-skin-build.gen.ts'),
+          'utf8'
+        ),
+        'build-old\n'
+      )
+    } finally {
+      await rm(fixture.rootPath, { recursive: true, force: true })
+    }
+  })
   it('validates runtime then build manifests without creating outputs', async () => {
     const fixture = await createSkinProjectFixture()
     try {

@@ -17,8 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo } from 'react'
-import { activeSkin } from '@/skins/runtime/active-skin.gen'
-import type { ThemeManifest } from '@/skins/runtime/contracts'
+import { activeSkinBuild } from '@/skins/runtime/active-skin-build.gen'
+import type { SkinBuildManifest } from '@/skins/runtime/build-contracts'
 import { mergeSkinHeaderLinks } from '@/skins/runtime/navigation'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
@@ -62,11 +62,7 @@ const HEADER_NAV_UTILITY_CUSTOM_LINK_POSITIONS = [
   'after_language',
 ] as const
 
-const activeSkinManifest: ThemeManifest = activeSkin
-const activeSkinHeaderNavigation = activeSkinManifest.navigation?.header ?? []
-const activeSkinRoutePaths = activeSkinManifest.build.routes.map(
-  (route) => route.path
-)
+const activeSkinRoutes = (activeSkinBuild as SkinBuildManifest).routes
 
 /**
  * Generate top navigation links based on HeaderNavModules configuration from backend /api/status
@@ -234,28 +230,22 @@ function useHeaderNavContext() {
 export function useTopNavLinks(): TopNavLink[] {
   const { modules, docsLink, isAuthed, t } = useHeaderNavContext()
 
-  const hostLinks = buildTopNavLinks({ modules, docsLink, isAuthed, t })
+  return useMemo(() => {
+    const hostLinks = buildTopNavLinks({ modules, docsLink, isAuthed, t })
 
-  return mergeSkinHeaderLinks(
-    hostLinks,
-    activeSkinHeaderNavigation,
-    activeSkinRoutePaths,
-    t
-  )
+    return mergeSkinHeaderLinks(hostLinks, activeSkinRoutes, t)
+  }, [modules, docsLink, isAuthed, t])
 }
 
 export function useTopNavLinkSlots(): TopNavLinkSlots {
   const { modules, docsLink, isAuthed, t } = useHeaderNavContext()
 
-  const slots = buildTopNavLinkSlots({ modules, docsLink, isAuthed, t })
+  return useMemo(() => {
+    const slots = buildTopNavLinkSlots({ modules, docsLink, isAuthed, t })
 
-  return {
-    ...slots,
-    primary: mergeSkinHeaderLinks(
-      slots.primary,
-      activeSkinHeaderNavigation,
-      activeSkinRoutePaths,
-      t
-    ),
-  }
+    return {
+      ...slots,
+      primary: mergeSkinHeaderLinks(slots.primary, activeSkinRoutes, t),
+    }
+  }, [modules, docsLink, isAuthed, t])
 }

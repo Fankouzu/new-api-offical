@@ -119,15 +119,22 @@ test('skin navigation cannot reintroduce backend-disabled pricing', () => {
     hostLinks.some((link) => link.href === '/pricing'),
     false
   )
-  assert.throws(
-    () =>
-      mergeSkinHeaderLinks(
-        hostLinks,
-        [{ labelKey: 'Pricing', href: '/pricing' }],
-        ['/solutions'],
-        identity
-      ),
-    /\/pricing/
+  const merged = mergeSkinHeaderLinks(
+    hostLinks,
+    [
+      {
+        id: 'solutions',
+        path: '/solutions',
+        componentImport: './solutions',
+        navigation: { labelKey: 'Solutions', position: 'header' },
+      },
+    ],
+    identity
+  )
+
+  assert.equal(
+    merged.some((link) => link.href === '/pricing'),
+    false
   )
 })
 
@@ -156,8 +163,14 @@ test('declared skin route appends after About and end custom links', () => {
 
   const merged = mergeSkinHeaderLinks(
     hostLinks,
-    [{ labelKey: 'Solutions', href: '/solutions' }],
-    ['/solutions'],
+    [
+      {
+        id: 'solutions',
+        path: '/solutions',
+        componentImport: './solutions',
+        navigation: { labelKey: 'Solutions', position: 'header' },
+      },
+    ],
     identity
   )
 
@@ -197,8 +210,14 @@ test('merging skin navigation into primary leaves utility slots unchanged', () =
     ...slots,
     primary: mergeSkinHeaderLinks(
       slots.primary,
-      [{ labelKey: 'Solutions', href: '/solutions' }],
-      ['/solutions'],
+      [
+        {
+          id: 'solutions',
+          path: '/solutions',
+          componentImport: './solutions',
+          navigation: { labelKey: 'Solutions', position: 'header' },
+        },
+      ],
       identity
     ),
   }
@@ -206,4 +225,46 @@ test('merging skin navigation into primary leaves utility slots unchanged', () =
   assert.equal(merged.before_search, slots.before_search)
   assert.equal(merged.before_search[0], utilityLink)
   assert.equal(merged.primary.at(-1)?.href, '/solutions')
+})
+
+test('backend custom link wins over a duplicate skin route contribution', () => {
+  const modules = parseHeaderNavModules(
+    JSON.stringify({
+      customLinks: [
+        {
+          id: 'solutions',
+          title: 'Admin solutions',
+          href: '/solutions',
+          enabled: true,
+          external: false,
+          requireAuth: false,
+          position: 'end',
+        },
+      ],
+    })
+  )
+  const hostLinks = buildTopNavLinks({
+    modules,
+    docsLink: null,
+    isAuthed: false,
+    t: identity,
+  })
+  const adminLink = hostLinks.at(-1)
+
+  const merged = mergeSkinHeaderLinks(
+    hostLinks,
+    [
+      {
+        id: 'solutions',
+        path: '/solutions',
+        componentImport: './solutions',
+        navigation: { labelKey: 'Skin solutions', position: 'header' },
+      },
+    ],
+    identity
+  )
+
+  assert.equal(merged.filter((link) => link.href === '/solutions').length, 1)
+  assert.equal(merged.at(-1), adminLink)
+  assert.equal(merged.at(-1)?.title, 'Admin solutions')
 })

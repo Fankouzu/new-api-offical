@@ -1,12 +1,15 @@
+export type SkinRouteNavigation = {
+  labelKey: string
+  position: 'header' | 'footer'
+  /** Nonnegative integer; lower values render first. */
+  order?: number
+}
+
 export type SkinRouteBuildDefinition = {
   id: string
   path: `/${string}`
   componentImport: string
-  navigation?: {
-    labelKey: string
-    position: 'header' | 'footer'
-    order?: number
-  }
+  navigation?: SkinRouteNavigation
 }
 
 export type SkinBuildManifest = {

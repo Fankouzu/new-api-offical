@@ -7,7 +7,6 @@ const customManifest = {
   build: customBuildManifest,
   pages: {},
   routes: [],
-  navigation: { header: [], footer: [] },
   shell: CustomPublicShell,
 } as const satisfies ThemeManifest
 

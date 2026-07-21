@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import type { SkinRouteBuildDefinition } from './build-contracts'
 import { mergeSkinHeaderLinks } from './navigation'
 
 const identity = (value: string) => value
 
-test('mergeSkinHeaderLinks appends sorted translated skin links without mutating inputs', () => {
+function route(
+  path: `/${string}`,
+  navigation?: SkinRouteBuildDefinition['navigation']
+): SkinRouteBuildDefinition {
+  return { id: path.slice(1), path, componentImport: `.${path}`, navigation }
+}
+
+test('mergeSkinHeaderLinks derives, sorts, and translates header links without mutation', () => {
   const hostLink = Object.freeze({
     title: 'Host',
     href: '/host',
@@ -14,17 +22,24 @@ test('mergeSkinHeaderLinks appends sorted translated skin links without mutating
     icon: 'host-icon',
   })
   const hostLinks = Object.freeze([hostLink])
-  const contributions = Object.freeze([
-    Object.freeze({ labelKey: 'Zoo', href: '/zoo' as const, order: 20 }),
-    Object.freeze({ labelKey: 'Alpha', href: '/alpha' as const, order: 10 }),
-    Object.freeze({ labelKey: 'Beta', href: '/beta' as const, order: 10 }),
+  const routes = Object.freeze([
+    Object.freeze(
+      route('/zoo', { labelKey: 'Zoo', position: 'header', order: 20 })
+    ),
+    Object.freeze(
+      route('/alpha', { labelKey: 'Alpha', position: 'header', order: 10 })
+    ),
+    Object.freeze(
+      route('/beta', { labelKey: 'Beta', position: 'header', order: 10 })
+    ),
+    Object.freeze(
+      route('/footer', { labelKey: 'Footer', position: 'footer', order: 0 })
+    ),
   ])
-  const allowedPaths = Object.freeze(['/zoo', '/alpha', '/beta'] as const)
 
   const result = mergeSkinHeaderLinks(
     hostLinks,
-    contributions,
-    allowedPaths,
+    routes,
     (key) => `translated:${key}`
   )
 
@@ -37,20 +52,19 @@ test('mergeSkinHeaderLinks appends sorted translated skin links without mutating
   assert.notEqual(result, hostLinks)
   assert.equal(result[0], hostLink)
   assert.deepEqual(
-    contributions.map((link) => link.href),
-    ['/zoo', '/alpha', '/beta']
+    routes.map((item) => item.path),
+    ['/zoo', '/alpha', '/beta', '/footer']
   )
 })
 
-test('mergeSkinHeaderLinks sorts equal and absent orders by href', () => {
+test('mergeSkinHeaderLinks sorts absent orders after ordered links by href', () => {
   const result = mergeSkinHeaderLinks(
     [],
     [
-      { labelKey: 'C', href: '/c' },
-      { labelKey: 'B', href: '/b', order: 1 },
-      { labelKey: 'A', href: '/a', order: 1 },
+      route('/c', { labelKey: 'C', position: 'header' }),
+      route('/b', { labelKey: 'B', position: 'header', order: 1 }),
+      route('/a', { labelKey: 'A', position: 'header', order: 1 }),
     ],
-    ['/a', '/b', '/c'],
     identity
   )
 
@@ -60,66 +74,64 @@ test('mergeSkinHeaderLinks sorts equal and absent orders by href', () => {
   )
 })
 
-test('mergeSkinHeaderLinks rejects duplicate contribution hrefs', () => {
-  assert.throws(
-    () =>
-      mergeSkinHeaderLinks(
-        [],
-        [
-          { labelKey: 'First', href: '/solutions' },
-          { labelKey: 'Second', href: '/solutions' },
-        ],
-        ['/solutions'],
-        identity
-      ),
-    /duplicate.*\/solutions/i
+test('mergeSkinHeaderLinks lets an existing host link win without throwing', () => {
+  const hostLink = Object.freeze({
+    title: 'Admin solutions',
+    href: '/solutions',
+    external: false,
+  })
+
+  const result = mergeSkinHeaderLinks(
+    [hostLink],
+    [route('/solutions', { labelKey: 'Skin solutions', position: 'header' })],
+    identity
+  )
+
+  assert.deepEqual(result, [hostLink])
+  assert.equal(result[0], hostLink)
+})
+
+test('mergeSkinHeaderLinks cannot create pricing without a pricing build route', () => {
+  const result = mergeSkinHeaderLinks(
+    [],
+    [route('/solutions', { labelKey: 'Solutions', position: 'header' })],
+    identity
+  )
+
+  assert.equal(
+    result.some((link) => link.href === '/pricing'),
+    false
   )
 })
 
-test('mergeSkinHeaderLinks rejects paths absent from active build routes', () => {
-  assert.throws(
-    () =>
-      mergeSkinHeaderLinks(
-        [],
-        [{ labelKey: 'Pricing', href: '/pricing' }],
-        ['/solutions'],
-        identity
-      ),
-    /\/pricing/
-  )
+test('mergeSkinHeaderLinks skips unexpected invalid runtime metadata', () => {
+  const invalidRoutes = [
+    route('/empty', { labelKey: '', position: 'header' }),
+    route('/position', {
+      labelKey: 'Position',
+      position: 'sidebar',
+    } as never),
+    route('/order', {
+      labelKey: 'Order',
+      position: 'header',
+      order: Number.NaN,
+    }),
+    { ...route('/missing'), navigation: { labelKey: 'Missing' } } as never,
+  ]
+
+  assert.doesNotThrow(() => mergeSkinHeaderLinks([], invalidRoutes, identity))
+  assert.deepEqual(mergeSkinHeaderLinks([], invalidRoutes, identity), [])
 })
 
-test('mergeSkinHeaderLinks applies route policy even when a protected path is listed', () => {
-  assert.throws(
-    () =>
-      mergeSkinHeaderLinks(
-        [],
-        [{ labelKey: 'Dashboard', href: '/dashboard' }],
-        ['/dashboard'],
-        identity
-      ),
-    /\/dashboard/
-  )
-})
-
-test('mergeSkinHeaderLinks rejects a contribution already present in host links', () => {
-  assert.throws(
-    () =>
-      mergeSkinHeaderLinks(
-        [{ title: 'Host solutions', href: '/solutions' }],
-        [{ labelKey: 'Skin solutions', href: '/solutions' }],
-        ['/solutions'],
-        identity
-      ),
-    /host.*\/solutions/i
-  )
-})
-
-test('mergeSkinHeaderLinks returns equal content in a new array when contributions are empty', () => {
+test('mergeSkinHeaderLinks returns equal content in a new array without header routes', () => {
   const hostLink = { title: 'Home', href: '/', disabled: true }
   const hostLinks = [hostLink]
 
-  const result = mergeSkinHeaderLinks(hostLinks, [], [], identity)
+  const result = mergeSkinHeaderLinks(
+    hostLinks,
+    [route('/footer', { labelKey: 'Footer', position: 'footer' })],
+    identity
+  )
 
   assert.deepEqual(result, hostLinks)
   assert.notEqual(result, hostLinks)

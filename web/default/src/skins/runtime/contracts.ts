@@ -20,21 +20,11 @@ export type SkinRuntimeRoute = {
   path: `/${string}`
   component: SkinComponent
 }
-export type SkinNavigationLink = {
-  labelKey: string
-  href: `/${string}`
-  order?: number
-}
-export type SkinNavigationConfig = {
-  header: readonly SkinNavigationLink[]
-  footer: readonly SkinNavigationLink[]
-}
 export type ThemeManifest = {
   id: string
   build: SkinBuildManifest
   pages: Partial<Record<PublicPageKey, SkinPageDefinition>>
   routes: readonly SkinRuntimeRoute[]
-  navigation?: SkinNavigationConfig
   shell?: ComponentType<{ children: ReactNode }>
 }
 export type DefaultThemeManifest = Omit<ThemeManifest, 'pages'> & {

@@ -39,6 +39,31 @@ export function validateSkinRoutes(
 
     assertSkinRouteAllowed(route.path)
 
+    if (route.navigation) {
+      if (
+        typeof route.navigation.labelKey !== 'string' ||
+        route.navigation.labelKey.trim() === ''
+      ) {
+        throw new Error(`Skin route navigation label is empty: ${route.path}`)
+      }
+      if (
+        route.navigation.position !== 'header' &&
+        route.navigation.position !== 'footer'
+      ) {
+        throw new Error(
+          `Invalid skin route navigation position for ${route.path}: ${String(route.navigation.position)}`
+        )
+      }
+      if (
+        route.navigation.order !== undefined &&
+        (!Number.isInteger(route.navigation.order) || route.navigation.order < 0)
+      ) {
+        throw new Error(
+          `Invalid skin route navigation order for ${route.path}: ${String(route.navigation.order)}`
+        )
+      }
+    }
+
     if (routeIds.has(route.id)) {
       throw new Error(`Duplicate skin route ID: ${route.id}`)
     }
