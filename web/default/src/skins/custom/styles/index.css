@@ -3,6 +3,10 @@
     --skin-font-body: var(--font-sans);
   }
 
+  .custom-hero-slide {
+    transform: scale(1.08);
+  }
+
   .custom-hero-slide.is-active {
     animation: custom-hero-zoom 5s linear forwards;
   }
