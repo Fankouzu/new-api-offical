@@ -104,8 +104,11 @@ type rawCatalogMod struct {
 
 // normalizeModelName lower-cases and strips trailing 6/8-digit date suffixes.
 func normalizeModelName(name string) string {
-	s := strings.ToLower(strings.TrimSpace(name))
-	return dateSuffixRe.ReplaceAllString(s, "")
+	return dateSuffixRe.ReplaceAllString(exactModelName(name), "")
+}
+
+func exactModelName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
 }
 
 // catalogModalityAllowlist maps models.dev modality strings to the frontend
@@ -213,6 +216,8 @@ func parseCatalog(data []byte) (map[string]*ModelCatalogSpec, error) {
 	}
 
 	idx := make(map[string]*ModelCatalogSpec)
+	aliasTargets := make(map[string]string)
+	ambiguousAliases := make(map[string]struct{})
 	providerNames := make([]string, 0, len(providers))
 	for name := range providers {
 		providerNames = append(providerNames, name)
@@ -227,14 +232,33 @@ func parseCatalog(data []byte) (map[string]*ModelCatalogSpec, error) {
 		sort.Strings(modelIDs)
 		for _, id := range modelIDs {
 			raw := provider.Models[id]
-			key := normalizeModelName(id)
-			if key == "" {
+			exactKey := exactModelName(id)
+			if exactKey == "" {
 				continue
 			}
-			if _, exists := idx[key]; !exists {
-				idx[key] = buildSpec(raw)
+			if _, exists := idx[exactKey]; !exists {
+				idx[exactKey] = buildSpec(raw)
+			}
+			alias := normalizeModelName(exactKey)
+			if alias == exactKey {
+				continue
+			}
+			if previous, exists := aliasTargets[alias]; !exists {
+				aliasTargets[alias] = exactKey
+			} else if previous != exactKey {
+				delete(aliasTargets, alias)
+				ambiguousAliases[alias] = struct{}{}
 			}
 		}
+	}
+	for alias, target := range aliasTargets {
+		if _, ambiguous := ambiguousAliases[alias]; ambiguous {
+			continue
+		}
+		if _, exactExists := idx[alias]; exactExists {
+			continue
+		}
+		idx[alias] = idx[target]
 	}
 	if len(idx) == 0 {
 		return nil, fmt.Errorf("model catalog contains no models")
@@ -331,10 +355,13 @@ func GetModelCatalogSpec(modelName string) (*ModelCatalogSpec, bool) {
 		return nil, false
 	}
 	triggerModelCatalogLoad(false)
-	key := normalizeModelName(modelName)
+	exactKey := exactModelName(modelName)
 	modelCatalogMu.RLock()
 	defer modelCatalogMu.RUnlock()
-	spec, ok := modelCatalogIndex[key]
+	spec, ok := modelCatalogIndex[exactKey]
+	if !ok {
+		spec, ok = modelCatalogIndex[normalizeModelName(exactKey)]
+	}
 	return spec, ok
 }
 

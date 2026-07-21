@@ -40,14 +40,14 @@ type Pricing struct {
 	// Model catalog metadata sourced from models.dev (see model_catalog.go).
 	// Populated only when the model is found in the catalog; otherwise omitted so
 	// the frontend renders an empty value rather than a mock.
-	ContextLength    int      `json:"context_length,omitempty"`
-	MaxOutputTokens  int      `json:"max_output_tokens,omitempty"`
-	KnowledgeCutoff  string   `json:"knowledge_cutoff,omitempty"`
-	ReleaseDate      string   `json:"release_date,omitempty"`
-	InputModalities     []string `json:"input_modalities,omitempty"`
-	OutputModalities    []string `json:"output_modalities,omitempty"`
-	Capabilities        []string `json:"capabilities,omitempty"`
-	SupportsTemperature *bool    `json:"supports_temperature,omitempty"`
+	ContextLength         int      `json:"context_length,omitempty"`
+	MaxOutputTokens       int      `json:"max_output_tokens,omitempty"`
+	KnowledgeCutoff       string   `json:"knowledge_cutoff,omitempty"`
+	ReleaseDate           string   `json:"release_date,omitempty"`
+	InputModalities       []string `json:"input_modalities,omitempty"`
+	OutputModalities      []string `json:"output_modalities,omitempty"`
+	Capabilities          []string `json:"capabilities,omitempty"`
+	SupportsTemperature   *bool    `json:"supports_temperature,omitempty"`
 	ReasoningEffortValues []string `json:"reasoning_effort_values,omitempty"`
 }
 
@@ -63,7 +63,7 @@ var (
 	vendorsList          []PricingVendor
 	supportedEndpointMap map[string]common.EndpointInfo
 	lastGetPricingTime   time.Time
-	updatePricingLock    sync.Mutex
+	updatePricingLock    sync.RWMutex
 
 	// 缓存映射：模型名 -> 启用分组 / 计费类型
 	modelEnableGroups     = make(map[string][]string)
@@ -77,15 +77,21 @@ var (
 )
 
 func GetPricing() []Pricing {
-	if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
-		updatePricingLock.Lock()
-		defer updatePricingLock.Unlock()
-		// Double check after acquiring the lock
-		if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
-			modelSupportEndpointsLock.Lock()
-			defer modelSupportEndpointsLock.Unlock()
-			updatePricing()
-		}
+	updatePricingLock.RLock()
+	stale := time.Since(lastGetPricingTime) > time.Minute || len(pricingMap) == 0
+	if !stale {
+		pricing := pricingMap
+		updatePricingLock.RUnlock()
+		return pricing
+	}
+	updatePricingLock.RUnlock()
+
+	updatePricingLock.Lock()
+	defer updatePricingLock.Unlock()
+	if time.Since(lastGetPricingTime) > time.Minute || len(pricingMap) == 0 {
+		modelSupportEndpointsLock.Lock()
+		defer modelSupportEndpointsLock.Unlock()
+		updatePricing()
 	}
 	return pricingMap
 }
@@ -101,10 +107,9 @@ func InvalidatePricingCache() {
 
 // GetVendors 返回当前定价接口使用到的供应商信息
 func GetVendors() []PricingVendor {
-	if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {
-		// 保证先刷新一次
-		GetPricing()
-	}
+	GetPricing()
+	updatePricingLock.RLock()
+	defer updatePricingLock.RUnlock()
 	return vendorsList
 }
 

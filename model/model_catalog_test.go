@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -175,6 +176,32 @@ func TestParseCatalogUsesStableProviderPrecedence(t *testing.T) {
 	}
 }
 
+func TestParseCatalogPreservesExactDatedModelsAndRejectsAmbiguousAlias(t *testing.T) {
+	data := []byte(`{
+		"provider": {"models": {
+			"seed-1-6-250615": {"release_date": "2025-06-25", "limit": {"output": 8192}},
+			"seed-1-6-250915": {"release_date": "2025-09-15", "limit": {"output": 32768}},
+			"single-version-250101": {"release_date": "2025-01-01", "limit": {"output": 4096}}
+		}}
+	}`)
+	idx, err := parseCatalog(data)
+	if err != nil {
+		t.Fatalf("parseCatalog returned error: %v", err)
+	}
+	if got := idx["seed-1-6-250615"]; got == nil || got.MaxOutputTokens != 8192 {
+		t.Fatalf("first exact dated model = %#v, want output 8192", got)
+	}
+	if got := idx["seed-1-6-250915"]; got == nil || got.MaxOutputTokens != 32768 {
+		t.Fatalf("second exact dated model = %#v, want output 32768", got)
+	}
+	if _, ok := idx["seed-1-6"]; ok {
+		t.Fatal("ambiguous date-stripped alias should not be indexed")
+	}
+	if got := idx["single-version"]; got == nil || got.MaxOutputTokens != 4096 {
+		t.Fatalf("unambiguous alias = %#v, want output 4096", got)
+	}
+}
+
 func TestCatalogFailureIsNotRetriedForEveryLookup(t *testing.T) {
 	var requests atomic.Int32
 	requestSeen := make(chan struct{}, 1)
@@ -276,6 +303,43 @@ func TestSuccessfulCatalogLoadInvalidatesPricingCache(t *testing.T) {
 	if pricingMap != nil || vendorsList != nil || !lastGetPricingTime.IsZero() {
 		t.Fatalf("pricing cache was not invalidated after catalog load: pricing=%v vendors=%v loadedAt=%v", pricingMap, vendorsList, lastGetPricingTime)
 	}
+}
+
+func TestPricingCacheConcurrentReadAndPublish(t *testing.T) {
+	updatePricingLock.Lock()
+	oldPricingMap := pricingMap
+	oldVendorsList := vendorsList
+	oldLastGetPricingTime := lastGetPricingTime
+	pricingMap = []Pricing{{ModelName: "cached"}}
+	vendorsList = []PricingVendor{{ID: 1}}
+	lastGetPricingTime = time.Now()
+	updatePricingLock.Unlock()
+	t.Cleanup(func() {
+		updatePricingLock.Lock()
+		pricingMap = oldPricingMap
+		vendorsList = oldVendorsList
+		lastGetPricingTime = oldLastGetPricingTime
+		updatePricingLock.Unlock()
+	})
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			updatePricingLock.Lock()
+			vendorsList = []PricingVendor{{ID: i + 1}}
+			lastGetPricingTime = time.Now()
+			updatePricingLock.Unlock()
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			_ = GetVendors()
+		}
+	}()
+	wg.Wait()
 }
 
 func contains(slice []string, v string) bool {
