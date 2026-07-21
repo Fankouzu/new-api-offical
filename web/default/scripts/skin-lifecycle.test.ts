@@ -9,6 +9,7 @@ import { generateSkin } from './generate-skin'
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const packageJsonPath = path.join(frontendRoot, 'package.json')
 const skinWrapperPath = path.join(frontendRoot, 'scripts', 'run-with-skin.ts')
+const dockerfilePath = path.join(frontendRoot, '..', '..', 'Dockerfile')
 
 async function createLifecycleFixture() {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'skin-lifecycle-'))
@@ -67,6 +68,16 @@ describe('skin build lifecycle', { concurrency: false }, () => {
     assert.doesNotMatch(
       await readFile(skinWrapperPath, 'utf8'),
       new RegExp(['SKIN', 'LOCK', 'PROJECT', 'ROOT'].join('_'))
+    )
+  })
+
+  it('passes the selected skin into the Docker frontend build', async () => {
+    const dockerfile = await readFile(dockerfilePath, 'utf8')
+
+    assert.match(dockerfile, /ARG APP_SKIN=default/)
+    assert.match(
+      dockerfile,
+      /APP_SKIN="\$\{APP_SKIN\}"[\s\S]*?bun run build/
     )
   })
 
