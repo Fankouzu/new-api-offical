@@ -216,6 +216,7 @@ export function Footer(props: FooterProps) {
   if (footerHtml) {
     return (
       <footer
+        data-home-section='footer'
         className={cn(
           'border-border/40 relative z-10 border-t',
           props.className
@@ -239,6 +240,7 @@ export function Footer(props: FooterProps) {
 
   return (
     <footer
+      data-home-section='footer'
       className={cn('border-border/40 relative z-10 border-t', props.className)}
     >
       <div className='mx-auto max-w-6xl px-6 py-12 md:py-16'>
