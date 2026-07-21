@@ -164,8 +164,9 @@ func InvalidatePricingCache() {
 	updatePricingLock.Lock()
 	defer updatePricingLock.Unlock()
 
-	pricingMap = nil
-	vendorsList = nil
+	// Keep the last successfully published snapshot available while forcing the
+	// next reader to rebuild it. If that rebuild fails, callers continue to get
+	// the last good pricing response instead of an empty partial response.
 	lastGetPricingTime = time.Time{}
 }
 

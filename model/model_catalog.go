@@ -194,7 +194,7 @@ func buildSpec(raw rawCatalogModel) *ModelCatalogSpec {
 	if raw.Reasoning {
 		caps = append(caps, "reasoning")
 	}
-	if raw.Modalities != nil && (containsString(raw.Modalities.Input, "image") || raw.Attachment) {
+	if raw.Modalities != nil && containsString(raw.Modalities.Input, "image") {
 		caps = append(caps, "vision")
 	}
 	spec.Capabilities = caps

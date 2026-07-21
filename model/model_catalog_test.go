@@ -163,6 +163,23 @@ func TestParseCatalogPreservesUnknownTemperature(t *testing.T) {
 	}
 }
 
+func TestBuildSpecDoesNotTreatAttachmentsAsVision(t *testing.T) {
+	spec := buildSpec(rawCatalogModel{
+		Attachment: true,
+		Modalities: &rawCatalogMod{
+			Input:  []string{"text", "pdf"},
+			Output: []string{"text"},
+		},
+	})
+
+	if contains(spec.Capabilities, "vision") {
+		t.Fatalf("attachment-only model capabilities = %v, want no vision", spec.Capabilities)
+	}
+	if !reflect.DeepEqual(spec.InputModalities, []string{"text", "file"}) {
+		t.Fatalf("attachment-only input modalities = %v, want [text file]", spec.InputModalities)
+	}
+}
+
 func TestParseCatalogUsesStableProviderPrecedence(t *testing.T) {
 	data := []byte(`{
 		"z-provider": {"models": {"shared-model": {"limit": {"context": 200}}}},
@@ -273,7 +290,7 @@ func TestCatalogFailureIsNotRetriedForEveryLookup(t *testing.T) {
 	}
 }
 
-func TestSuccessfulCatalogLoadInvalidatesPricingCache(t *testing.T) {
+func TestSuccessfulCatalogLoadMarksPricingCacheStaleWithoutDiscardingSnapshot(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
@@ -303,8 +320,8 @@ func TestSuccessfulCatalogLoadInvalidatesPricingCache(t *testing.T) {
 
 	updatePricingLock.Lock()
 	defer updatePricingLock.Unlock()
-	if pricingMap != nil || vendorsList != nil || !lastGetPricingTime.IsZero() {
-		t.Fatalf("pricing cache was not invalidated after catalog load: pricing=%v vendors=%v loadedAt=%v", pricingMap, vendorsList, lastGetPricingTime)
+	if len(pricingMap) != 1 || pricingMap[0].ModelName != "cached-without-catalog" || len(vendorsList) != 1 || !lastGetPricingTime.IsZero() {
+		t.Fatalf("last published pricing snapshot was not preserved as stale: pricing=%v vendors=%v loadedAt=%v", pricingMap, vendorsList, lastGetPricingTime)
 	}
 }
 
