@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "skin:generate": "bun scripts/generate-skin.ts",
+    "skin:generate": "bun scripts/run-with-skin.ts generate",
     "dev": "rsbuild dev",
     "build": "rsbuild build",
-    "typecheck": "bun run skin:generate && tsc -b",
+    "typecheck": "bun scripts/run-with-skin.ts typecheck",
     "build:check": "bun run typecheck && rsbuild build",
     "build:default": "APP_SKIN=default bun run build:check",
     "build:custom": "APP_SKIN=custom bun run build:check",

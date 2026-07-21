@@ -4,10 +4,23 @@ import { defineConfig, loadEnv } from '@rsbuild/core'
 import { pluginReact } from '@rsbuild/plugin-react'
 import { tanstackRouter } from '@tanstack/router-plugin/rspack'
 import { generateSkin } from './scripts/generate-skin.ts'
+import { normalizeSkinId } from './scripts/skin-route-utils.ts'
+import {
+  acquireSkinWorkspaceLease,
+  installSkinLeaseProcessCleanup,
+} from './scripts/skin-workspace-lock.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-await generateSkin()
+const skinId = normalizeSkinId(process.env.APP_SKIN)
+const skinLease = await acquireSkinWorkspaceLease({ projectRoot: __dirname, skinId })
+try {
+  await generateSkin({ skinId })
+  installSkinLeaseProcessCleanup(skinLease)
+} catch (error: unknown) {
+  await skinLease.release()
+  throw error
+}
 
 export default defineConfig(({ envMode }) => {
   const env = loadEnv({ mode: envMode, prefixes: ['VITE_'] })

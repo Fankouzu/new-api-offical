@@ -1,11 +1,12 @@
 import type { KnipConfig } from 'knip'
 
 const config: KnipConfig = {
-  ignore: [
-    'src/components/ui/**',
-    'src/routeTree.gen.ts',
-    'src/routes/(skin-generated)/**',
+  entry: [
+    'src/main.tsx',
+    'scripts/skin-lifecycle.test.ts',
+    'scripts/skin-workspace-lock.test.ts',
   ],
+  ignore: ['src/components/ui/**', 'src/routeTree.gen.ts'],
   ignoreDependencies: ['tailwindcss', 'tw-animate-css'],
 }
 

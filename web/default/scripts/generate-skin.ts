@@ -23,6 +23,7 @@ import {
   renderGeneratedRoute,
   validateSkinRoutes,
 } from './skin-route-utils'
+import { acquireSkinWorkspaceLease } from './skin-workspace-lock'
 
 const defaultProjectRoot = new URL('../', import.meta.url)
 let temporaryFileSequence = 0
@@ -311,9 +312,19 @@ export async function generateSkin(options: GenerateSkinOptions = {}): Promise<v
 
 const entryPath = process.argv[1] ? path.resolve(process.argv[1]) : undefined
 if (entryPath === fileURLToPath(import.meta.url)) {
-  generateSkin().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error)
-    process.stderr.write(`Unable to generate active skin: ${message}\n`)
-    process.exitCode = 1
-  })
+  const projectRoot = fileURLToPath(defaultProjectRoot)
+  const skinId = normalizeSkinId(process.env.APP_SKIN)
+  acquireSkinWorkspaceLease({ projectRoot, skinId })
+    .then(async (lease) => {
+      try {
+        await generateSkin({ skinId })
+      } finally {
+        await lease.release()
+      }
+    })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error)
+      process.stderr.write(`Unable to generate active skin: ${message}\n`)
+      process.exitCode = 1
+    })
 }
