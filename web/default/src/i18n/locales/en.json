@@ -767,7 +767,7 @@
     "Command": "Command",
     "Common": "Common",
     "Common Keys": "Common Keys",
-    "Common OpenAI-compatible request parameters. Availability varies by provider; parameters a model does not support are typically ignored.": "Common OpenAI-compatible request parameters. Availability varies by provider; parameters a model does not support are typically ignored.",
+    "Common OpenAI-compatible request parameters. Availability varies by provider; unsupported parameters may be ignored or rejected.": "Common OpenAI-compatible request parameters. Availability varies by provider; unsupported parameters may be ignored or rejected.",
     "Common parameters": "Common parameters",
     "Common Logs": "Common Logs",
     "Common ports include 25, 465, and 587": "Common ports include 25, 465, and 587",

@@ -58,6 +58,12 @@ type PricingVendor struct {
 	Icon        string `json:"icon,omitempty"`
 }
 
+type PricingSnapshot struct {
+	Pricing            []Pricing
+	Vendors            []PricingVendor
+	SupportedEndpoints map[string]common.EndpointInfo
+}
+
 var (
 	pricingMap           []Pricing
 	vendorsList          []PricingVendor
@@ -96,6 +102,64 @@ func GetPricing() []Pricing {
 	return pricingMap
 }
 
+func GetPricingSnapshot() PricingSnapshot {
+	updatePricingLock.RLock()
+	stale := time.Since(lastGetPricingTime) > time.Minute || len(pricingMap) == 0
+	if !stale {
+		snapshot := clonePricingSnapshotLocked()
+		updatePricingLock.RUnlock()
+		return snapshot
+	}
+	updatePricingLock.RUnlock()
+
+	updatePricingLock.Lock()
+	defer updatePricingLock.Unlock()
+	if time.Since(lastGetPricingTime) > time.Minute || len(pricingMap) == 0 {
+		modelSupportEndpointsLock.Lock()
+		defer modelSupportEndpointsLock.Unlock()
+		updatePricing()
+	}
+	return clonePricingSnapshotLocked()
+}
+
+func clonePricingSnapshotLocked() PricingSnapshot {
+	pricing := make([]Pricing, len(pricingMap))
+	for i, item := range pricingMap {
+		pricing[i] = item
+		pricing[i].EnableGroup = append([]string(nil), item.EnableGroup...)
+		pricing[i].SupportedEndpointTypes = append([]constant.EndpointType(nil), item.SupportedEndpointTypes...)
+		pricing[i].InputModalities = append([]string(nil), item.InputModalities...)
+		pricing[i].OutputModalities = append([]string(nil), item.OutputModalities...)
+		pricing[i].Capabilities = append([]string(nil), item.Capabilities...)
+		pricing[i].ReasoningEffortValues = append([]string(nil), item.ReasoningEffortValues...)
+		pricing[i].CacheRatio = clonePointer(item.CacheRatio)
+		pricing[i].CreateCacheRatio = clonePointer(item.CreateCacheRatio)
+		pricing[i].ImageRatio = clonePointer(item.ImageRatio)
+		pricing[i].AudioRatio = clonePointer(item.AudioRatio)
+		pricing[i].AudioCompletionRatio = clonePointer(item.AudioCompletionRatio)
+		pricing[i].SupportsTemperature = clonePointer(item.SupportsTemperature)
+	}
+
+	vendors := append([]PricingVendor(nil), vendorsList...)
+	endpoints := make(map[string]common.EndpointInfo, len(supportedEndpointMap))
+	for endpointType, info := range supportedEndpointMap {
+		endpoints[endpointType] = info
+	}
+	return PricingSnapshot{
+		Pricing:            pricing,
+		Vendors:            vendors,
+		SupportedEndpoints: endpoints,
+	}
+}
+
+func clonePointer[T any](value *T) *T {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
 func InvalidatePricingCache() {
 	updatePricingLock.Lock()
 	defer updatePricingLock.Unlock()
@@ -110,7 +174,7 @@ func GetVendors() []PricingVendor {
 	GetPricing()
 	updatePricingLock.RLock()
 	defer updatePricingLock.RUnlock()
-	return vendorsList
+	return append([]PricingVendor(nil), vendorsList...)
 }
 
 func GetModelSupportEndpointTypes(model string) []constant.EndpointType {
@@ -391,5 +455,12 @@ func updatePricing() {
 
 // GetSupportedEndpointMap 返回全局端点到路径的映射
 func GetSupportedEndpointMap() map[string]common.EndpointInfo {
-	return supportedEndpointMap
+	GetPricing()
+	updatePricingLock.RLock()
+	defer updatePricingLock.RUnlock()
+	endpoints := make(map[string]common.EndpointInfo, len(supportedEndpointMap))
+	for endpointType, info := range supportedEndpointMap {
+		endpoints[endpointType] = info
+	}
+	return endpoints
 }

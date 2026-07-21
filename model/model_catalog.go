@@ -185,10 +185,6 @@ func buildSpec(raw rawCatalogModel) *ModelCatalogSpec {
 	}
 
 	caps := make([]string, 0, 8)
-	hasTextOutput := raw.Modalities != nil && containsString(raw.Modalities.Output, "text")
-	if hasTextOutput {
-		caps = append(caps, "streaming", "system_prompt")
-	}
 	if raw.ToolCall {
 		caps = append(caps, "tools", "function_calling")
 	}

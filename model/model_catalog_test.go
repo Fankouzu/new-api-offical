@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/QuantumNous/new-api/common"
 )
 
 func TestNormalizeModelName(t *testing.T) {
@@ -89,7 +92,7 @@ func TestParseCatalogBuildsNormalizedIndex(t *testing.T) {
 	if spec.ReleaseDate != "2024-05-13" {
 		t.Errorf("gpt-4o release = %q, want 2024-05-13", spec.ReleaseDate)
 	}
-	wantCaps := []string{"streaming", "system_prompt", "tools", "function_calling", "structured_output", "json_mode", "vision"}
+	wantCaps := []string{"tools", "function_calling", "structured_output", "json_mode", "vision"}
 	if !reflect.DeepEqual(spec.Capabilities, wantCaps) {
 		t.Errorf("gpt-4o capabilities = %v, want %v", spec.Capabilities, wantCaps)
 	}
@@ -337,6 +340,60 @@ func TestPricingCacheConcurrentReadAndPublish(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 1000; i++ {
 			_ = GetVendors()
+		}
+	}()
+	wg.Wait()
+}
+
+func TestGetPricingSnapshotReturnsOnePublishedVersion(t *testing.T) {
+	updatePricingLock.Lock()
+	oldPricingMap := pricingMap
+	oldVendorsList := vendorsList
+	oldSupportedEndpointMap := supportedEndpointMap
+	oldLastGetPricingTime := lastGetPricingTime
+	pricingMap = []Pricing{{ModelName: "version-1"}}
+	vendorsList = []PricingVendor{{ID: 1}}
+	supportedEndpointMap = map[string]common.EndpointInfo{"version": {Path: "/1"}}
+	lastGetPricingTime = time.Now()
+	updatePricingLock.Unlock()
+	t.Cleanup(func() {
+		updatePricingLock.Lock()
+		pricingMap = oldPricingMap
+		vendorsList = oldVendorsList
+		supportedEndpointMap = oldSupportedEndpointMap
+		lastGetPricingTime = oldLastGetPricingTime
+		updatePricingLock.Unlock()
+	})
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 1; i <= 1000; i++ {
+			updatePricingLock.Lock()
+			pricingMap = []Pricing{{ModelName: fmt.Sprintf("version-%d", i)}}
+			vendorsList = []PricingVendor{{ID: i}}
+			supportedEndpointMap = map[string]common.EndpointInfo{
+				"version": {Path: fmt.Sprintf("/%d", i)},
+			}
+			lastGetPricingTime = time.Now()
+			updatePricingLock.Unlock()
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			snapshot := GetPricingSnapshot()
+			if len(snapshot.Pricing) != 1 || len(snapshot.Vendors) != 1 {
+				t.Errorf("incomplete snapshot: %+v", snapshot)
+				return
+			}
+			wantModel := fmt.Sprintf("version-%d", snapshot.Vendors[0].ID)
+			wantPath := fmt.Sprintf("/%d", snapshot.Vendors[0].ID)
+			if snapshot.Pricing[0].ModelName != wantModel || snapshot.SupportedEndpoints["version"].Path != wantPath {
+				t.Errorf("mixed snapshot: %+v", snapshot)
+				return
+			}
 		}
 	}()
 	wg.Wait()
