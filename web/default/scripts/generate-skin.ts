@@ -15,7 +15,6 @@ import {
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { SkinBuildManifest } from '../src/skins/runtime/build-contracts'
-import type { ThemeManifest } from '../src/skins/runtime/contracts'
 import {
   getGeneratedRouteFile,
   normalizeSkinId,
@@ -152,73 +151,6 @@ async function loadBuildManifest(filePath: string): Promise<SkinBuildManifest> {
   return loadedModule.default as SkinBuildManifest
 }
 
-async function loadRuntimeManifest(filePath: string): Promise<ThemeManifest> {
-  const contentHash = createHash('sha256').update(await readFile(filePath)).digest('hex')
-  const moduleUrl = pathToFileURL(filePath)
-  moduleUrl.searchParams.set('version', contentHash)
-  const loaded: unknown = await import(moduleUrl.href)
-  if (typeof loaded !== 'object' || loaded === null || !('default' in loaded)) {
-    throw new Error(`Invalid skin runtime manifest: ${filePath}`)
-  }
-  return loaded.default as ThemeManifest
-}
-
-async function validateManifestAgreement(
-  skinId: string,
-  skinDirectory: string,
-  buildManifest: SkinBuildManifest,
-  runtimeManifest: ThemeManifest
-): Promise<void> {
-  if (buildManifest.id !== skinId || runtimeManifest.id !== skinId || runtimeManifest.build?.id !== skinId) {
-    throw new Error(`Skin "${skinId}" manifest ID mismatch`)
-  }
-  if (!Array.isArray(runtimeManifest.routes)) {
-    throw new Error(`Skin "${skinId}" runtime manifest routes must be an array`)
-  }
-  for (const buildRoute of buildManifest.routes) {
-    const embeddedBuildRoute = runtimeManifest.build.routes.find(
-      (route) => route.id === buildRoute.id
-    )
-    if (
-      !embeddedBuildRoute ||
-      embeddedBuildRoute.path !== buildRoute.path ||
-      embeddedBuildRoute.componentImport !== buildRoute.componentImport
-    ) {
-      throw new Error(
-        `Skin "${skinId}" embedded build manifest route "${buildRoute.id}" path or componentImport differs from the generated build manifest`
-      )
-    }
-    const runtimeRoute = runtimeManifest.routes.find((route) => route.id === buildRoute.id)
-    if (!runtimeRoute) throw new Error(`Skin "${skinId}" route "${buildRoute.id}" is missing from the runtime manifest`)
-    if (runtimeRoute.path !== buildRoute.path) {
-      throw new Error(`Skin "${skinId}" route "${buildRoute.id}" runtime path mismatch: expected ${buildRoute.path}, received ${runtimeRoute.path}`)
-    }
-    let routeModule: { default?: unknown }
-    try {
-      routeModule = (await import(
-        pathToFileURL(path.resolve(skinDirectory, buildRoute.componentImport)).href
-      )) as { default?: unknown }
-    } catch (error: unknown) {
-      throw new Error(
-        `Skin "${skinId}" route "${buildRoute.id}" component import "${buildRoute.componentImport}" cannot be resolved`,
-        { cause: error }
-      )
-    }
-    if (routeModule.default === undefined) {
-      throw new Error(`Skin "${skinId}" route "${buildRoute.id}" component import "${buildRoute.componentImport}" has no default export`)
-    }
-    if (runtimeRoute.component !== routeModule.default) {
-      throw new Error(`Skin "${skinId}" route "${buildRoute.id}" runtime component does not match componentImport "${buildRoute.componentImport}"`)
-    }
-  }
-  if (runtimeManifest.routes.length !== buildManifest.routes.length) {
-    throw new Error(`Skin "${skinId}" runtime and build route counts differ`)
-  }
-  if (runtimeManifest.build.routes.length !== buildManifest.routes.length) {
-    throw new Error(`Skin "${skinId}" embedded and generated build route counts differ`)
-  }
-}
-
 async function pathExists(filePath: string): Promise<boolean> {
   try {
     await lstat(filePath)
@@ -253,6 +185,16 @@ async function recoverInterruptedGeneration(projectRoot: string): Promise<void> 
     else await writeFile(selector.filePath, selector.content, 'utf8')
   }
   await unlink(journalPath)
+}
+
+async function removeStaleRouteBackups(projectRoot: string): Promise<void> {
+  const routesDirectory = path.join(projectRoot, 'src', 'routes')
+  if (!(await pathExists(routesDirectory))) return
+  for (const entry of await readdir(routesDirectory)) {
+    if (/^\.skin-routes-stage-[A-Za-z0-9]+-backup$/.test(entry)) {
+      await rm(path.join(routesDirectory, entry), { recursive: true, force: true })
+    }
+  }
 }
 
 async function copyPreservedFilesAndReadOwnedRoutes(
@@ -406,6 +348,7 @@ async function regenerateRouteProxies(
 export async function generateSkin(options: GenerateSkinOptions = {}): Promise<void> {
   const projectRoot = fileURLToPath(options.projectRoot ?? defaultProjectRoot)
   await recoverInterruptedGeneration(projectRoot)
+  await removeStaleRouteBackups(projectRoot)
   const skinId = normalizeSkinId(options.skinId ?? process.env.APP_SKIN)
   const selectedSkinDirectory = path.join(projectRoot, 'src', 'skins', skinId)
   const runtimeManifestPath = path.join(selectedSkinDirectory, 'manifest.ts')
@@ -415,15 +358,16 @@ export async function generateSkin(options: GenerateSkinOptions = {}): Promise<v
   await assertManifestFile(buildManifestPath, projectRoot, skinId)
 
   const buildManifest = await loadBuildManifest(buildManifestPath)
+  if (buildManifest.id !== skinId) {
+    throw new Error(`Skin "${skinId}" build manifest ID mismatch: ${buildManifest.id}`)
+  }
   const routes = validateSkinRoutes(buildManifest.routes)
-  const runtimeManifest = await loadRuntimeManifest(runtimeManifestPath)
-  await validateManifestAgreement(skinId, selectedSkinDirectory, buildManifest, runtimeManifest)
 
   const runtimeDirectory = path.join(projectRoot, 'src', 'skins', 'runtime')
   const selectorOutputs = [
     {
       filePath: path.join(runtimeDirectory, 'active-skin.gen.ts'),
-      content: renderActiveSkinModule(skinId),
+      content: renderActiveSkinModule(skinId, routes),
     },
     {
       filePath: path.join(runtimeDirectory, 'active-skin-build.gen.ts'),

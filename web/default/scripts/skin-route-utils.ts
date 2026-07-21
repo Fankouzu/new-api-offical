@@ -14,8 +14,33 @@ export function normalizeSkinId(value: string | undefined): string {
   return skinId
 }
 
-export function renderActiveSkinModule(skinId: string): string {
-  return `${GENERATED_HEADER}\nexport { default as activeSkin } from '@/skins/${skinId}/manifest'\n`
+export function renderActiveSkinModule(
+  skinId: string,
+  routes: readonly SkinRouteBuildDefinition[] = []
+): string {
+  const componentChecks = routes
+    .map((route, index) => {
+      const importPath = `@/skins/${skinId}/${route.componentImport.replace(/^\.\//, '')}`
+      return `type RouteComponent${index} = typeof import(${JSON.stringify(importPath)}).default
+const routeComponent${index}IsValid: RouteComponent${index} extends SkinComponent ? true : never = true
+void routeComponent${index}IsValid`
+    })
+    .join('\n')
+
+  const contractImports = routes.length
+    ? 'SkinComponent, ThemeManifestFor'
+    : 'ThemeManifestFor'
+
+  return `${GENERATED_HEADER}
+import type skinBuildManifest from '@/skins/${skinId}/build-manifest'
+import skinManifest from '@/skins/${skinId}/manifest'
+import type { ${contractImports} } from '@/skins/runtime/contracts'
+
+const checkedManifest: ThemeManifestFor<typeof skinBuildManifest> = skinManifest
+void checkedManifest
+${componentChecks}${componentChecks ? '\n' : ''}
+export { skinManifest as activeSkin }
+`
 }
 
 export function renderActiveBuildModule(skinId: string): string {
@@ -35,6 +60,17 @@ export function validateSkinRoutes(
     }
     if (route.componentImport.trim() === '') {
       throw new Error(`Skin route "${route.id}" has an empty component import`)
+    }
+    const componentSegments = route.componentImport.slice(2).split('/')
+    if (
+      !/^\.\/[A-Za-z0-9_./-]+$/.test(route.componentImport) ||
+      componentSegments.some(
+        (segment) => segment === '' || segment === '.' || segment === '..'
+      )
+    ) {
+      throw new Error(
+        `Skin route "${route.id}" has an invalid component import: ${route.componentImport}`
+      )
     }
 
     assertSkinRouteAllowed(route.path)

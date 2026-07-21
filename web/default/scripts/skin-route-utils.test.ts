@@ -26,6 +26,70 @@ import {
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 
+async function typecheckGeneratedSelector(options: {
+  manifestSource: string
+  routeSource?: string
+}): Promise<string> {
+  const rootPath = await mkdtemp(path.join(frontendRoot, '.skin-selector-typecheck-'))
+  const src = path.join(rootPath, 'src')
+  const skin = path.join(src, 'skins', 'custom')
+  const runtime = path.join(src, 'skins', 'runtime')
+  try {
+    await Promise.all([
+      mkdir(path.join(skin, 'routes'), { recursive: true }),
+      mkdir(runtime, { recursive: true }),
+    ])
+    const routes = [
+      {
+        id: 'solutions',
+        path: '/solutions' as const,
+        componentImport: './routes/solutions',
+      },
+    ]
+    await Promise.all([
+      writeFile(
+        path.join(skin, 'build-manifest.ts'),
+        `export default { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] } as const\n`
+      ),
+      writeFile(path.join(skin, 'manifest.ts'), options.manifestSource),
+      writeFile(
+        path.join(runtime, 'contracts.ts'),
+        `import type { ComponentType, LazyExoticComponent } from 'react'
+export type SkinComponent = ComponentType | LazyExoticComponent<ComponentType>
+type RuntimeRoutesFor<R extends readonly unknown[]> = { readonly [K in keyof R]: R[K] extends { id: infer I; path: infer P } ? { id: I; path: P; component: SkinComponent } : R[K] }
+export type ThemeManifestFor<B extends { id: string; routes: readonly unknown[] }> = { id: B['id']; build: B; pages: object; routes: RuntimeRoutesFor<B['routes']> }\n`
+      ),
+      writeFile(
+        path.join(runtime, 'active-skin.gen.ts'),
+        renderActiveSkinModule('custom', routes)
+      ),
+      ...(options.routeSource === undefined
+        ? []
+        : [writeFile(path.join(skin, 'routes', 'solutions.tsx'), options.routeSource)]),
+    ])
+    const program = ts.createProgram(
+      [path.join(runtime, 'active-skin.gen.ts')],
+      {
+        baseUrl: rootPath,
+        jsx: ts.JsxEmit.ReactJSX,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        noEmit: true,
+        paths: { '@/*': ['./src/*'] },
+        skipLibCheck: true,
+        strict: true,
+        target: ts.ScriptTarget.ES2022,
+      }
+    )
+    return ts
+      .getPreEmitDiagnostics(program)
+      .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'))
+      .join('\n')
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+}
+
 function routeDefinition(pathValue: `/${string}`) {
   return {
     id: pathValue.slice(1),
@@ -46,11 +110,21 @@ describe('skin build selection utilities', () => {
   })
 
   it('renders the selected runtime manifest as the activeSkin default export', () => {
-    const source = renderActiveSkinModule('custom')
+    const source = renderActiveSkinModule('custom', [
+      {
+        id: 'solutions',
+        path: '/solutions',
+        componentImport: './routes/solutions',
+      },
+    ])
 
     assert.match(source, /@\/skins\/custom\/manifest/)
-    assert.match(source, /export \{ default as activeSkin \}/)
-    assert.doesNotMatch(source, /customSkin/)
+    assert.match(source, /ThemeManifestFor<typeof skinBuildManifest>/)
+    assert.match(
+      source,
+      /typeof import\("@\/skins\/custom\/routes\/solutions"\)\.default/
+    )
+    assert.doesNotMatch(source, /^import .*routes\/solutions/m)
   })
 
   it('renders the selected build manifest as the activeSkinBuild default export', () => {
@@ -59,6 +133,36 @@ describe('skin build selection utilities', () => {
     assert.match(source, /@\/skins\/custom\/build-manifest/)
     assert.match(source, /export \{ default as activeSkinBuild \}/)
     assert.doesNotMatch(source, /customSkinBuild/)
+  })
+
+  it('typechecks a lazy runtime route without eagerly importing its component module', async () => {
+    const diagnostics = await typecheckGeneratedSelector({
+      manifestSource: `import { lazy } from 'react'; import build from './build-manifest'; const Lazy = lazy(() => import('./routes/solutions')); export default { id: 'custom', build, pages: {}, routes: [{ id: 'solutions', path: '/solutions', component: Lazy }] } as const\n`,
+      routeSource: `export default function Solutions() { return null }\n`,
+    })
+    assert.equal(diagnostics, '')
+  })
+
+  it('reports missing modules, missing defaults, and runtime metadata drift in typecheck', async () => {
+    const validManifest = `import build from './build-manifest'; const Component = () => null; export default { id: 'custom', build, pages: {}, routes: [{ id: 'solutions', path: '/solutions', component: Component }] } as const\n`
+    assert.match(
+      await typecheckGeneratedSelector({ manifestSource: validManifest }),
+      /Cannot find module.*routes\/solutions/
+    )
+    assert.match(
+      await typecheckGeneratedSelector({
+        manifestSource: validManifest,
+        routeSource: `export const Solutions = () => null\n`,
+      }),
+      /no exported member 'default'/
+    )
+    assert.match(
+      await typecheckGeneratedSelector({
+        manifestSource: validManifest.replace("path: '/solutions'", "path: '/drifted'"),
+        routeSource: `export default function Solutions() { return null }\n`,
+      }),
+      /not assignable to type 'ThemeManifestFor/
+    )
   })
 })
 
@@ -165,6 +269,17 @@ describe('skin route generation utilities', () => {
     assert.throws(
       () => validateSkinRoutes([{ id: 'solutions', path: '/solutions', componentImport: '' }]),
       /empty component import/i
+    )
+    assert.throws(
+      () =>
+        validateSkinRoutes([
+          {
+            id: 'solutions',
+            path: '/solutions',
+            componentImport: './../outside',
+          },
+        ]),
+      /invalid component import/i
     )
   })
 
@@ -316,77 +431,26 @@ async function createSkinProjectFixture(): Promise<{
 }
 
 describe('skin generator', () => {
-  it('rejects a missing route component before replacing generated outputs', async () => {
+  it('does not execute a browser-only runtime manifest during generation', async () => {
     const fixture = await createSkinProjectFixture()
     try {
       await Promise.all([
-        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `function Missing() {}
-const build = { id: 'custom', routes: [{ id: 'missing', path: '/missing', componentImport: './routes/missing' }] }
-export default { id: 'custom', build, pages: {}, routes: [{ id: 'missing', path: '/missing', component: Missing }] }\n`),
-        writeFile(path.join(fixture.skinDirectory, 'build-manifest.ts'), `export default { id: 'custom', routes: [{ id: 'missing', path: '/missing', componentImport: './routes/missing' }] }\n`),
+        writeFile(
+          path.join(fixture.skinDirectory, 'manifest.ts'),
+          `if (typeof window === 'undefined') throw new Error('browser globals unavailable'); export default {}\n`
+        ),
+        writeFile(
+          path.join(fixture.skinDirectory, 'build-manifest.ts'),
+          `export default { id: 'custom', routes: [] }\n`
+        ),
       ])
-      await assert.rejects(
-        generateSkin({ projectRoot: fixture.projectRoot, skinId: 'custom' }),
-        /route "missing" component import.*cannot be resolved/i
-      )
-      assert.deepEqual(await readdir(fixture.runtimeDirectory), [])
-    } finally {
-      await rm(fixture.rootPath, { recursive: true, force: true })
-    }
-  })
-
-  it('rejects runtime route metadata drift before generation', async () => {
-    const fixture = await createSkinProjectFixture()
-    try {
-      await mkdir(path.join(fixture.skinDirectory, 'routes'), { recursive: true })
-      await Promise.all([
-        writeFile(path.join(fixture.skinDirectory, 'routes', 'solutions.ts'), 'export default function Solutions() {}\n'),
-        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `import Solutions from './routes/solutions'
-const build = { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] }
-export default { id: 'custom', build, pages: {}, routes: [{ id: 'solutions', path: '/drifted', component: Solutions }] }\n`),
-        writeFile(path.join(fixture.skinDirectory, 'build-manifest.ts'), `export default { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] }\n`),
-      ])
-      await assert.rejects(
-        generateSkin({ projectRoot: fixture.projectRoot, skinId: 'custom' }),
-        /route "solutions" runtime path mismatch.*\/drifted/i
-      )
-    } finally {
-      await rm(fixture.rootPath, { recursive: true, force: true })
-    }
-  })
-
-  it('rejects an embedded runtime build manifest that differs from the generated build manifest', async () => {
-    const fixture = await createSkinProjectFixture()
-    try {
-      await mkdir(path.join(fixture.skinDirectory, 'routes'), { recursive: true })
-      await Promise.all([
-        writeFile(path.join(fixture.skinDirectory, 'routes', 'solutions.ts'), 'export default function Solutions() {}\n'),
-        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `import Solutions from './routes/solutions'
-const build = { id: 'custom', routes: [{ id: 'solutions', path: '/old', componentImport: './routes/solutions' }] }
-export default { id: 'custom', build, pages: {}, routes: [{ id: 'solutions', path: '/solutions', component: Solutions }] }\n`),
-        writeFile(path.join(fixture.skinDirectory, 'build-manifest.ts'), `export default { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] }\n`),
-      ])
-      await assert.rejects(
-        generateSkin({ projectRoot: fixture.projectRoot, skinId: 'custom' }),
-        /embedded build manifest.*solutions.*path/i
-      )
-    } finally {
-      await rm(fixture.rootPath, { recursive: true, force: true })
-    }
-  })
-
-  it('rejects a runtime component that differs from componentImport', async () => {
-    const fixture = await createSkinProjectFixture()
-    try {
-      await mkdir(path.join(fixture.skinDirectory, 'routes'), { recursive: true })
-      await Promise.all([
-        writeFile(path.join(fixture.skinDirectory, 'routes', 'solutions.ts'), 'export default function Imported() {}\n'),
-        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), `function RuntimeOnly() {}; const build = { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] }; export default { id: 'custom', build, pages: {}, routes: [{ id: 'solutions', path: '/solutions', component: RuntimeOnly }] }\n`),
-        writeFile(path.join(fixture.skinDirectory, 'build-manifest.ts'), `export default { id: 'custom', routes: [{ id: 'solutions', path: '/solutions', componentImport: './routes/solutions' }] }\n`),
-      ])
-      await assert.rejects(
-        generateSkin({ projectRoot: fixture.projectRoot, skinId: 'custom' }),
-        /runtime component does not match componentImport/i
+      await generateSkin({ projectRoot: fixture.projectRoot, skinId: 'custom' })
+      assert.match(
+        await readFile(
+          path.join(fixture.runtimeDirectory, 'active-skin.gen.ts'),
+          'utf8'
+        ),
+        /skinManifest/
       )
     } finally {
       await rm(fixture.rootPath, { recursive: true, force: true })
@@ -703,12 +767,19 @@ export default { id: 'custom', build, pages: {}, routes: [{ id: 'solutions', pat
     const fixture = await createSkinProjectFixture()
     const generatedDirectory = path.join(fixture.rootPath, 'src', 'routes', '(skin-generated)')
     const backupDirectory = path.join(fixture.rootPath, 'src', 'routes', '.interrupted-backup')
+    const staleBackupDirectory = path.join(
+      fixture.rootPath,
+      'src',
+      'routes',
+      '.skin-routes-stage-Ab12-backup'
+    )
     const runtimeSelector = path.join(fixture.runtimeDirectory, 'active-skin.gen.ts')
     const buildSelector = path.join(fixture.runtimeDirectory, 'active-skin-build.gen.ts')
     try {
       await Promise.all([
         mkdir(generatedDirectory, { recursive: true }),
         mkdir(backupDirectory, { recursive: true }),
+        mkdir(staleBackupDirectory, { recursive: true }),
       ])
       await Promise.all([
         writeFile(path.join(generatedDirectory, 'new.tsx'), 'new\n'),
@@ -738,6 +809,8 @@ export default { id: 'custom', build, pages: {}, routes: [{ id: 'solutions', pat
       assert.equal(await readFile(runtimeSelector, 'utf8'), 'old-runtime\n')
       assert.equal(await readFile(buildSelector, 'utf8'), 'old-build\n')
       await assert.rejects(readFile(path.join(fixture.runtimeDirectory, '.skin-generation-journal.json'), 'utf8'))
+      await assert.rejects(readFile(path.join(staleBackupDirectory, 'anything'), 'utf8'))
+      assert.equal((await readdir(path.dirname(staleBackupDirectory))).includes(path.basename(staleBackupDirectory)), false)
     } finally {
       await rm(fixture.rootPath, { recursive: true, force: true })
     }

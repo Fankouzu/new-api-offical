@@ -27,6 +27,22 @@ export type ThemeManifest = {
   routes: readonly SkinRuntimeRoute[]
   shell?: ComponentType<{ children: ReactNode }>
 }
+export type ThemeManifestFor<B extends SkinBuildManifest> = Omit<
+  ThemeManifest,
+  'id' | 'build' | 'routes'
+> & {
+  id: B['id']
+  build: B
+  routes: RuntimeRoutesFor<B['routes']>
+}
+type RuntimeRoutesFor<R extends readonly unknown[]> = {
+  readonly [K in keyof R]: R[K] extends {
+    id: infer I
+    path: infer P
+  }
+    ? { id: I; path: P; component: SkinComponent }
+    : R[K]
+}
 export type DefaultThemeManifest = Omit<ThemeManifest, 'pages'> & {
   pages: Record<PublicPageKey, SkinPageDefinition>
 }
