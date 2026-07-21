@@ -1,10 +1,12 @@
+import { createHash } from 'node:crypto'
 import {
+  copyFile,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
   readdir,
   rename,
-  rmdir,
   rm,
   stat,
   unlink,
@@ -26,6 +28,7 @@ const defaultProjectRoot = new URL('../', import.meta.url)
 let temporaryFileSequence = 0
 
 type GenerateSkinOptions = {
+  afterRouteBackup?: () => Promise<void>
   projectRoot?: URL
   skinId?: string
 }
@@ -112,9 +115,10 @@ async function writeChangedOutputs(outputs: GeneratedOutput[]): Promise<void> {
 }
 
 async function loadBuildManifest(filePath: string): Promise<SkinBuildManifest> {
-  const fileStat = await stat(filePath)
+  const manifestContent = await readFile(filePath)
+  const contentHash = createHash('sha256').update(manifestContent).digest('hex')
   const moduleUrl = pathToFileURL(filePath)
-  moduleUrl.searchParams.set('version', `${fileStat.mtimeMs}-${fileStat.size}`)
+  moduleUrl.searchParams.set('version', contentHash)
   const loadedModule: unknown = await import(moduleUrl.href)
 
   if (
@@ -132,58 +136,146 @@ async function loadBuildManifest(filePath: string): Promise<SkinBuildManifest> {
   return loadedModule.default as SkinBuildManifest
 }
 
-async function removeOwnedRouteFiles(directory: string, isRoot = true): Promise<void> {
-  let entries: Awaited<ReturnType<typeof readdir>>
+async function pathExists(filePath: string): Promise<boolean> {
   try {
-    entries = await readdir(directory, { withFileTypes: true })
+    await lstat(filePath)
+    return true
   } catch (error: unknown) {
     if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-      return
+      return false
     }
     throw error
   }
+}
+
+async function copyPreservedFilesAndReadOwnedRoutes(
+  sourceDirectory: string,
+  destinationDirectory: string,
+  relativeDirectory = ''
+): Promise<Map<string, string>> {
+  const ownedRoutes = new Map<string, string>()
+  if (!(await pathExists(sourceDirectory))) {
+    return ownedRoutes
+  }
+
+  const sourceStat = await lstat(sourceDirectory)
+  if (sourceStat.isSymbolicLink()) {
+    throw new Error(`Symlink found under skin-generated routes: ${sourceDirectory}`)
+  }
+  if (!sourceStat.isDirectory()) {
+    throw new Error(`Generated skin route root is not a directory: ${sourceDirectory}`)
+  }
+
+  const entries = await readdir(sourceDirectory)
+  entries.sort((left, right) => left.localeCompare(right))
 
   for (const entry of entries) {
-    const entryPath = path.join(directory, entry.name)
-    if (entry.isDirectory()) {
-      await removeOwnedRouteFiles(entryPath, false)
-    } else if (entry.isFile() && entry.name.endsWith('.tsx')) {
-      await unlink(entryPath)
+    const sourcePath = path.join(sourceDirectory, entry)
+    const destinationPath = path.join(destinationDirectory, entry)
+    const relativePath = path.join(relativeDirectory, entry)
+    const entryStat = await lstat(sourcePath)
+
+    if (entryStat.isSymbolicLink()) {
+      throw new Error(`Symlink found under skin-generated routes: ${sourcePath}`)
+    }
+    if (entryStat.isDirectory()) {
+      await mkdir(destinationPath, { recursive: true })
+      const nestedRoutes = await copyPreservedFilesAndReadOwnedRoutes(
+        sourcePath,
+        destinationPath,
+        relativePath
+      )
+      for (const [routePath, content] of nestedRoutes) {
+        ownedRoutes.set(routePath, content)
+      }
+    } else if (entryStat.isFile() && entry.endsWith('.tsx')) {
+      ownedRoutes.set(relativePath, await readFile(sourcePath, 'utf8'))
+    } else if (entryStat.isFile()) {
+      await copyFile(sourcePath, destinationPath)
+    } else {
+      throw new Error(`Unsupported entry under skin-generated routes: ${sourcePath}`)
     }
   }
 
-  if (!isRoot && (await readdir(directory)).length === 0) {
-    await rmdir(directory)
+  return ownedRoutes
+}
+
+function routeTreesMatch(
+  liveRoutes: ReadonlyMap<string, string>,
+  desiredRoutes: ReadonlyMap<string, string>
+): boolean {
+  if (liveRoutes.size !== desiredRoutes.size) {
+    return false
   }
+
+  for (const [routePath, content] of desiredRoutes) {
+    if (liveRoutes.get(routePath) !== content) {
+      return false
+    }
+  }
+
+  return true
 }
 
 async function regenerateRouteProxies(
   projectRoot: string,
-  routes: readonly ReturnType<typeof validateSkinRoutes>[number][]
+  routes: readonly ReturnType<typeof validateSkinRoutes>[number][],
+  afterRouteBackup?: () => Promise<void>
 ): Promise<void> {
   const routesDirectory = path.join(projectRoot, 'src', 'routes')
   const generatedDirectory = path.join(routesDirectory, '(skin-generated)')
   await mkdir(routesDirectory, { recursive: true })
-  const stagingDirectory = await mkdtemp(path.join(routesDirectory, '.skin-routes-'))
+  const stagingDirectory = await mkdtemp(path.join(routesDirectory, '.skin-routes-stage-'))
+  const backupDirectory = `${stagingDirectory}-backup`
+  let backupCreated = false
+  let stagedRoutesActivated = false
 
   try {
-    const stagedOutputs = routes.map((route) => ({
-      filePath: path.join(stagingDirectory, getGeneratedRouteFile(route.path)),
-      content: renderGeneratedRoute(route),
-    }))
+    const liveRoutes = await copyPreservedFilesAndReadOwnedRoutes(
+      generatedDirectory,
+      stagingDirectory
+    )
+    const desiredRoutes = new Map<string, string>()
+    const stagedOutputs = routes.map((route) => {
+      const relativePath = getGeneratedRouteFile(route.path).replace(
+        /^\(skin-generated\)\//,
+        ''
+      )
+      return {
+        relativePath,
+        filePath: path.join(stagingDirectory, relativePath),
+        content: renderGeneratedRoute(route),
+      }
+    })
     for (const output of stagedOutputs) {
+      desiredRoutes.set(output.relativePath, output.content)
       await mkdir(path.dirname(output.filePath), { recursive: true })
     }
     await writeChangedOutputs(stagedOutputs)
 
-    await mkdir(generatedDirectory, { recursive: true })
-    await removeOwnedRouteFiles(generatedDirectory)
-    for (const output of stagedOutputs) {
-      const relativePath = path.relative(stagingDirectory, output.filePath)
-      const destinationPath = path.join(routesDirectory, relativePath)
-      await mkdir(path.dirname(destinationPath), { recursive: true })
-      await rename(output.filePath, destinationPath)
+    if (routeTreesMatch(liveRoutes, desiredRoutes)) {
+      return
     }
+
+    if (await pathExists(generatedDirectory)) {
+      await rename(generatedDirectory, backupDirectory)
+      backupCreated = true
+    }
+    await afterRouteBackup?.()
+    await rename(stagingDirectory, generatedDirectory)
+    stagedRoutesActivated = true
+
+    if (backupCreated) {
+      await rm(backupDirectory, { recursive: true, force: true })
+    }
+  } catch (error: unknown) {
+    if (stagedRoutesActivated) {
+      await rm(generatedDirectory, { recursive: true, force: true })
+    }
+    if (backupCreated) {
+      await rename(backupDirectory, generatedDirectory)
+    }
+    throw error
   } finally {
     await rm(stagingDirectory, { recursive: true, force: true })
   }
@@ -202,6 +294,8 @@ export async function generateSkin(options: GenerateSkinOptions = {}): Promise<v
   const buildManifest = await loadBuildManifest(buildManifestPath)
   const routes = validateSkinRoutes(buildManifest.routes)
 
+  await regenerateRouteProxies(projectRoot, routes, options.afterRouteBackup)
+
   const runtimeDirectory = path.join(projectRoot, 'src', 'skins', 'runtime')
   await writeChangedOutputs([
     {
@@ -213,7 +307,6 @@ export async function generateSkin(options: GenerateSkinOptions = {}): Promise<v
       content: renderActiveBuildModule(skinId),
     },
   ])
-  await regenerateRouteProxies(projectRoot, routes)
 }
 
 const entryPath = process.argv[1] ? path.resolve(process.argv[1]) : undefined
