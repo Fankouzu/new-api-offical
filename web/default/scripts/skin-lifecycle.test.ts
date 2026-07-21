@@ -8,6 +8,7 @@ import { generateSkin } from './generate-skin'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const packageJsonPath = path.join(frontendRoot, 'package.json')
+const skinWrapperPath = path.join(frontendRoot, 'scripts', 'run-with-skin.ts')
 
 async function createLifecycleFixture() {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'skin-lifecycle-'))
@@ -62,6 +63,11 @@ describe('skin build lifecycle', { concurrency: false }, () => {
     assert.equal(packageJson.scripts['build:default'], 'APP_SKIN=default bun run build')
     assert.equal(packageJson.scripts['build:custom'], 'APP_SKIN=custom bun run build')
     assert.match(packageJson.scripts['test:unit'], /"scripts\/\*\*\/\*\.test\.ts"/)
+    assert.match(packageJson.scripts['test:unit'], /--test-concurrency=1/)
+    assert.doesNotMatch(
+      await readFile(skinWrapperPath, 'utf8'),
+      new RegExp(['SKIN', 'LOCK', 'PROJECT', 'ROOT'].join('_'))
+    )
   })
 
   it('switches default to custom and back deterministically in an isolated project', async () => {

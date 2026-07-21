@@ -11,7 +11,7 @@
     "build:check": "bun run build",
     "build:default": "APP_SKIN=default bun run build",
     "build:custom": "APP_SKIN=custom bun run build",
-    "test:unit": "tsx --test \"src/**/*.test.ts\" \"src/**/*.test.tsx\" \"scripts/**/*.test.ts\"",
+    "test:unit": "tsx --test --test-concurrency=1 \"src/**/*.test.ts\" \"src/**/*.test.tsx\" \"scripts/**/*.test.ts\"",
     "lint": "eslint .",
     "preview": "rsbuild preview",
     "format:check": "prettier --check .",

@@ -7,6 +7,12 @@ import { describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
+const lockDirectory = path.join(
+  frontendRoot,
+  'node_modules',
+  '.cache',
+  'frontend-skin-workspace.lock'
+)
 const timeoutMs = 8_000
 
 function waitForExit(child: ReturnType<typeof spawn>) {
@@ -37,19 +43,9 @@ async function waitForFile(filePath: string): Promise<string> {
   throw new Error(`Timed out waiting for ${filePath}`)
 }
 
-function getLockDirectory(projectRoot: string) {
-  return path.join(
-    projectRoot,
-    'node_modules',
-    '.cache',
-    'frontend-skin-workspace.lock'
-  )
-}
-
 function spawnWrapper(
   skinId: string,
   typecheckBin: string,
-  lockProjectRoot: string,
   killTimeoutMs = 2_000,
   mode = 'typecheck',
   buildBin?: string
@@ -61,7 +57,6 @@ function spawnWrapper(
       APP_SKIN: skinId,
       SKIN_TYPECHECK_BIN: typecheckBin,
       SKIN_CHILD_KILL_TIMEOUT_MS: String(killTimeoutMs),
-      SKIN_LOCK_PROJECT_ROOT: lockProjectRoot,
       ...(buildBin ? { SKIN_BUILD_BIN: buildBin } : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -141,10 +136,9 @@ setInterval(() => {}, 1000)
 `
       )
       childPidPath = childFixture.childPidPath
-      wrapper = spawnWrapper('default', childFixture.executablePath, fixture)
+      wrapper = spawnWrapper('default', childFixture.executablePath)
       wrapperExit = waitForExit(wrapper)
       await waitForFile(startedPath)
-      const lockDirectory = getLockDirectory(fixture)
       assert.ok(await readFile(path.join(lockDirectory, 'owner.json'), 'utf8'))
 
       wrapper.kill('SIGTERM')
@@ -155,7 +149,6 @@ setInterval(() => {}, 1000)
         env: {
           ...process.env,
           APP_SKIN: 'custom',
-          SKIN_LOCK_PROJECT_ROOT: fixture,
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       })
@@ -185,7 +178,7 @@ setInterval(() => {}, 1000)
     try {
       const childFixture = await createExecutable(fixture, 'process.exit(17)\n')
       childPidPath = childFixture.childPidPath
-      wrapper = spawnWrapper('default', childFixture.executablePath, fixture)
+      wrapper = spawnWrapper('default', childFixture.executablePath)
       wrapperExit = waitForExit(wrapper)
 
       assert.deepEqual(await wrapperExit, { code: 17, signal: null })
@@ -216,7 +209,6 @@ setTimeout(() => process.exit(0), 400)
       wrapper = spawnWrapper(
         'default',
         typecheck.executablePath,
-        fixture,
         2_000,
         'build',
         build.executablePath
@@ -224,7 +216,7 @@ setTimeout(() => process.exit(0), 400)
       const wrapperExit = waitForExit(wrapper)
       await waitForFile(buildStartedPath)
       assert.ok(
-        await readFile(path.join(getLockDirectory(fixture), 'owner.json'), 'utf8')
+        await readFile(path.join(lockDirectory, 'owner.json'), 'utf8')
       )
 
       const contender = spawn('bun', ['scripts/run-with-skin.ts', 'generate'], {
@@ -232,14 +224,13 @@ setTimeout(() => process.exit(0), 400)
         env: {
           ...process.env,
           APP_SKIN: 'custom',
-          SKIN_LOCK_PROJECT_ROOT: fixture,
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       })
       assert.equal((await waitForExit(contender)).code, 1)
       assert.deepEqual(await wrapperExit, { code: 0, signal: null })
       await assert.rejects(
-        readFile(path.join(getLockDirectory(fixture), 'owner.json'), 'utf8')
+        readFile(path.join(lockDirectory, 'owner.json'), 'utf8')
       )
     } finally {
       if (wrapper && wrapper.exitCode === null && wrapper.signalCode === null) {
@@ -266,7 +257,7 @@ setInterval(() => {}, 1000)
 `
       )
       childPidPath = childFixture.childPidPath
-      wrapper = spawnWrapper('default', childFixture.executablePath, fixture, 200)
+      wrapper = spawnWrapper('default', childFixture.executablePath, 200)
       wrapperExit = waitForExit(wrapper)
       await waitForFile(startedPath)
 
@@ -276,7 +267,7 @@ setInterval(() => {}, 1000)
       assert.deepEqual(await wrapperExit, { code: null, signal: 'SIGTERM' })
       assert.ok(Date.now() - signaledAt >= 150)
       await assert.rejects(
-        readFile(path.join(getLockDirectory(fixture), 'owner.json'), 'utf8')
+        readFile(path.join(lockDirectory, 'owner.json'), 'utf8')
       )
     } finally {
       await killFixtureProcessGroup(childPidPath)

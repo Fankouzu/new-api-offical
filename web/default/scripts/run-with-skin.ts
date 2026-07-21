@@ -86,9 +86,8 @@ async function main(): Promise<void> {
   }
 
   const skinId = normalizeSkinId(process.env.APP_SKIN)
-  const lockProjectRoot = process.env.SKIN_LOCK_PROJECT_ROOT || projectRoot
   const lease = await acquireSkinWorkspaceLease({
-    projectRoot: lockProjectRoot,
+    projectRoot,
     skinId,
   })
   const onExit = () => lease.releaseSync()
