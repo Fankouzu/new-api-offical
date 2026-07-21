@@ -202,7 +202,7 @@ export function HeroTerminalDemo() {
   const accent = ACCENT_CLASSES[demo.accent]
 
   return (
-    <div className='mx-auto mt-16 w-full max-w-2xl'>
+    <div className='mt-16 mr-auto w-full max-w-2xl'>
       <div
         className={cn(
           'overflow-hidden rounded-2xl border backdrop-blur-sm',
