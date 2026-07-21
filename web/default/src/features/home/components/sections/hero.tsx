@@ -57,7 +57,7 @@ export function Hero(props: HeroProps) {
         className='absolute inset-0 -z-10 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_30%,black_20%,transparent_100%)] bg-[size:4rem_4rem] opacity-[0.08]'
       />
 
-      <div className='mx-auto w-fit max-w-[70vw]'>
+      <div className='mx-auto w-[70vw]'>
         <div className='flex max-w-3xl flex-col items-start text-left'>
           <h1
             className='landing-animate-fade-up text-[clamp(2rem,5.5vw,3.5rem)] leading-[1.15] font-bold tracking-tight'
