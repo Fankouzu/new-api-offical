@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import z from 'zod'
 import { createFileRoute } from '@tanstack/react-router'
-import { ModelDetails } from '@/features/pricing/components/model-details'
+import { SkinPage } from '@/skins/runtime/skin-page'
 
 const modelDetailsSearchSchema = z.object({
   search: z.string().optional(),
@@ -35,5 +35,5 @@ const modelDetailsSearchSchema = z.object({
 
 export const Route = createFileRoute('/pricing/$modelId/')({
   validateSearch: modelDetailsSearchSchema,
-  component: ModelDetails,
+  component: () => <SkinPage page='modelDetails' />,
 })

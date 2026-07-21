@@ -17,8 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { createFileRoute } from '@tanstack/react-router'
-import { Home } from '@/features/home'
+import { SkinPage } from '@/skins/runtime/skin-page'
 
 export const Route = createFileRoute('/')({
-  component: Home,
+  component: () => <SkinPage page='home' />,
 })

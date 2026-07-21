@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import z from 'zod'
 import { createFileRoute } from '@tanstack/react-router'
-import { Pricing } from '@/features/pricing'
+import { SkinPage } from '@/skins/runtime/skin-page'
 
 const pricingSearchSchema = z.object({
   search: z.string().optional(),
@@ -35,5 +35,5 @@ const pricingSearchSchema = z.object({
 
 export const Route = createFileRoute('/pricing/')({
   validateSearch: pricingSearchSchema,
-  component: Pricing,
+  component: () => <SkinPage page='pricing' />,
 })

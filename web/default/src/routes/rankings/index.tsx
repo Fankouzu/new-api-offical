@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import z from 'zod'
 import { createFileRoute } from '@tanstack/react-router'
-import { Rankings } from '@/features/rankings'
+import { SkinPage } from '@/skins/runtime/skin-page'
 
 const rankingsSearchSchema = z.object({
   period: z
@@ -29,5 +29,5 @@ const rankingsSearchSchema = z.object({
 
 export const Route = createFileRoute('/rankings/')({
   validateSearch: rankingsSearchSchema,
-  component: Rankings,
+  component: () => <SkinPage page='rankings' />,
 })
