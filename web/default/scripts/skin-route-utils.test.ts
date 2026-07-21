@@ -13,6 +13,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, it } from 'node:test'
 import { pathToFileURL } from 'node:url'
+import ts from 'typescript'
 import { generateSkin } from './generate-skin'
 import {
   getGeneratedRouteFile,
@@ -168,6 +169,41 @@ describe('skin route generation utilities', () => {
     assert.ok(source.includes("from '@/skins/runtime/skin-route'"))
     assert.ok(source.includes('routeId={"solutions"}'))
     assert.doesNotMatch(source, /\.\/routes\/solutions/)
+  })
+
+  it('resolves the generated proxy runtime import through TypeScript', () => {
+    const source = renderGeneratedRoute({
+      id: 'solutions',
+      path: '/solutions',
+      componentImport: './routes/solutions',
+    })
+    const runtimeImport = source.match(
+      /from ['"](@\/skins\/runtime\/skin-route)['"]/
+    )?.[1]
+    const containingFile = path.join(
+      process.cwd(),
+      'src',
+      'routes',
+      '(skin-generated)',
+      'solutions.tsx'
+    )
+
+    assert.equal(runtimeImport, '@/skins/runtime/skin-route')
+    const resolution = ts.resolveModuleName(
+      runtimeImport,
+      containingFile,
+      {
+        baseUrl: process.cwd(),
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        paths: { '@/*': ['./src/*'] },
+      },
+      ts.sys
+    )
+
+    assert.equal(
+      resolution.resolvedModule?.resolvedFileName,
+      path.join(process.cwd(), 'src', 'skins', 'runtime', 'skin-route.tsx')
+    )
   })
 
   it('renders quote and control characters in route IDs as safe JSX expressions', () => {

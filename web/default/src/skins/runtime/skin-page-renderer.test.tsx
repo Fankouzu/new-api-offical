@@ -66,4 +66,37 @@ describe('SkinPageRenderer', () => {
     assert.match(markup, /aria-live="polite"/)
     assert.match(markup, />Loading\.\.\.</)
   })
+
+  it('renders a synchronous skin route through one boundary and its shell', () => {
+    const plan: SkinPageRenderPlan = {
+      shell: 'skin',
+      definition: { component: Page, shell: 'skin' },
+      skinId: 'custom',
+      Shell,
+    }
+
+    const markup = renderToStaticMarkup(
+      createElement(SkinPageRenderer, { plan })
+    )
+
+    assert.match(markup, /<main>Page content<\/main>/)
+    assert.match(markup, /data-test-shell="true"/)
+    assert.equal((markup.match(/data-skin-boundary=/g) ?? []).length, 1)
+  })
+
+  it('renders the accessible loading status for a pending skin route', () => {
+    const PendingRoute = lazy(() => new Promise<never>(() => undefined))
+    const plan: SkinPageRenderPlan = {
+      shell: 'skin',
+      definition: { component: PendingRoute, shell: 'skin' },
+      skinId: 'custom',
+      Shell,
+    }
+
+    const markup = renderToString(createElement(SkinPageRenderer, { plan }))
+
+    assert.match(markup, /role="status"/)
+    assert.match(markup, /aria-live="polite"/)
+    assert.match(markup, />Loading\.\.\.</)
+  })
 })

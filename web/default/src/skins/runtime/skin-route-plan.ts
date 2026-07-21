@@ -1,0 +1,23 @@
+import type { ThemeManifest } from './contracts'
+import { resolveRuntimeRoute } from './resolve-route'
+import type { SkinPageRenderPlan } from './skin-page-plan'
+
+export function createSkinRouteRenderPlan(
+  activeSkin: ThemeManifest,
+  routeId: string
+): Extract<SkinPageRenderPlan, { shell: 'skin' }> {
+  const component = resolveRuntimeRoute(activeSkin.routes, routeId)
+
+  if (!activeSkin.shell) {
+    throw new Error(
+      `Skin ${activeSkin.id} route ${routeId} requires a skin shell, but none is configured`
+    )
+  }
+
+  return {
+    shell: 'skin',
+    definition: { component, shell: 'skin' },
+    skinId: activeSkin.id,
+    Shell: activeSkin.shell,
+  }
+}
