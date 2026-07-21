@@ -7,12 +7,12 @@
     transform: scale(1);
   }
 
-  .custom-hero-slide.is-active {
-    animation: custom-hero-zoom 5s linear forwards;
+  .custom-hero-slide.is-moving {
+    animation: custom-hero-zoom 6s linear forwards;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .custom-hero-slide.is-active {
+    .custom-hero-slide.is-moving {
       animation: none;
     }
   }

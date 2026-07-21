@@ -1,4 +1,4 @@
-import { createElement, useEffect, useState } from 'react'
+import { createElement, useEffect, useRef, useState } from 'react'
 
 export const CUSTOM_HERO_IMAGES = [
   'https://image.lizh.ai/e0f4935c-a82c-41aa-e917-0e90e1eac700/large',
@@ -13,9 +13,12 @@ export function getNextHeroSlideIndex(current: number, total: number) {
 
 export function CustomHeroCarousel() {
   const [activeIndex, setActiveIndex] = useState(0)
+  const [exitingIndex, setExitingIndex] = useState<number | null>(null)
+  const activeIndexRef = useRef(0)
 
   useEffect(() => {
     let timer: number | undefined
+    let exitTimer: number | undefined
 
     const stop = () => {
       if (timer !== undefined) {
@@ -29,9 +32,14 @@ export function CustomHeroCarousel() {
       if (document.hidden) return
 
       timer = window.setInterval(() => {
-        setActiveIndex((current) =>
-          getNextHeroSlideIndex(current, CUSTOM_HERO_IMAGES.length)
-        )
+        const current = activeIndexRef.current
+        const next = getNextHeroSlideIndex(current, CUSTOM_HERO_IMAGES.length)
+
+        if (exitTimer !== undefined) window.clearTimeout(exitTimer)
+        setExitingIndex(current)
+        activeIndexRef.current = next
+        setActiveIndex(next)
+        exitTimer = window.setTimeout(() => setExitingIndex(null), 1000)
       }, 5000)
     }
 
@@ -45,6 +53,7 @@ export function CustomHeroCarousel() {
 
     return () => {
       stop()
+      if (exitTimer !== undefined) window.clearTimeout(exitTimer)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])
@@ -62,8 +71,8 @@ export function CustomHeroCarousel() {
         alt: '',
         fetchPriority: index === 0 ? 'high' : 'auto',
         className: `custom-hero-slide absolute inset-0 size-full object-cover transition-opacity duration-2000 ease-in-out motion-reduce:transition-none ${
-          index === activeIndex ? 'is-active opacity-100' : 'opacity-0'
-        }`,
+          index === activeIndex || index === exitingIndex ? 'is-moving' : ''
+        } ${index === activeIndex ? 'opacity-100' : 'opacity-0'}`,
       })
     ),
     createElement('div', { className: 'absolute inset-0 bg-black/55' })

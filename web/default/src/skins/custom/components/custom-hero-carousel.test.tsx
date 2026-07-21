@@ -19,7 +19,7 @@ describe('CustomHeroCarousel', () => {
     assert.match(markup, /object-cover/)
     assert.match(markup, /duration-2000/)
     assert.match(markup, /custom-hero-slide/)
-    assert.match(markup, /is-active/)
+    assert.match(markup, /is-moving/)
     assert.match(markup, /aria-hidden="true"/)
   })
 
