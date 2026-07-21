@@ -1,7 +1,12 @@
 import type { ComponentType } from 'react'
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import type { PublicPageKey, ThemeManifest } from './contracts'
+import type {
+  DefaultThemeManifest,
+  PublicPageKey,
+  SkinPageDefinition,
+  ThemeManifest,
+} from './contracts'
 import { resolveSkinPage } from './resolve-page'
 
 const ActiveHome: ComponentType = () => null
@@ -20,12 +25,37 @@ function createManifest(
   }
 }
 
+function createDefaultManifest(
+  pages: Partial<Record<PublicPageKey, SkinPageDefinition>> = {}
+): DefaultThemeManifest {
+  const fallbackPage: SkinPageDefinition = {
+    component: DefaultHome,
+    shell: 'self',
+  }
+
+  return {
+    id: 'default',
+    build: { id: 'default', routes: [] },
+    pages: {
+      home: fallbackPage,
+      pricing: fallbackPage,
+      modelDetails: fallbackPage,
+      rankings: fallbackPage,
+      about: fallbackPage,
+      privacyPolicy: fallbackPage,
+      userAgreement: fallbackPage,
+      ...pages,
+    },
+    routes: [],
+  }
+}
+
 describe('resolveSkinPage', () => {
   it('prefers the active skin page override', () => {
     const activeSkin = createManifest('custom', {
       home: { component: ActiveHome, shell: 'skin' },
     })
-    const defaultSkin = createManifest('default', {
+    const defaultSkin = createDefaultManifest({
       home: { component: DefaultHome, shell: 'self' },
     })
 
@@ -37,7 +67,7 @@ describe('resolveSkinPage', () => {
 
   it('falls back to the default skin page', () => {
     const activeSkin = createManifest('custom', {})
-    const defaultSkin = createManifest('default', {
+    const defaultSkin = createDefaultManifest({
       pricing: { component: DefaultPricing, shell: 'self' },
     })
 
@@ -49,27 +79,44 @@ describe('resolveSkinPage', () => {
 
   it('throws an actionable error when neither manifest defines the page', () => {
     const page: PublicPageKey = 'about'
+    const defaultSkin = createDefaultManifest()
+    const pagesWithoutAbout = new Proxy(defaultSkin.pages, {
+      get(target, property, receiver) {
+        if (property === page) {
+          return undefined
+        }
+
+        return Reflect.get(target, property, receiver)
+      },
+    })
 
     assert.throws(
       () =>
         resolveSkinPage(
           createManifest('custom', {}),
-          createManifest('default', {}),
+          { ...defaultSkin, pages: pagesWithoutAbout },
           page
         ),
-      { message: `No page registered for ${page}` }
+      {
+        message:
+          'No page registered for about in active skin custom or default skin default',
+      }
     )
   })
 
   it('does not mutate either manifest', () => {
     const activePages = Object.freeze({})
-    const defaultPages = Object.freeze({
-      home: Object.freeze({ component: DefaultHome, shell: 'self' as const }),
+    const defaultSkin = createDefaultManifest({
+      home: Object.freeze({ component: DefaultHome, shell: 'self' }),
     })
+    const defaultPages = Object.freeze(defaultSkin.pages)
     const activeSkin = Object.freeze(createManifest('custom', activePages))
-    const defaultSkin = Object.freeze(createManifest('default', defaultPages))
+    const frozenDefaultSkin = Object.freeze({
+      ...defaultSkin,
+      pages: defaultPages,
+    })
 
-    const resolvedPage = resolveSkinPage(activeSkin, defaultSkin, 'home')
+    const resolvedPage = resolveSkinPage(activeSkin, frozenDefaultSkin, 'home')
 
     assert.equal(resolvedPage, defaultPages.home)
     assert.deepEqual(activeSkin.pages, {})

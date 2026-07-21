@@ -1,5 +1,5 @@
 @layer theme {
-  [data-skin='custom'] {
+  [data-skin='custom'] [data-skin-shell='custom'] {
     --skin-font-body: var(--font-sans);
   }
 }

@@ -23,3 +23,6 @@ export type ThemeManifest = {
   routes: readonly SkinRuntimeRoute[]
   shell?: ComponentType<{ children: ReactNode }>
 }
+export type DefaultThemeManifest = Omit<ThemeManifest, 'pages'> & {
+  pages: Record<PublicPageKey, SkinPageDefinition>
+}

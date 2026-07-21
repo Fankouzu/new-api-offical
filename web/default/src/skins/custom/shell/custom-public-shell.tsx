@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { createElement, type ReactNode } from 'react'
 import '../styles/index.css'
 
 type CustomPublicShellProps = {
@@ -6,5 +6,5 @@ type CustomPublicShellProps = {
 }
 
 export function CustomPublicShell(props: CustomPublicShellProps) {
-  return <div data-skin-shell='custom'>{props.children}</div>
+  return createElement('div', { 'data-skin-shell': 'custom' }, props.children)
 }
