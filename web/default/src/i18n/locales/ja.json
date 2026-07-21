@@ -767,6 +767,8 @@
     "Command": "コマンド",
     "Common": "共通",
     "Common Keys": "よく使うキー",
+    "Common OpenAI-compatible request parameters. Availability varies by provider; unsupported parameters may be ignored or rejected.": "OpenAI 互換の一般的なリクエストパラメータです。利用可否はプロバイダーによって異なり、サポートされていないパラメータは無視または拒否される場合があります。",
+    "Common parameters": "一般的なパラメータ",
     "Common Logs": "一般的なログ",
     "Common ports include 25, 465, and 587": "一般的なポートには 25, 465, 587 が含まれます",
     "Common User": "一般ユーザー",

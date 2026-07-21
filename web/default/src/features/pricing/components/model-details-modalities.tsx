@@ -60,6 +60,9 @@ export function ModalityIcons(props: {
     <span className='inline-flex items-center gap-1'>
       {props.modalities.map((modality) => {
         const meta = MODALITY_META[modality]
+        // Defensive: skip any modality value we have no icon for (e.g. an
+        // unrecognized value sourced from the catalog) rather than crashing.
+        if (!meta) return null
         const Icon = meta.icon
         return (
           <Tooltip key={modality}>

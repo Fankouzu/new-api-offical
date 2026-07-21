@@ -767,6 +767,8 @@
     "Command": "Lệnh",
     "Common": "Chung",
     "Common Keys": "Khóa thường dùng",
+    "Common OpenAI-compatible request parameters. Availability varies by provider; unsupported parameters may be ignored or rejected.": "Các tham số yêu cầu phổ biến tương thích với OpenAI. Khả dụng tùy thuộc vào nhà cung cấp; các tham số không được hỗ trợ có thể bị bỏ qua hoặc từ chối.",
+    "Common parameters": "Tham số phổ biến",
     "Common Logs": "Logarit thập phân",
     "Common ports include 25, 465, and 587": "Các cổng phổ biến bao gồm 25, 465 và 587",
     "Common User": "Người dùng thông thường",

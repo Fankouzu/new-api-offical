@@ -252,6 +252,148 @@ func TestBuildRobotsAndSitemap(t *testing.T) {
 	}
 }
 
+func TestIsKnownRouteRejectsUnknownAndMissingModelPaths(t *testing.T) {
+	if !IsKnownRoute("/pricing", nil, "") {
+		t.Fatal("pricing should be a known public route")
+	}
+	if IsKnownRoute("/pricing/missing-model", nil, "") {
+		t.Fatal("missing model page should not be treated as a valid route")
+	}
+	if IsKnownRoute("/this-page-does-not-exist", nil, "") {
+		t.Fatal("unknown paths should not fall back to the SPA shell")
+	}
+	if !IsKnownRoute("/console/topup", nil, "") {
+		t.Fatal("authenticated SPA routes should keep their fallback")
+	}
+}
+
+func TestIsKnownRouteAllowsFrontendDeepLinks(t *testing.T) {
+	tests := []struct {
+		path  string
+		theme string
+	}{
+		{path: "/dashboard"},
+		{path: "/dashboard/overview"},
+		{path: "/profile"},
+		{path: "/keys"},
+		{path: "/subscriptions"},
+		{path: "/redemption-codes"},
+		{path: "/chat/conversation-123"},
+		{path: "/oauth"},
+		{path: "/sign-in"},
+		{path: "/sign-up"},
+		{path: "/forgot-password"},
+		{path: "/otp"},
+		{path: "/404"},
+		{path: "/login", theme: "classic"},
+		{path: "/register", theme: "classic"},
+		{path: "/forbidden", theme: "classic"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.theme+tt.path, func(t *testing.T) {
+			if !IsKnownRoute(tt.path, nil, tt.theme) {
+				t.Fatalf("expected %s to be a known %s frontend route", tt.path, tt.theme)
+			}
+		})
+	}
+}
+
+func TestIsKnownRouteRejectsInvalidDeepLinksAndWrongThemeRoutes(t *testing.T) {
+	tests := []struct {
+		path  string
+		theme string
+	}{
+		{path: "/keys/not-real"},
+		{path: "/profile/not-real"},
+		{path: "/subscriptions/not-real"},
+		{path: "/redemption-codes/not-real"},
+		{path: "/dashboard/section/extra"},
+		{path: "/chat/conversation/extra"},
+		{path: "/oauth/provider/extra"},
+		{path: "/oauth/provider/extra", theme: "classic"},
+		{path: "/dashboard", theme: "classic"},
+		{path: "/keys", theme: "classic"},
+		{path: "/profile", theme: "classic"},
+		{path: "/chat/conversation", theme: "classic"},
+		{path: "/oauth", theme: "classic"},
+		{path: "/compare/ai-api-pricing", theme: "classic"},
+		{path: "/sign-in", theme: "classic"},
+		{path: "/sign-up", theme: "classic"},
+		{path: "/forgot-password", theme: "classic"},
+		{path: "/otp", theme: "classic"},
+		{path: "/401", theme: "classic"},
+		{path: "/403", theme: "classic"},
+		{path: "/404", theme: "classic"},
+		{path: "/500", theme: "classic"},
+		{path: "/503", theme: "classic"},
+		{path: "/login"},
+		{path: "/register"},
+		{path: "/forbidden"},
+		{path: "/usage-logs/activity", theme: "classic"},
+		{path: "/playground", theme: "classic"},
+		{path: "/wallet", theme: "classic"},
+		{path: "/channels", theme: "classic"},
+		{path: "/system-settings/site", theme: "classic"},
+		{path: "/models/catalog", theme: "classic"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.theme+tt.path, func(t *testing.T) {
+			if IsKnownRoute(tt.path, nil, tt.theme) {
+				t.Fatalf("expected %s to be rejected for theme %q", tt.path, tt.theme)
+			}
+		})
+	}
+}
+
+func TestIsKnownRouteRejectsUnknownDescendantsWithinActiveTheme(t *testing.T) {
+	tests := []struct {
+		path  string
+		theme string
+	}{
+		{path: "/usage-logs/activity/extra"},
+		{path: "/models/catalog/extra"},
+		{path: "/_authenticated/anything"},
+		{path: "/console/not-a-route"},
+		{path: "/wallet/not-real"},
+		{path: "/channels/not-real"},
+		{path: "/system-settings/not-real"},
+		{path: "/system-settings/site/general/extra"},
+		{path: "/console/not-a-route", theme: "classic"},
+		{path: "/console/chat/id/extra", theme: "classic"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.theme+tt.path, func(t *testing.T) {
+			if IsKnownRoute(tt.path, nil, tt.theme) {
+				t.Fatalf("expected unknown descendant %s to be rejected for theme %q", tt.path, tt.theme)
+			}
+		})
+	}
+}
+
+func TestIsKnownRouteAllowsActualAuthenticatedRoutes(t *testing.T) {
+	tests := []struct {
+		path  string
+		theme string
+	}{
+		{path: "/console/topup"},
+		{path: "/usage-logs/activity"},
+		{path: "/models/catalog"},
+		{path: "/errors/provider-timeout"},
+		{path: "/system-settings/site"},
+		{path: "/system-settings/site/general"},
+		{path: "/console/channel", theme: "classic"},
+		{path: "/console/chat", theme: "classic"},
+		{path: "/console/chat/conversation", theme: "classic"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.theme+tt.path, func(t *testing.T) {
+			if !IsKnownRoute(tt.path, nil, tt.theme) {
+				t.Fatalf("expected actual route %s to be allowed for theme %q", tt.path, tt.theme)
+			}
+		})
+	}
+}
+
 func TestBuildSitemapOnlyIncludesIndexableURLs(t *testing.T) {
 	sitemap := BuildSitemapXML("https://lizh.ai", testCatalog)
 	for _, url := range sitemapURLs(t, sitemap) {

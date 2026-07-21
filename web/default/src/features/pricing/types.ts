@@ -69,6 +69,10 @@ export type PricingModel = {
   input_modalities?: Modality[]
   output_modalities?: Modality[]
   capabilities?: ModelCapability[]
+  /** Whether the model supports the temperature parameter (models.dev catalog). */
+  supports_temperature?: boolean
+  /** Real reasoning_effort enum values for reasoning models (models.dev catalog). */
+  reasoning_effort_values?: string[]
 }
 
 /** Input/output modalities supported by a model. */

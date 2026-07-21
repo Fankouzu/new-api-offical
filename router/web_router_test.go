@@ -122,6 +122,30 @@ func TestWebRouterServesSEOFilesWithCrawlerFriendlyContentTypes(t *testing.T) {
 	}
 }
 
+func TestWebRouterReturns404ForUnknownPath(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupWebRouterTestDB(t)
+	oldServerAddress := system_setting.ServerAddress
+	defer func() { system_setting.ServerAddress = oldServerAddress }()
+	system_setting.ServerAddress = "https://lizh.ai"
+
+	r := gin.New()
+	SetWebRouter(r, ThemeAssets{
+		DefaultBuildFS:   emptyWebDefaultBuildFS,
+		DefaultIndexPage: []byte(`<!doctype html><html><head><title>Old</title></head><body><div id="root"></div></body></html>`),
+		ClassicBuildFS:   emptyWebClassicBuildFS,
+		ClassicIndexPage: []byte(`<!doctype html><html><head><title>Old</title></head><body><div id="root"></div></body></html>`),
+	})
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/this-page-does-not-exist", nil)
+	req.Host = "lizh.ai"
+	r.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("unknown path status = %d, want %d", recorder.Code, http.StatusNotFound)
+	}
+}
+
 func TestSetupWebRouterTestDBRestoresGlobals(t *testing.T) {
 	originalDB := model.DB
 	originalSQLite := common.UsingSQLite
