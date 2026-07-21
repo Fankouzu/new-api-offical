@@ -1,10 +1,5 @@
-import { createContext, createElement, useContext, type ReactNode } from 'react'
-
-const missingSkinPortalProvider = Symbol('missing-skin-portal-provider')
-
-const SkinPortalContext = createContext<
-  HTMLElement | null | typeof missingSkinPortalProvider
->(missingSkinPortalProvider)
+import { createElement, type ReactNode } from 'react'
+import { SkinPortalContext } from './skin-portal-context'
 
 type SkinPortalProviderProps = {
   children: ReactNode
@@ -17,14 +12,4 @@ export function SkinPortalProvider(props: SkinPortalProviderProps) {
     { value: props.container },
     props.children
   )
-}
-
-export function useSkinPortalContainer(): HTMLElement | null {
-  const container = useContext(SkinPortalContext)
-
-  if (container === missingSkinPortalProvider) {
-    throw new Error('useSkinPortalContainer must be used within a SkinBoundary')
-  }
-
-  return container
 }

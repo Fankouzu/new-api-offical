@@ -2,30 +2,16 @@ import {
   createElement,
   Fragment,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
 import { SkinPortalProvider } from './skin-portal'
-
-type SkinSurfaceDataset = {
-  skinSurface?: string
-}
-
-export function setSkinSurface(
-  dataset: SkinSurfaceDataset,
-  skinId: string
-): void {
-  dataset.skinSurface = skinId
-}
-
-export function clearOwnedSkinSurface(
-  dataset: SkinSurfaceDataset,
-  skinId: string
-): void {
-  if (dataset.skinSurface === skinId) {
-    delete dataset.skinSurface
-  }
-}
+import {
+  createSkinSurfaceToken,
+  registerSkinSurface,
+  unregisterSkinSurface,
+} from './skin-surface-registry'
 
 type SkinBoundaryProps = {
   skinId: string
@@ -33,15 +19,18 @@ type SkinBoundaryProps = {
 }
 
 export function SkinBoundary(props: SkinBoundaryProps) {
+  const surfaceToken = useRef(createSkinSurfaceToken())
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(
     null
   )
 
   useEffect(() => {
-    setSkinSurface(document.body.dataset, props.skinId)
+    const dataset = document.body.dataset
+    const token = surfaceToken.current
+    registerSkinSurface(dataset, token, props.skinId)
 
     return () => {
-      clearOwnedSkinSurface(document.body.dataset, props.skinId)
+      unregisterSkinSurface(dataset, token)
     }
   }, [props.skinId])
 
