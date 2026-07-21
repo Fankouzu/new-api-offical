@@ -10,7 +10,7 @@ const PUBLIC_PAGE_PATHS: Record<PublicPageKey, `/${string}`> = {
   userAgreement: '/user-agreement',
 }
 
-export const HOST_OWNED_PATHS = new Set<string>([
+const HOST_OWNED_PATHS = new Set<string>([
   ...Object.values(PUBLIC_PAGE_PATHS),
   '/compare/ai-api-pricing',
   '/sign-in',
@@ -27,10 +27,12 @@ export const HOST_OWNED_PATHS = new Set<string>([
   '/503',
 ])
 
-export const FORBIDDEN_PREFIXES = [
+const FORBIDDEN_PREFIXES = [
   '/oauth',
   '/console',
   '/dashboard',
+  '/chat2link',
+  '/errors',
   '/wallet',
   '/models',
   '/channels',
@@ -45,17 +47,40 @@ export const FORBIDDEN_PREFIXES = [
   '/chat',
 ] as const
 
+function hasAsciiControlCharacter(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const characterCode = value.charCodeAt(index)
+    if (characterCode <= 0x1f || characterCode === 0x7f) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function isCanonicalRoutePath(path: string): boolean {
+  if (
+    !path.startsWith('/') ||
+    path.includes('//') ||
+    path.includes('?') ||
+    path.includes('#') ||
+    path.includes('%') ||
+    path.includes('\\') ||
+    hasAsciiControlCharacter(path) ||
+    (path !== '/' && path.endsWith('/'))
+  ) {
+    return false
+  }
+
+  return !path.split('/').some((segment) => segment === '.' || segment === '..')
+}
+
 export function getPublicPagePath(page: PublicPageKey): `/${string}` {
   return PUBLIC_PAGE_PATHS[page]
 }
 
 export function assertSkinRouteAllowed(path: string): void {
-  if (
-    !path.startsWith('/') ||
-    path.includes('//') ||
-    path.includes('?') ||
-    path.includes('#')
-  ) {
+  if (!isCanonicalRoutePath(path)) {
     throw new Error(`Invalid skin route path: ${path}`)
   }
 
