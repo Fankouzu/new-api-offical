@@ -4,7 +4,7 @@ const config: KnipConfig = {
   entry: [
     'src/main.tsx',
     'scripts/skin-lifecycle.test.ts',
-    'scripts/skin-wrapper.integration.ts',
+    'scripts/skin-wrapper.integration.test.ts',
     'scripts/skin-workspace-lock.test.ts',
   ],
   ignore: ['src/components/ui/**', 'src/routeTree.gen.ts'],
