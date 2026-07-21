@@ -3,8 +3,11 @@ import { fileURLToPath } from 'url'
 import { defineConfig, loadEnv } from '@rsbuild/core'
 import { pluginReact } from '@rsbuild/plugin-react'
 import { tanstackRouter } from '@tanstack/router-plugin/rspack'
+import { generateSkin } from './scripts/generate-skin.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+await generateSkin()
 
 export default defineConfig(({ envMode }) => {
   const env = loadEnv({ mode: envMode, prefixes: ['VITE_'] })
