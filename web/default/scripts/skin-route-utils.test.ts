@@ -14,9 +14,12 @@ import { describe, it } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { generateSkin } from './generate-skin'
 import {
+  getGeneratedRouteFile,
   normalizeSkinId,
   renderActiveBuildModule,
   renderActiveSkinModule,
+  renderGeneratedRoute,
+  validateSkinRoutes,
 } from './skin-route-utils'
 
 describe('skin build selection utilities', () => {
@@ -44,6 +47,102 @@ describe('skin build selection utilities', () => {
     assert.match(source, /@\/skins\/custom\/build-manifest/)
     assert.match(source, /export \{ default as activeSkinBuild \}/)
     assert.doesNotMatch(source, /customSkinBuild/)
+  })
+})
+
+describe('skin route generation utilities', () => {
+  it('maps a top-level route to the generated route group', () => {
+    assert.equal(getGeneratedRouteFile('/solutions'), '(skin-generated)/solutions.tsx')
+  })
+
+  it('keeps dynamic route segments literal', () => {
+    assert.equal(
+      getGeneratedRouteFile('/guides/$slug'),
+      '(skin-generated)/guides/$slug.tsx'
+    )
+  })
+
+  it('rejects duplicate route IDs', () => {
+    assert.throws(
+      () =>
+        validateSkinRoutes([
+          { id: 'solutions', path: '/solutions', componentImport: './routes/solutions' },
+          { id: 'solutions', path: '/guides', componentImport: './routes/guides' },
+        ]),
+      /duplicate skin route id: solutions/i
+    )
+  })
+
+  it('rejects duplicate route paths', () => {
+    assert.throws(
+      () =>
+        validateSkinRoutes([
+          { id: 'solutions', path: '/solutions', componentImport: './routes/solutions' },
+          { id: 'other', path: '/solutions', componentImport: './routes/other' },
+        ]),
+      /duplicate skin route path: \/solutions/i
+    )
+  })
+
+  it('rejects host-owned routes through the shared route policy', () => {
+    assert.throws(
+      () =>
+        validateSkinRoutes([
+          { id: 'pricing', path: '/pricing', componentImport: './routes/pricing' },
+        ]),
+      /host-owned path: \/pricing/i
+    )
+  })
+
+  it('rejects unsafe and non-canonical routes through the shared route policy', () => {
+    assert.throws(
+      () =>
+        validateSkinRoutes([
+          { id: 'unsafe', path: '/guides/../pricing', componentImport: './routes/unsafe' },
+        ]),
+      /invalid skin route path/i
+    )
+  })
+
+  it('rejects empty route IDs and component imports', () => {
+    assert.throws(
+      () => validateSkinRoutes([{ id: '', path: '/solutions', componentImport: './route' }]),
+      /empty skin route id/i
+    )
+    assert.throws(
+      () => validateSkinRoutes([{ id: 'solutions', path: '/solutions', componentImport: '' }]),
+      /empty component import/i
+    )
+  })
+
+  it('renders a route proxy through ActiveSkinRoute', () => {
+    const source = renderGeneratedRoute({
+      id: 'solutions',
+      path: '/solutions',
+      componentImport: './routes/solutions',
+    })
+
+    assert.ok(source.includes("createFileRoute('/(skin-generated)/solutions')"))
+    assert.match(source, /<ActiveSkinRoute routeId='solutions' \/>/)
+    assert.doesNotMatch(source, /\.\/routes\/solutions/)
+  })
+
+  it('returns routes sorted by path without mutating the input', () => {
+    const routes = [
+      { id: 'solutions', path: '/solutions' as const, componentImport: './routes/solutions' },
+      { id: 'guides', path: '/guides' as const, componentImport: './routes/guides' },
+    ]
+
+    const validated = validateSkinRoutes(routes)
+
+    assert.deepEqual(
+      validated.map((route) => route.path),
+      ['/guides', '/solutions']
+    )
+    assert.deepEqual(
+      routes.map((route) => route.path),
+      ['/solutions', '/guides']
+    )
   })
 })
 
@@ -97,7 +196,7 @@ describe('skin generator', () => {
         writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), 'export default {}\n'),
         writeFile(
           path.join(fixture.skinDirectory, 'build-manifest.ts'),
-          'export default {}\n'
+          "export default { id: 'custom', routes: [] }\n"
         ),
         writeFile(path.join(fixture.runtimeDirectory, 'active-skin.gen.ts'), 'stale\n'),
         writeFile(path.join(fixture.runtimeDirectory, 'active-skin-build.gen.ts'), 'stale\n'),
@@ -125,7 +224,7 @@ describe('skin generator', () => {
         writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), 'export default {}\n'),
         writeFile(
           path.join(fixture.skinDirectory, 'build-manifest.ts'),
-          'export default {}\n'
+          "export default { id: 'custom', routes: [] }\n"
         ),
       ])
       await generateSkin({ projectRoot: fixture.projectRoot, skinId: 'custom' })
@@ -140,6 +239,50 @@ describe('skin generator', () => {
       const after = await Promise.all([stat(runtimePath), stat(buildPath)])
       assert.equal(after[0].mtimeMs, before[0].mtimeMs)
       assert.equal(after[1].mtimeMs, before[1].mtimeMs)
+    } finally {
+      await rm(fixture.rootPath, { recursive: true, force: true })
+    }
+  })
+
+  it('regenerates nested proxies while preserving files outside generated ownership', async () => {
+    const fixture = await createSkinProjectFixture()
+    const generatedDirectory = path.join(fixture.rootPath, 'src', 'routes', '(skin-generated)')
+    try {
+      await Promise.all([
+        mkdir(path.join(generatedDirectory, 'stale'), { recursive: true }),
+        writeFile(path.join(fixture.skinDirectory, 'manifest.ts'), 'export default {}\n'),
+        writeFile(
+          path.join(fixture.skinDirectory, 'build-manifest.ts'),
+          `export default {
+  id: 'custom',
+  routes: [
+    { id: 'solutions', path: '/solutions', componentImport: './routes/solutions' },
+    { id: 'guide', path: '/guides/$slug', componentImport: './routes/guide' },
+  ],
+}\n`
+        ),
+      ])
+      await Promise.all([
+        writeFile(path.join(generatedDirectory, '.gitignore'), '*.tsx\n!/.gitignore\n'),
+        writeFile(path.join(generatedDirectory, 'notes.txt'), 'preserve\n'),
+        writeFile(path.join(generatedDirectory, 'stale', 'old.tsx'), 'stale\n'),
+        writeFile(path.join(generatedDirectory, 'stale', 'keep.json'), '{}\n'),
+      ])
+
+      await generateSkin({ projectRoot: fixture.projectRoot, skinId: 'custom' })
+
+      assert.match(
+        await readFile(path.join(generatedDirectory, 'guides', '$slug.tsx'), 'utf8'),
+        /routeId='guide'/
+      )
+      assert.match(
+        await readFile(path.join(generatedDirectory, 'solutions.tsx'), 'utf8'),
+        /routeId='solutions'/
+      )
+      await assert.rejects(readFile(path.join(generatedDirectory, 'stale', 'old.tsx'), 'utf8'))
+      assert.equal(await readFile(path.join(generatedDirectory, '.gitignore'), 'utf8'), '*.tsx\n!/.gitignore\n')
+      assert.equal(await readFile(path.join(generatedDirectory, 'notes.txt'), 'utf8'), 'preserve\n')
+      assert.equal(await readFile(path.join(generatedDirectory, 'stale', 'keep.json'), 'utf8'), '{}\n')
     } finally {
       await rm(fixture.rootPath, { recursive: true, force: true })
     }

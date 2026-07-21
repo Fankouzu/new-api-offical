@@ -1,10 +1,25 @@
-import { readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rmdir,
+  rm,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import type { SkinBuildManifest } from '../src/skins/runtime/build-contracts'
+import {
+  getGeneratedRouteFile,
   normalizeSkinId,
   renderActiveBuildModule,
   renderActiveSkinModule,
+  renderGeneratedRoute,
+  validateSkinRoutes,
 } from './skin-route-utils'
 
 const defaultProjectRoot = new URL('../', import.meta.url)
@@ -96,6 +111,84 @@ async function writeChangedOutputs(outputs: GeneratedOutput[]): Promise<void> {
   }
 }
 
+async function loadBuildManifest(filePath: string): Promise<SkinBuildManifest> {
+  const fileStat = await stat(filePath)
+  const moduleUrl = pathToFileURL(filePath)
+  moduleUrl.searchParams.set('version', `${fileStat.mtimeMs}-${fileStat.size}`)
+  const loadedModule: unknown = await import(moduleUrl.href)
+
+  if (
+    typeof loadedModule !== 'object' ||
+    loadedModule === null ||
+    !('default' in loadedModule) ||
+    typeof loadedModule.default !== 'object' ||
+    loadedModule.default === null ||
+    !('routes' in loadedModule.default) ||
+    !Array.isArray(loadedModule.default.routes)
+  ) {
+    throw new Error(`Invalid skin build manifest: ${filePath}`)
+  }
+
+  return loadedModule.default as SkinBuildManifest
+}
+
+async function removeOwnedRouteFiles(directory: string, isRoot = true): Promise<void> {
+  let entries: Awaited<ReturnType<typeof readdir>>
+  try {
+    entries = await readdir(directory, { withFileTypes: true })
+  } catch (error: unknown) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return
+    }
+    throw error
+  }
+
+  for (const entry of entries) {
+    const entryPath = path.join(directory, entry.name)
+    if (entry.isDirectory()) {
+      await removeOwnedRouteFiles(entryPath, false)
+    } else if (entry.isFile() && entry.name.endsWith('.tsx')) {
+      await unlink(entryPath)
+    }
+  }
+
+  if (!isRoot && (await readdir(directory)).length === 0) {
+    await rmdir(directory)
+  }
+}
+
+async function regenerateRouteProxies(
+  projectRoot: string,
+  routes: readonly ReturnType<typeof validateSkinRoutes>[number][]
+): Promise<void> {
+  const routesDirectory = path.join(projectRoot, 'src', 'routes')
+  const generatedDirectory = path.join(routesDirectory, '(skin-generated)')
+  await mkdir(routesDirectory, { recursive: true })
+  const stagingDirectory = await mkdtemp(path.join(routesDirectory, '.skin-routes-'))
+
+  try {
+    const stagedOutputs = routes.map((route) => ({
+      filePath: path.join(stagingDirectory, getGeneratedRouteFile(route.path)),
+      content: renderGeneratedRoute(route),
+    }))
+    for (const output of stagedOutputs) {
+      await mkdir(path.dirname(output.filePath), { recursive: true })
+    }
+    await writeChangedOutputs(stagedOutputs)
+
+    await mkdir(generatedDirectory, { recursive: true })
+    await removeOwnedRouteFiles(generatedDirectory)
+    for (const output of stagedOutputs) {
+      const relativePath = path.relative(stagingDirectory, output.filePath)
+      const destinationPath = path.join(routesDirectory, relativePath)
+      await mkdir(path.dirname(destinationPath), { recursive: true })
+      await rename(output.filePath, destinationPath)
+    }
+  } finally {
+    await rm(stagingDirectory, { recursive: true, force: true })
+  }
+}
+
 export async function generateSkin(options: GenerateSkinOptions = {}): Promise<void> {
   const projectRoot = fileURLToPath(options.projectRoot ?? defaultProjectRoot)
   const skinId = normalizeSkinId(options.skinId ?? process.env.APP_SKIN)
@@ -105,6 +198,9 @@ export async function generateSkin(options: GenerateSkinOptions = {}): Promise<v
 
   await assertManifestFile(runtimeManifestPath, projectRoot, skinId)
   await assertManifestFile(buildManifestPath, projectRoot, skinId)
+
+  const buildManifest = await loadBuildManifest(buildManifestPath)
+  const routes = validateSkinRoutes(buildManifest.routes)
 
   const runtimeDirectory = path.join(projectRoot, 'src', 'skins', 'runtime')
   await writeChangedOutputs([
@@ -117,6 +213,7 @@ export async function generateSkin(options: GenerateSkinOptions = {}): Promise<v
       content: renderActiveBuildModule(skinId),
     },
   ])
+  await regenerateRouteProxies(projectRoot, routes)
 }
 
 const entryPath = process.argv[1] ? path.resolve(process.argv[1]) : undefined
