@@ -27,6 +27,22 @@ describe('SkinBoundary', () => {
     )
   })
 
+  it('rejects nested skin boundaries', () => {
+    assert.throws(
+      () =>
+        renderToStaticMarkup(
+          createElement(SkinBoundary, {
+            skinId: 'outer',
+            children: createElement(SkinBoundary, {
+              skinId: 'inner',
+              children: createElement('main', null, 'Nested content'),
+            }),
+          })
+        ),
+      { message: 'SkinBoundary cannot be nested' }
+    )
+  })
+
   it('rejects portal hook use outside a SkinBoundary provider', () => {
     function PortalConsumer() {
       useSkinPortalContainer()

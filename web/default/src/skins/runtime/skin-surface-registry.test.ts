@@ -57,6 +57,24 @@ describe('skin surface registry', () => {
     assert.equal(dataset.skinSurface, 'B')
   })
 
+  it('restores remaining owners across React-style prop effect replacement', () => {
+    const dataset: Dataset = {}
+    const existing = createSkinSurfaceToken()
+    const updated = createSkinSurfaceToken()
+
+    registerSkinSurface(dataset, existing, 'B')
+    registerSkinSurface(dataset, updated, 'A')
+
+    unregisterSkinSurface(dataset, updated)
+    assert.equal(dataset.skinSurface, 'B')
+
+    registerSkinSurface(dataset, updated, 'C')
+    assert.equal(dataset.skinSurface, 'C')
+
+    unregisterSkinSurface(dataset, updated)
+    assert.equal(dataset.skinSurface, 'B')
+  })
+
   it('handles StrictMode-like effect replay without duplicating ownership', () => {
     const dataset: Dataset = {}
     const outer = createSkinSurfaceToken()

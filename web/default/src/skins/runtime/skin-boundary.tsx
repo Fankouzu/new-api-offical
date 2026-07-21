@@ -1,11 +1,12 @@
 import {
   createElement,
   Fragment,
+  useContext,
   useEffect,
-  useRef,
   useState,
   type ReactNode,
 } from 'react'
+import { SkinBoundaryPresenceContext } from './skin-boundary-context'
 import { SkinPortalProvider } from './skin-portal'
 import {
   createSkinSurfaceToken,
@@ -19,35 +20,43 @@ type SkinBoundaryProps = {
 }
 
 export function SkinBoundary(props: SkinBoundaryProps) {
-  const surfaceToken = useRef(createSkinSurfaceToken())
+  const hasAncestorBoundary = useContext(SkinBoundaryPresenceContext)
+  const [surfaceToken] = useState(createSkinSurfaceToken)
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(
     null
   )
 
+  if (hasAncestorBoundary) {
+    throw new Error('SkinBoundary cannot be nested')
+  }
+
   useEffect(() => {
     const dataset = document.body.dataset
-    const token = surfaceToken.current
-    registerSkinSurface(dataset, token, props.skinId)
+    registerSkinSurface(dataset, surfaceToken, props.skinId)
 
     return () => {
-      unregisterSkinSurface(dataset, token)
+      unregisterSkinSurface(dataset, surfaceToken)
     }
-  }, [props.skinId])
+  }, [props.skinId, surfaceToken])
 
   return createElement(
-    'div',
-    { 'data-skin': props.skinId, 'data-skin-boundary': true },
-    createElement(SkinPortalProvider, {
-      container: portalContainer,
-      children: createElement(
-        Fragment,
-        null,
-        props.children,
-        createElement('div', {
-          ref: setPortalContainer,
-          'data-skin-portal-root': props.skinId,
-        })
-      ),
-    })
+    SkinBoundaryPresenceContext.Provider,
+    { value: true },
+    createElement(
+      'div',
+      { 'data-skin': props.skinId, 'data-skin-boundary': true },
+      createElement(SkinPortalProvider, {
+        container: portalContainer,
+        children: createElement(
+          Fragment,
+          null,
+          props.children,
+          createElement('div', {
+            ref: setPortalContainer,
+            'data-skin-portal-root': props.skinId,
+          })
+        ),
+      })
+    )
   )
 }
