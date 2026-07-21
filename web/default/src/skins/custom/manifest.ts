@@ -8,12 +8,18 @@ const CustomHome = lazy(() =>
     default: module.CustomHome,
   }))
 )
+const CustomPricing = lazy(() =>
+  import('./pages/custom-pricing').then((module) => ({
+    default: module.CustomPricing,
+  }))
+)
 
 const customManifest = {
   id: 'custom',
   build: customBuildManifest,
   pages: {
     home: { component: CustomHome, shell: 'self' },
+    pricing: { component: CustomPricing, shell: 'self' },
   },
   routes: [],
   shell: CustomPublicShell,
