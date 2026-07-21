@@ -623,7 +623,7 @@ function SupportedParametersSection(props: { model: PricingModel }) {
       </div>
       <p className='text-muted-foreground mt-2 text-[11px] leading-relaxed'>
         {t(
-          'Common OpenAI-compatible request parameters. Availability varies by provider; parameters a model does not support are typically ignored.'
+          'Common OpenAI-compatible request parameters. Availability varies by provider; unsupported parameters may be ignored or rejected.'
         )}
       </p>
     </section>

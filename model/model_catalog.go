@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -27,9 +28,10 @@ import (
 // wired in later — see pricing-detail-data-sources memory.
 
 const (
-	defaultModelCatalogURL   = "https://models.dev/api.json"
-	modelCatalogTimeout      = 60 * time.Second
-	modelCatalogDefaultTTLH  = 24 // hours — cache for at least one day
+	defaultModelCatalogURL  = "https://models.dev/api.json"
+	modelCatalogTimeout     = 60 * time.Second
+	modelCatalogDefaultTTLH = 24 // hours — cache for at least one day
+	modelCatalogRetryDelay  = 5 * time.Minute
 )
 
 var (
@@ -38,27 +40,28 @@ var (
 	// so they can match models.dev's canonical ids.
 	dateSuffixRe = regexp.MustCompile(`-(?:\d{8}|\d{6})$`)
 
-	modelCatalogOnce    sync.Once
-	modelCatalogMu      sync.RWMutex
-	modelCatalogIndex   map[string]*ModelCatalogSpec
-	modelCatalogLoadedAt time.Time
-	modelCatalogRunning atomic.Bool
+	modelCatalogOnce        sync.Once
+	modelCatalogMu          sync.RWMutex
+	modelCatalogIndex       map[string]*ModelCatalogSpec
+	modelCatalogLoadedAt    time.Time
+	modelCatalogLastAttempt time.Time
+	modelCatalogRunning     atomic.Bool
 )
 
 // ModelCatalogSpec is the subset of models.dev metadata exposed on the pricing
 // detail page. Field json tags intentionally match PricingModel in the frontend
 // (web/default/src/features/pricing/types.ts) so values flow through unchanged.
 type ModelCatalogSpec struct {
-	ContextLength       int      `json:"context_length,omitempty"`
-	MaxInputTokens      int      `json:"max_input_tokens,omitempty"`
-	MaxOutputTokens     int      `json:"max_output_tokens,omitempty"`
-	KnowledgeCutoff     string   `json:"knowledge_cutoff,omitempty"`
-	ReleaseDate         string   `json:"release_date,omitempty"`
-	InputModalities     []string `json:"input_modalities,omitempty"`
-	OutputModalities    []string `json:"output_modalities,omitempty"`
-	Capabilities        []string `json:"capabilities,omitempty"`
-	OpenWeights         bool     `json:"open_weights,omitempty"`
-	SupportsTemperature *bool    `json:"supports_temperature,omitempty"`
+	ContextLength         int      `json:"context_length,omitempty"`
+	MaxInputTokens        int      `json:"max_input_tokens,omitempty"`
+	MaxOutputTokens       int      `json:"max_output_tokens,omitempty"`
+	KnowledgeCutoff       string   `json:"knowledge_cutoff,omitempty"`
+	ReleaseDate           string   `json:"release_date,omitempty"`
+	InputModalities       []string `json:"input_modalities,omitempty"`
+	OutputModalities      []string `json:"output_modalities,omitempty"`
+	Capabilities          []string `json:"capabilities,omitempty"`
+	OpenWeights           bool     `json:"open_weights,omitempty"`
+	SupportsTemperature   *bool    `json:"supports_temperature,omitempty"`
 	ReasoningEffortValues []string `json:"reasoning_effort_values,omitempty"`
 }
 
@@ -78,7 +81,7 @@ type rawCatalogModel struct {
 	ReasoningOptions []rawCatalogReasoningOption `json:"reasoning_options"`
 	Attachment       bool                        `json:"attachment"`
 	OpenWeights      bool                        `json:"open_weights"`
-	Temperature      bool                        `json:"temperature"`
+	Temperature      *bool                       `json:"temperature"`
 }
 
 // rawCatalogReasoningOption mirrors models.dev's reasoning_options entries,
@@ -101,8 +104,11 @@ type rawCatalogMod struct {
 
 // normalizeModelName lower-cases and strips trailing 6/8-digit date suffixes.
 func normalizeModelName(name string) string {
-	s := strings.ToLower(strings.TrimSpace(name))
-	return dateSuffixRe.ReplaceAllString(s, "")
+	return dateSuffixRe.ReplaceAllString(exactModelName(name), "")
+}
+
+func exactModelName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
 }
 
 // catalogModalityAllowlist maps models.dev modality strings to the frontend
@@ -161,12 +167,11 @@ func extractReasoningEffort(opts []rawCatalogReasoningOption) []string {
 // buildSpec maps a raw models.dev entry to the public spec, including a
 // capabilities list expressed in the frontend's ModelCapability vocabulary.
 func buildSpec(raw rawCatalogModel) *ModelCatalogSpec {
-	supportsTemperature := raw.Temperature
 	spec := &ModelCatalogSpec{
 		KnowledgeCutoff:       raw.Knowledge,
 		ReleaseDate:           raw.ReleaseDate,
 		OpenWeights:           raw.OpenWeights,
-		SupportsTemperature:   &supportsTemperature,
+		SupportsTemperature:   raw.Temperature,
 		ReasoningEffortValues: extractReasoningEffort(raw.ReasoningOptions),
 	}
 	if raw.Limit != nil {
@@ -180,10 +185,6 @@ func buildSpec(raw rawCatalogModel) *ModelCatalogSpec {
 	}
 
 	caps := make([]string, 0, 8)
-	hasTextOutput := raw.Modalities != nil && containsString(raw.Modalities.Output, "text")
-	if hasTextOutput {
-		caps = append(caps, "streaming", "system_prompt")
-	}
 	if raw.ToolCall {
 		caps = append(caps, "tools", "function_calling")
 	}
@@ -193,7 +194,7 @@ func buildSpec(raw rawCatalogModel) *ModelCatalogSpec {
 	if raw.Reasoning {
 		caps = append(caps, "reasoning")
 	}
-	if raw.Modalities != nil && (containsString(raw.Modalities.Input, "image") || raw.Attachment) {
+	if raw.Modalities != nil && containsString(raw.Modalities.Input, "image") {
 		caps = append(caps, "vision")
 	}
 	spec.Capabilities = caps
@@ -202,7 +203,8 @@ func buildSpec(raw rawCatalogModel) *ModelCatalogSpec {
 
 // parseCatalog parses the models.dev api.json payload into a lookup index keyed
 // by normalized model id. When the same model id appears under multiple
-// providers, the first occurrence wins (their specs are normally identical).
+// providers, the alphabetically first provider wins so refreshes and process
+// restarts resolve conflicts consistently.
 func parseCatalog(data []byte) (map[string]*ModelCatalogSpec, error) {
 	var providers map[string]rawCatalogProvider
 	if err := common.Unmarshal(data, &providers); err != nil {
@@ -210,16 +212,52 @@ func parseCatalog(data []byte) (map[string]*ModelCatalogSpec, error) {
 	}
 
 	idx := make(map[string]*ModelCatalogSpec)
-	for _, provider := range providers {
-		for id, raw := range provider.Models {
-			key := normalizeModelName(id)
-			if key == "" {
+	aliasTargets := make(map[string]string)
+	ambiguousAliases := make(map[string]struct{})
+	providerNames := make([]string, 0, len(providers))
+	for name := range providers {
+		providerNames = append(providerNames, name)
+	}
+	sort.Strings(providerNames)
+	for _, providerName := range providerNames {
+		provider := providers[providerName]
+		modelIDs := make([]string, 0, len(provider.Models))
+		for id := range provider.Models {
+			modelIDs = append(modelIDs, id)
+		}
+		sort.Strings(modelIDs)
+		for _, id := range modelIDs {
+			raw := provider.Models[id]
+			exactKey := exactModelName(id)
+			if exactKey == "" {
 				continue
 			}
-			if _, exists := idx[key]; !exists {
-				idx[key] = buildSpec(raw)
+			if _, exists := idx[exactKey]; !exists {
+				idx[exactKey] = buildSpec(raw)
+			}
+			alias := normalizeModelName(exactKey)
+			if alias == exactKey {
+				continue
+			}
+			if previous, exists := aliasTargets[alias]; !exists {
+				aliasTargets[alias] = exactKey
+			} else if previous != exactKey {
+				delete(aliasTargets, alias)
+				ambiguousAliases[alias] = struct{}{}
 			}
 		}
+	}
+	for alias, target := range aliasTargets {
+		if _, ambiguous := ambiguousAliases[alias]; ambiguous {
+			continue
+		}
+		if _, exactExists := idx[alias]; exactExists {
+			continue
+		}
+		idx[alias] = idx[target]
+	}
+	if len(idx) == 0 {
+		return nil, fmt.Errorf("model catalog contains no models")
 	}
 	return idx, nil
 }
@@ -278,23 +316,32 @@ func loadModelCatalog() {
 	modelCatalogIndex = idx
 	modelCatalogLoadedAt = time.Now()
 	modelCatalogMu.Unlock()
+	InvalidatePricingCache()
 	common.SysLog(fmt.Sprintf("model catalog loaded: %d models", len(idx)))
 }
 
-// ensureModelCatalogLoaded performs a lazy first load if the cache is empty or
-// stale. It is safe to call concurrently.
-func ensureModelCatalogLoaded() {
+// triggerModelCatalogLoad schedules at most one refresh. Lookups continue with
+// the current (possibly empty or stale) snapshot instead of waiting on the
+// external catalog. Failed attempts are cooled down so a pricing rebuild cannot
+// retry once per model.
+func triggerModelCatalogLoad(force bool) {
 	modelCatalogMu.RLock()
-	loaded := len(modelCatalogIndex) > 0 && time.Since(modelCatalogLoadedAt) < catalogTTL()
+	fresh := len(modelCatalogIndex) > 0 && time.Since(modelCatalogLoadedAt) < catalogTTL()
+	inCooldown := !modelCatalogLastAttempt.IsZero() && time.Since(modelCatalogLastAttempt) < modelCatalogRetryDelay
 	modelCatalogMu.RUnlock()
-	if loaded {
+	if !force && (fresh || inCooldown) {
 		return
 	}
 	if !modelCatalogRunning.CompareAndSwap(false, true) {
-		return // another goroutine is loading
+		return
 	}
-	defer modelCatalogRunning.Store(false)
-	loadModelCatalog()
+	modelCatalogMu.Lock()
+	modelCatalogLastAttempt = time.Now()
+	modelCatalogMu.Unlock()
+	gopool.Go(func() {
+		defer modelCatalogRunning.Store(false)
+		loadModelCatalog()
+	})
 }
 
 // GetModelCatalogSpec looks up the spec for a model name. Returns ok=false when
@@ -303,11 +350,14 @@ func GetModelCatalogSpec(modelName string) (*ModelCatalogSpec, bool) {
 	if strings.TrimSpace(modelName) == "" {
 		return nil, false
 	}
-	ensureModelCatalogLoaded()
-	key := normalizeModelName(modelName)
+	triggerModelCatalogLoad(false)
+	exactKey := exactModelName(modelName)
 	modelCatalogMu.RLock()
 	defer modelCatalogMu.RUnlock()
-	spec, ok := modelCatalogIndex[key]
+	spec, ok := modelCatalogIndex[exactKey]
+	if !ok {
+		spec, ok = modelCatalogIndex[normalizeModelName(exactKey)]
+	}
 	return spec, ok
 }
 
@@ -321,11 +371,11 @@ func StartModelCatalogRefresh() {
 		gopool.Go(func() {
 			ttl := catalogTTL()
 			common.SysLog(fmt.Sprintf("model catalog refresh task started: cache ttl=%s", ttl))
-			loadModelCatalog()
+			triggerModelCatalogLoad(false)
 			ticker := time.NewTicker(ttl)
 			defer ticker.Stop()
 			for range ticker.C {
-				loadModelCatalog()
+				triggerModelCatalogLoad(true)
 			}
 		})
 	})

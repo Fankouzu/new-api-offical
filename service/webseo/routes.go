@@ -25,8 +25,10 @@ func IsKnownRoute(requestURI string, pricings []model.Pricing, theme string) boo
 	catalog := BuildCatalog(pricings)
 
 	switch {
-	case path == "/", path == "/pricing", path == "/compare/ai-api-pricing":
+	case path == "/", path == "/pricing":
 		return true
+	case path == "/compare/ai-api-pricing":
+		return theme != "classic"
 	case path == "/rankings":
 		return theme != "classic"
 	case path == "/about", path == "/privacy-policy", path == "/user-agreement":
@@ -40,29 +42,88 @@ func IsKnownRoute(requestURI string, pricings []model.Pricing, theme string) boo
 		}
 		_, ok := findModel(catalog, modelID)
 		return ok
-	case path == "/login", path == "/sign-in", path == "/register", path == "/sign-up",
-		path == "/reset", path == "/forgot-password", path == "/user/reset", path == "/setup",
-		path == "/otp", path == "/chat2link", path == "/401", path == "/403", path == "/404",
-		path == "/500", path == "/503":
+	case path == "/reset", path == "/user/reset", path == "/setup", path == "/chat2link":
 		return true
-	case strings.HasPrefix(path, "/oauth/"):
+	case isDefaultExactRoute(path):
+		return theme != "classic"
+	case path == "/login" || path == "/register":
+		return theme == "classic"
+	case hasSinglePathSegment(path, "/oauth"):
 		return true
-	case isAuthenticatedAppPath(path):
+	case path == "/oauth":
+		return theme != "classic"
+	case path == "/forbidden":
+		return theme == "classic"
+	case theme != "classic" && isDefaultAuthenticatedPath(path):
 		return true
-	case hasPathPrefix(path, "/system-settings", "/errors", "/site", "/security", "/operations", "/models", "/content", "/billing", "/auth"):
+	case theme == "classic" && isClassicAuthenticatedPath(path):
 		return true
 	default:
 		return false
 	}
 }
 
-func hasPathPrefix(path string, prefixes ...string) bool {
-	for _, prefix := range prefixes {
-		if path == prefix || strings.HasPrefix(path, prefix+"/") {
-			return true
-		}
+func isDefaultExactRoute(path string) bool {
+	switch path {
+	case "/sign-in", "/sign-up", "/forgot-password", "/otp",
+		"/401", "/403", "/404", "/500", "/503":
+		return true
+	default:
+		return false
 	}
-	return false
+}
+
+func isDefaultAuthenticatedPath(path string) bool {
+	switch path {
+	case "/console/log", "/console/topup", "/wallet", "/users",
+		"/usage-logs", "/subscriptions", "/redemption-codes", "/profile",
+		"/playground", "/models", "/keys", "/dashboard", "/channels",
+		"/system-settings":
+		return true
+	}
+	if hasSinglePathSegment(path, "/usage-logs") ||
+		hasSinglePathSegment(path, "/models") ||
+		hasSinglePathSegment(path, "/errors") ||
+		hasSinglePathSegment(path, "/dashboard") ||
+		hasSinglePathSegment(path, "/chat") {
+		return true
+	}
+	return isSystemSettingsPath(path)
+}
+
+func isSystemSettingsPath(path string) bool {
+	rest, ok := strings.CutPrefix(path, "/system-settings/")
+	if !ok || rest == "" {
+		return false
+	}
+	parts := strings.Split(rest, "/")
+	if len(parts) > 2 || parts[0] == "" {
+		return false
+	}
+	switch parts[0] {
+	case "site", "security", "operations", "models", "content", "billing", "auth":
+		return len(parts) == 1 || parts[1] != ""
+	default:
+		return false
+	}
+}
+
+func isClassicAuthenticatedPath(path string) bool {
+	switch path {
+	case "/console", "/console/models", "/console/deployment",
+		"/console/subscription", "/console/channel", "/console/token",
+		"/console/playground", "/console/redemption", "/console/user",
+		"/console/setting", "/console/personal", "/console/topup",
+		"/console/log", "/console/midjourney", "/console/task", "/console/chat":
+		return true
+	default:
+		return hasSinglePathSegment(path, "/console/chat")
+	}
+}
+
+func hasSinglePathSegment(path string, prefix string) bool {
+	rest, ok := strings.CutPrefix(path, prefix+"/")
+	return ok && rest != "" && !strings.Contains(rest, "/")
 }
 
 func ResolveMetaForTheme(requestURI string, baseURL string, pricings []model.Pricing, theme string) Meta {

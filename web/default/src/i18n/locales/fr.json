@@ -788,6 +788,8 @@
     "Command": "Commande",
     "Common": "Commun",
     "Common Keys": "Clés courantes",
+    "Common OpenAI-compatible request parameters. Availability varies by provider; unsupported parameters may be ignored or rejected.": "Paramètres de requête courants compatibles avec OpenAI. Leur disponibilité varie selon le fournisseur ; les paramètres non pris en charge peuvent être ignorés ou rejetés.",
+    "Common parameters": "Paramètres courants",
     "Common Logs": "Journaux courants",
     "Common ports include 25, 465, and 587": "Les ports courants incluent 25, 465 et 587",
     "Common User": "Utilisateur commun",
