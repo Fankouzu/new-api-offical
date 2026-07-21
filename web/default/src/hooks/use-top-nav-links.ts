@@ -17,6 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo } from 'react'
+import { activeSkin } from '@/skins/runtime/active-skin.gen'
+import type { ThemeManifest } from '@/skins/runtime/contracts'
+import { mergeSkinHeaderLinks } from '@/skins/runtime/navigation'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { useStatus } from '@/hooks/use-status'
@@ -58,6 +61,12 @@ const HEADER_NAV_UTILITY_CUSTOM_LINK_POSITIONS = [
   'before_language',
   'after_language',
 ] as const
+
+const activeSkinManifest: ThemeManifest = activeSkin
+const activeSkinHeaderNavigation = activeSkinManifest.navigation?.header ?? []
+const activeSkinRoutePaths = activeSkinManifest.build.routes.map(
+  (route) => route.path
+)
 
 /**
  * Generate top navigation links based on HeaderNavModules configuration from backend /api/status
@@ -225,11 +234,28 @@ function useHeaderNavContext() {
 export function useTopNavLinks(): TopNavLink[] {
   const { modules, docsLink, isAuthed, t } = useHeaderNavContext()
 
-  return buildTopNavLinks({ modules, docsLink, isAuthed, t })
+  const hostLinks = buildTopNavLinks({ modules, docsLink, isAuthed, t })
+
+  return mergeSkinHeaderLinks(
+    hostLinks,
+    activeSkinHeaderNavigation,
+    activeSkinRoutePaths,
+    t
+  )
 }
 
 export function useTopNavLinkSlots(): TopNavLinkSlots {
   const { modules, docsLink, isAuthed, t } = useHeaderNavContext()
 
-  return buildTopNavLinkSlots({ modules, docsLink, isAuthed, t })
+  const slots = buildTopNavLinkSlots({ modules, docsLink, isAuthed, t })
+
+  return {
+    ...slots,
+    primary: mergeSkinHeaderLinks(
+      slots.primary,
+      activeSkinHeaderNavigation,
+      activeSkinRoutePaths,
+      t
+    ),
+  }
 }

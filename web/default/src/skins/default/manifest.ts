@@ -43,6 +43,7 @@ const defaultManifest = {
     userAgreement: { component: UserAgreement, shell: 'self' },
   },
   routes: [],
+  navigation: { header: [], footer: [] },
 } as const satisfies DefaultThemeManifest
 
 export default defaultManifest
