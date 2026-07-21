@@ -4,7 +4,7 @@
   }
 
   .custom-hero-slide {
-    transform: scale(1.08);
+    transform: scale(1);
   }
 
   .custom-hero-slide.is-active {
@@ -19,11 +19,11 @@
 
   @keyframes custom-hero-zoom {
     from {
-      transform: scale(1);
+      transform: scale(1.08);
     }
 
     to {
-      transform: scale(1.08);
+      transform: scale(1);
     }
   }
 }
