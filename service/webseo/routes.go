@@ -25,8 +25,10 @@ func IsKnownRoute(requestURI string, pricings []model.Pricing, theme string) boo
 	catalog := BuildCatalog(pricings)
 
 	switch {
-	case path == "/", path == "/pricing", path == "/compare/ai-api-pricing":
+	case path == "/", path == "/pricing":
 		return true
+	case path == "/compare/ai-api-pricing":
+		return theme != "classic"
 	case path == "/rankings":
 		return theme != "classic"
 	case path == "/about", path == "/privacy-policy", path == "/user-agreement":
@@ -40,16 +42,25 @@ func IsKnownRoute(requestURI string, pricings []model.Pricing, theme string) boo
 		}
 		_, ok := findModel(catalog, modelID)
 		return ok
-	case path == "/login", path == "/sign-in", path == "/register", path == "/sign-up",
-		path == "/reset", path == "/forgot-password", path == "/user/reset", path == "/setup",
-		path == "/otp", path == "/chat2link", path == "/401", path == "/403", path == "/404",
-		path == "/500", path == "/503":
+	case path == "/reset", path == "/user/reset", path == "/setup", path == "/chat2link":
 		return true
-	case strings.HasPrefix(path, "/oauth/"):
+	case isDefaultExactRoute(path):
+		return theme != "classic"
+	case path == "/login" || path == "/register":
+		return theme == "classic"
+	case hasSinglePathSegment(path, "/oauth"):
 		return true
-	case isAuthenticatedAppPath(path):
+	case path == "/oauth":
+		return theme != "classic"
+	case path == "/forbidden":
+		return theme == "classic"
+	case theme != "classic" && isDefaultAppPath(path):
 		return true
-	case hasPathPrefix(path, "/system-settings", "/errors", "/site", "/security", "/operations", "/models", "/content", "/billing", "/auth"):
+	case theme == "classic" && hasPathPrefix(path, "/console"):
+		return true
+	case theme != "classic" && isAuthenticatedAppPath(path):
+		return true
+	case theme != "classic" && hasPathPrefix(path, "/system-settings", "/errors", "/site", "/security", "/operations", "/models", "/content", "/billing", "/auth"):
 		return true
 	default:
 		return false
@@ -63,6 +74,32 @@ func hasPathPrefix(path string, prefixes ...string) bool {
 		}
 	}
 	return false
+}
+
+func isDefaultExactRoute(path string) bool {
+	switch path {
+	case "/sign-in", "/sign-up", "/forgot-password", "/otp",
+		"/401", "/403", "/404", "/500", "/503":
+		return true
+	default:
+		return false
+	}
+}
+
+func isDefaultAppPath(path string) bool {
+	switch path {
+	case "/profile", "/keys", "/subscriptions", "/redemption-codes":
+		return true
+	}
+	if path == "/dashboard" || hasSinglePathSegment(path, "/dashboard") {
+		return true
+	}
+	return hasSinglePathSegment(path, "/chat")
+}
+
+func hasSinglePathSegment(path string, prefix string) bool {
+	rest, ok := strings.CutPrefix(path, prefix+"/")
+	return ok && rest != "" && !strings.Contains(rest, "/")
 }
 
 func ResolveMetaForTheme(requestURI string, baseURL string, pricings []model.Pricing, theme string) Meta {

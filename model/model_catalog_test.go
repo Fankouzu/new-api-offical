@@ -2,21 +2,24 @@ package model
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 func TestNormalizeModelName(t *testing.T) {
 	cases := map[string]string{
-		"doubao-seedance-2-0-260128":   "doubao-seedance-2-0",
-		"Claude-3-5-Sonnet-20241022":   "claude-3-5-sonnet",
-		"gpt-4o":                       "gpt-4o",
-		"deepseek-chat":                "deepseek-chat",
-		"  Qwen-Max  ":                 "qwen-max",
-		"gemini-2.0-flash-001":         "gemini-2.0-flash-001", // 3 digits are not a date suffix
-		"claude-3-7-sonnet-20250219":   "claude-3-7-sonnet",
+		"doubao-seedance-2-0-260128": "doubao-seedance-2-0",
+		"Claude-3-5-Sonnet-20241022": "claude-3-5-sonnet",
+		"gpt-4o":                     "gpt-4o",
+		"deepseek-chat":              "deepseek-chat",
+		"  Qwen-Max  ":               "qwen-max",
+		"gemini-2.0-flash-001":       "gemini-2.0-flash-001", // 3 digits are not a date suffix
+		"claude-3-7-sonnet-20250219": "claude-3-7-sonnet",
 	}
 	for input, want := range cases {
 		if got := normalizeModelName(input); got != want {
@@ -135,6 +138,102 @@ func TestNormalizeModalities(t *testing.T) {
 func TestParseCatalogInvalidJSON(t *testing.T) {
 	if _, err := parseCatalog([]byte("{not json")); err == nil {
 		t.Fatalf("expected error for invalid json, got nil")
+	}
+}
+
+func TestParseCatalogPreservesUnknownTemperature(t *testing.T) {
+	idx, err := parseCatalog([]byte(`{
+		"provider": {"models": {"model-without-temperature": {"limit": {"context": 8192}}}}
+	}`))
+	if err != nil {
+		t.Fatalf("parseCatalog returned error: %v", err)
+	}
+	if got := idx["model-without-temperature"].SupportsTemperature; got != nil {
+		t.Fatalf("supports_temperature = %v, want nil for a missing source field", *got)
+	}
+}
+
+func TestParseCatalogUsesStableProviderPrecedence(t *testing.T) {
+	data := []byte(`{
+		"z-provider": {"models": {"shared-model": {"limit": {"context": 200}}}},
+		"a-provider": {"models": {"shared-model": {"limit": {"context": 100}}}}
+	}`)
+	for i := 0; i < 100; i++ {
+		idx, err := parseCatalog(data)
+		if err != nil {
+			t.Fatalf("parseCatalog returned error: %v", err)
+		}
+		if got := idx["shared-model"].ContextLength; got != 100 {
+			t.Fatalf("iteration %d: context = %d, want alphabetically first provider value 100", i, got)
+		}
+	}
+}
+
+func TestCatalogFailureIsNotRetriedForEveryLookup(t *testing.T) {
+	var requests atomic.Int32
+	requestSeen := make(chan struct{}, 1)
+	releaseRequest := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		select {
+		case requestSeen <- struct{}{}:
+		default:
+		}
+		<-releaseRequest
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	t.Setenv("MODEL_CATALOG_URL", server.URL)
+
+	modelCatalogMu.Lock()
+	oldIndex := modelCatalogIndex
+	oldLoadedAt := modelCatalogLoadedAt
+	oldLastAttempt := modelCatalogLastAttempt
+	modelCatalogIndex = nil
+	modelCatalogLoadedAt = time.Time{}
+	modelCatalogLastAttempt = time.Time{}
+	modelCatalogMu.Unlock()
+	modelCatalogRunning.Store(false)
+	t.Cleanup(func() {
+		modelCatalogMu.Lock()
+		modelCatalogIndex = oldIndex
+		modelCatalogLoadedAt = oldLoadedAt
+		modelCatalogLastAttempt = oldLastAttempt
+		modelCatalogMu.Unlock()
+		modelCatalogRunning.Store(false)
+	})
+
+	lookupDone := make(chan bool, 1)
+	go func() {
+		_, ok := GetModelCatalogSpec("first-model")
+		lookupDone <- ok
+	}()
+	select {
+	case ok := <-lookupDone:
+		if ok {
+			t.Fatal("unexpected catalog hit")
+		}
+	case <-time.After(500 * time.Millisecond):
+		close(releaseRequest)
+		t.Fatal("catalog lookup blocked on the external refresh")
+	}
+	select {
+	case <-requestSeen:
+	case <-time.After(2 * time.Second):
+		t.Fatal("catalog load did not start")
+	}
+	close(releaseRequest)
+	for modelCatalogRunning.Load() {
+		time.Sleep(time.Millisecond)
+	}
+
+	for _, name := range []string{"second-model", "third-model", "fourth-model"} {
+		if _, ok := GetModelCatalogSpec(name); ok {
+			t.Fatalf("unexpected catalog hit for %s", name)
+		}
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("catalog requests = %d, want 1 during the failure cooldown", got)
 	}
 }
 
