@@ -19,7 +19,7 @@
 
   @keyframes custom-hero-zoom {
     from {
-      transform: scale(1.08);
+      transform: scale(1.04);
     }
 
     to {
