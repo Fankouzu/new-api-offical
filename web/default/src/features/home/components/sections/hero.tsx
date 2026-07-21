@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -24,6 +25,7 @@ import { Button } from '@/components/ui/button'
 import { HeroTerminalDemo } from '../hero-terminal-demo'
 
 interface HeroProps {
+  background?: ReactNode
   className?: string
   isAuthenticated?: boolean
 }
@@ -34,6 +36,9 @@ export function Hero(props: HeroProps) {
 
   return (
     <section className='relative z-10 flex flex-col items-center overflow-hidden px-6 pt-28 pb-16 md:pt-36 md:pb-24'>
+      {props.background ? (
+        <div className='absolute inset-0 -z-20'>{props.background}</div>
+      ) : null}
       {/* Radial gradient background */}
       <div
         aria-hidden
@@ -49,7 +54,7 @@ export function Hero(props: HeroProps) {
       {/* Grid pattern */}
       <div
         aria-hidden
-        className='absolute inset-0 -z-10 border-4 border-dashed border-red-500 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:4rem_4rem]'
+        className='absolute inset-0 -z-10 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_30%,black_20%,transparent_100%)] bg-[size:4rem_4rem] opacity-[0.08]'
       />
 
       <div className='flex max-w-3xl flex-col items-center text-center'>
