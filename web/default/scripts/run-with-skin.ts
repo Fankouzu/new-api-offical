@@ -26,11 +26,15 @@ function forwardSignal(child: ReturnType<typeof spawn>, signal: NodeJS.Signals):
   }
 }
 
-async function runTypecheck(): Promise<ChildResult> {
-  const tscPath = process.env.SKIN_TYPECHECK_BIN || path.join(projectRoot, 'node_modules', '.bin', 'tsc')
-  const child = spawn(tscPath, ['-b'], {
+async function runChild(
+  executablePath: string,
+  args: string[],
+  env?: NodeJS.ProcessEnv
+): Promise<ChildResult> {
+  const child = spawn(executablePath, args, {
     cwd: projectRoot,
     detached: process.platform !== 'win32',
+    env: { ...process.env, ...env },
     stdio: 'inherit',
   })
   const configuredTimeout = Number(process.env.SKIN_CHILD_KILL_TIMEOUT_MS)
@@ -77,22 +81,41 @@ async function runTypecheck(): Promise<ChildResult> {
 
 async function main(): Promise<void> {
   const mode = process.argv[2]
-  if (mode !== 'generate' && mode !== 'typecheck') {
+  if (mode !== 'generate' && mode !== 'typecheck' && mode !== 'build') {
     throw new Error(`Unknown skin command mode: ${mode ?? '(missing)'}`)
   }
 
   const skinId = normalizeSkinId(process.env.APP_SKIN)
-  const lease = await acquireSkinWorkspaceLease({ projectRoot, skinId })
+  const lockProjectRoot = process.env.SKIN_LOCK_PROJECT_ROOT || projectRoot
+  const lease = await acquireSkinWorkspaceLease({
+    projectRoot: lockProjectRoot,
+    skinId,
+  })
   const onExit = () => lease.releaseSync()
   process.once('exit', onExit)
   let exitSignal: NodeJS.Signals | null = null
 
   try {
     await generateSkin({ skinId })
-    if (mode === 'typecheck') {
-      const result = await runTypecheck()
+    if (mode === 'typecheck' || mode === 'build') {
+      const tscPath =
+        process.env.SKIN_TYPECHECK_BIN ||
+        path.join(projectRoot, 'node_modules', '.bin', 'tsc')
+      const result = await runChild(tscPath, ['-b'])
       exitSignal = result.terminationSignal ?? result.signal
       if (!exitSignal) process.exitCode = result.code ?? 1
+      if (!exitSignal && result.code === 0 && mode === 'build') {
+        const rsbuildPath =
+          process.env.SKIN_BUILD_BIN ||
+          path.join(projectRoot, 'node_modules', '.bin', 'rsbuild')
+        const buildResult = await runChild(rsbuildPath, ['build'], {
+          SKIN_WORKSPACE_LEASE_OWNER_PID: String(process.pid),
+          SKIN_WORKSPACE_LEASE_PROJECT_ROOT: lockProjectRoot,
+          SKIN_WORKSPACE_LEASE_TOKEN: lease.token,
+        })
+        exitSignal = buildResult.terminationSignal ?? buildResult.signal
+        if (!exitSignal) process.exitCode = buildResult.code ?? 1
+      }
     }
   } finally {
     await lease.release()

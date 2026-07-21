@@ -27,6 +27,7 @@ export type SkinWorkspaceLease = {
   release: () => Promise<void>
   releaseSync: () => void
   skinId: string
+  token: string
 }
 
 type ActiveLease = {
@@ -103,6 +104,7 @@ function createLease(lockDirectory: string, metadataPath: string, active: Active
 
   return {
     skinId: active.metadata.skinId,
+    token: active.metadata.token,
     release: async () => {
       if (!decrement()) return
       activeLeases.delete(lockDirectory)
@@ -117,6 +119,28 @@ function createLease(lockDirectory: string, metadataPath: string, active: Active
         rmSync(lockDirectory, { recursive: true, force: true })
       }
     },
+  }
+}
+
+export async function assertSkinWorkspaceLeaseOwner(options: {
+  ownerPid: number
+  projectRoot: string
+  skinId: string
+  token: string
+}): Promise<void> {
+  const metadata = await readMetadata(
+    getSkinWorkspaceLockPaths(options.projectRoot).metadataPath
+  )
+  if (
+    !metadata ||
+    metadata.pid !== options.ownerPid ||
+    metadata.skinId !== options.skinId ||
+    metadata.token !== options.token ||
+    !isProcessAlive(metadata.pid)
+  ) {
+    throw new Error(
+      `Frontend skin workspace lease delegation is invalid for skin "${options.skinId}"`
+    )
   }
 }
 

@@ -5,6 +5,7 @@ import path from 'node:path'
 import { describe, it } from 'node:test'
 import {
   acquireSkinWorkspaceLease,
+  assertSkinWorkspaceLeaseOwner,
   getSkinWorkspaceLockPaths,
 } from './skin-workspace-lock'
 
@@ -94,6 +95,41 @@ describe('skin workspace lease', { concurrency: false }, () => {
 
       assert.deepEqual(JSON.parse(await readFile(metadataPath, 'utf8')), replacement)
     } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('delegates only with the live owner PID, token, and skin', async () => {
+    const projectRoot = await createRoot()
+    const lease = await acquireSkinWorkspaceLease({
+      projectRoot,
+      skinId: 'default',
+    })
+    try {
+      await assertSkinWorkspaceLeaseOwner({
+        ownerPid: process.pid,
+        projectRoot,
+        skinId: 'default',
+        token: lease.token,
+      })
+      for (const override of [
+        { token: 'forged' },
+        { skinId: 'custom' },
+        { ownerPid: 2147483647 },
+      ]) {
+        await assert.rejects(
+          assertSkinWorkspaceLeaseOwner({
+            ownerPid: process.pid,
+            projectRoot,
+            skinId: 'default',
+            token: lease.token,
+            ...override,
+          }),
+          /lease delegation is invalid/
+        )
+      }
+    } finally {
+      await lease.release()
       await rm(projectRoot, { recursive: true, force: true })
     }
   })

@@ -56,11 +56,11 @@ describe('skin build lifecycle', { concurrency: false }, () => {
 
     assert.equal(packageJson.scripts['skin:generate'], 'bun scripts/run-with-skin.ts generate')
     assert.equal(packageJson.scripts.dev, 'rsbuild dev')
-    assert.equal(packageJson.scripts.build, 'rsbuild build')
+    assert.equal(packageJson.scripts.build, 'bun scripts/run-with-skin.ts build')
     assert.equal(packageJson.scripts.typecheck, 'bun scripts/run-with-skin.ts typecheck')
-    assert.equal(packageJson.scripts['build:check'], 'bun run typecheck && rsbuild build')
-    assert.equal(packageJson.scripts['build:default'], 'APP_SKIN=default bun run build:check')
-    assert.equal(packageJson.scripts['build:custom'], 'APP_SKIN=custom bun run build:check')
+    assert.equal(packageJson.scripts['build:check'], 'bun run build')
+    assert.equal(packageJson.scripts['build:default'], 'APP_SKIN=default bun run build')
+    assert.equal(packageJson.scripts['build:custom'], 'APP_SKIN=custom bun run build')
     assert.match(packageJson.scripts['test:unit'], /"scripts\/\*\*\/\*\.test\.ts"/)
   })
 

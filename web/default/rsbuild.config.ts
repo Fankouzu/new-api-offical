@@ -7,19 +7,49 @@ import { generateSkin } from './scripts/generate-skin.ts'
 import { normalizeSkinId } from './scripts/skin-route-utils.ts'
 import {
   acquireSkinWorkspaceLease,
+  assertSkinWorkspaceLeaseOwner,
   installSkinLeaseProcessCleanup,
 } from './scripts/skin-workspace-lock.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const skinId = normalizeSkinId(process.env.APP_SKIN)
-const skinLease = await acquireSkinWorkspaceLease({ projectRoot: __dirname, skinId })
-try {
+const delegatedToken = process.env.SKIN_WORKSPACE_LEASE_TOKEN
+const delegatedOwnerPid = Number(process.env.SKIN_WORKSPACE_LEASE_OWNER_PID)
+const delegatedProjectRoot = process.env.SKIN_WORKSPACE_LEASE_PROJECT_ROOT
+const hasDelegation =
+  delegatedToken !== undefined ||
+  process.env.SKIN_WORKSPACE_LEASE_OWNER_PID !== undefined ||
+  delegatedProjectRoot !== undefined
+
+if (hasDelegation) {
+  if (
+    !delegatedToken ||
+    !delegatedProjectRoot ||
+    !Number.isInteger(delegatedOwnerPid) ||
+    delegatedOwnerPid <= 0
+  ) {
+    throw new Error('Incomplete frontend skin workspace lease delegation')
+  }
+  await assertSkinWorkspaceLeaseOwner({
+    ownerPid: delegatedOwnerPid,
+    projectRoot: delegatedProjectRoot,
+    skinId,
+    token: delegatedToken,
+  })
   await generateSkin({ skinId })
-  installSkinLeaseProcessCleanup(skinLease)
-} catch (error: unknown) {
-  await skinLease.release()
-  throw error
+} else {
+  const skinLease = await acquireSkinWorkspaceLease({
+    projectRoot: __dirname,
+    skinId,
+  })
+  try {
+    await generateSkin({ skinId })
+    installSkinLeaseProcessCleanup(skinLease)
+  } catch (error: unknown) {
+    await skinLease.release()
+    throw error
+  }
 }
 
 export default defineConfig(({ envMode }) => {
