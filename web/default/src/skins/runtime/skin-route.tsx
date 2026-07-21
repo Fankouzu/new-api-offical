@@ -4,10 +4,15 @@ import { createSkinRouteRenderPlan } from './skin-route-plan'
 
 type ActiveSkinRouteProps = {
   routeId: string
+  routePath: `/${string}`
 }
 
 export function ActiveSkinRoute(props: ActiveSkinRouteProps) {
-  const plan = createSkinRouteRenderPlan(activeSkin, props.routeId)
+  const plan = createSkinRouteRenderPlan(
+    activeSkin,
+    props.routeId,
+    props.routePath
+  )
 
   return <SkinPageRenderer plan={plan} />
 }

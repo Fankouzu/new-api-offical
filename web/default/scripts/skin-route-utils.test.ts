@@ -12,7 +12,7 @@ import {
 import os from 'node:os'
 import path from 'node:path'
 import { describe, it } from 'node:test'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import ts from 'typescript'
 import { generateSkin } from './generate-skin'
 import {
@@ -23,6 +23,8 @@ import {
   renderGeneratedRoute,
   validateSkinRoutes,
 } from './skin-route-utils'
+
+const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 
 describe('skin build selection utilities', () => {
   it('defaults missing and empty skin IDs to default', () => {
@@ -168,6 +170,7 @@ describe('skin route generation utilities', () => {
     assert.ok(source.includes("createFileRoute('/(skin-generated)/solutions')"))
     assert.ok(source.includes("from '@/skins/runtime/skin-route'"))
     assert.ok(source.includes('routeId={"solutions"}'))
+    assert.ok(source.includes('routePath={"/solutions"}'))
     assert.doesNotMatch(source, /\.\/routes\/solutions/)
   })
 
@@ -181,7 +184,7 @@ describe('skin route generation utilities', () => {
       /from ['"](@\/skins\/runtime\/skin-route)['"]/
     )?.[1]
     const containingFile = path.join(
-      process.cwd(),
+      frontendRoot,
       'src',
       'routes',
       '(skin-generated)',
@@ -193,7 +196,7 @@ describe('skin route generation utilities', () => {
       runtimeImport,
       containingFile,
       {
-        baseUrl: process.cwd(),
+        baseUrl: frontendRoot,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
         paths: { '@/*': ['./src/*'] },
       },
@@ -202,7 +205,7 @@ describe('skin route generation utilities', () => {
 
     assert.equal(
       resolution.resolvedModule?.resolvedFileName,
-      path.join(process.cwd(), 'src', 'skins', 'runtime', 'skin-route.tsx')
+      path.join(frontendRoot, 'src', 'skins', 'runtime', 'skin-route.tsx')
     )
   })
 
@@ -214,6 +217,7 @@ describe('skin route generation utilities', () => {
     })
 
     assert.ok(source.includes(`routeId={${JSON.stringify("quote'\nline")}}`))
+    assert.ok(source.includes(`routePath={${JSON.stringify('/safe-id')}}`))
     assert.doesNotMatch(source, /routeId='quote'/)
   })
 

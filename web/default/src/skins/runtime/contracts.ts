@@ -15,7 +15,11 @@ export type SkinPageDefinition = {
   component: SkinComponent
   shell: 'self' | 'skin'
 }
-export type SkinRuntimeRoute = { id: string; component: SkinComponent }
+export type SkinRuntimeRoute = {
+  id: string
+  path: `/${string}`
+  component: SkinComponent
+}
 export type ThemeManifest = {
   id: string
   build: SkinBuildManifest

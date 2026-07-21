@@ -85,7 +85,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { ActiveSkinRoute } from '@/skins/runtime/skin-route'
 
 export const Route = createFileRoute('/${generatedRoutePath}')({
-  component: () => <ActiveSkinRoute routeId={${JSON.stringify(route.id)}} />,
+  component: () => <ActiveSkinRoute routeId={${JSON.stringify(route.id)}} routePath={${JSON.stringify(route.path)}} />,
 })
 `
 }

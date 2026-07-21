@@ -10,16 +10,25 @@ const Shell: ComponentType<{ children: React.ReactNode }> = () => null
 function createManifest(shell?: ThemeManifest['shell']): ThemeManifest {
   return {
     id: 'custom',
-    build: { id: 'custom', routes: [] },
+    build: {
+      id: 'custom',
+      routes: [
+        { id: 'solutions', path: '/solutions', componentImport: './solutions' },
+      ],
+    },
     pages: {},
-    routes: [{ id: 'solutions', component: Route }],
+    routes: [{ id: 'solutions', path: '/solutions', component: Route }],
     shell,
   }
 }
 
 describe('createSkinRouteRenderPlan', () => {
   it('uses the active skin ID, shell, and matching route component', () => {
-    const plan = createSkinRouteRenderPlan(createManifest(Shell), 'solutions')
+    const plan = createSkinRouteRenderPlan(
+      createManifest(Shell),
+      'solutions',
+      '/solutions'
+    )
 
     assert.equal(plan.shell, 'skin')
     assert.equal(plan.skinId, 'custom')
@@ -30,10 +39,11 @@ describe('createSkinRouteRenderPlan', () => {
 
   it('rejects a skin route when the active manifest has no shell', () => {
     assert.throws(
-      () => createSkinRouteRenderPlan(createManifest(), 'solutions'),
+      () =>
+        createSkinRouteRenderPlan(createManifest(), 'solutions', '/solutions'),
       {
         message:
-          'Skin custom route solutions requires a skin shell, but none is configured',
+          'Skin custom route solutions at generated path /solutions requires a skin shell, but none is configured',
       }
     )
   })
