@@ -66,6 +66,39 @@
   --home-image-label: rgb(255 255 255 / 0.24);
 }
 
+html:not(.dark) #root > div:has(.custom-hero-slide) > header nav {
+  color: rgb(255 255 255 / 0.78);
+}
+
+html:not(.dark) #root > div:has(.custom-hero-slide) > header nav a,
+html:not(.dark) #root > div:has(.custom-hero-slide) > header nav button {
+  color: rgb(255 255 255 / 0.78);
+}
+
+html:not(.dark) #root > div:has(.custom-hero-slide) > header nav a:hover,
+html:not(.dark) #root > div:has(.custom-hero-slide) > header nav button:hover {
+  color: rgb(255 255 255);
+}
+
+html:not(.dark)
+  #root
+  > div:has(.custom-hero-slide)
+  > section:first-of-type
+  > .mx-auto.w-\[70vw\]
+  > .flex.max-w-3xl {
+  color: rgb(255 255 255 / 0.96);
+}
+
+html:not(.dark)
+  #root
+  > div:has(.custom-hero-slide)
+  > section:first-of-type
+  > .mx-auto.w-\[70vw\]
+  > .flex.max-w-3xl
+  > p {
+  color: rgb(255 255 255 / 0.72);
+}
+
 #root > div:has(.custom-hero-slide) [data-home-section] {
   isolation: isolate;
   overflow: hidden;
