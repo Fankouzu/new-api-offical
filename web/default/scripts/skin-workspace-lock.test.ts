@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, it } from 'node:test'
 import {
   acquireSkinWorkspaceLease,
+  assertSkinLeaseDelegationProject,
   assertSkinWorkspaceLeaseOwner,
   getSkinWorkspaceLockPaths,
 } from './skin-workspace-lock'
@@ -131,6 +132,32 @@ describe('skin workspace lease', { concurrency: false }, () => {
     } finally {
       await lease.release()
       await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects delegation from a different canonical project root', async () => {
+    const projectRoot = await createRoot()
+    const externalRoot = await createRoot()
+    try {
+      assert.equal(
+        await assertSkinLeaseDelegationProject({
+          delegatedProjectRoot: projectRoot,
+          projectRoot,
+        }),
+        await realpath(projectRoot)
+      )
+      await assert.rejects(
+        assertSkinLeaseDelegationProject({
+          delegatedProjectRoot: externalRoot,
+          projectRoot,
+        }),
+        /delegation project mismatch/
+      )
+    } finally {
+      await Promise.all([
+        rm(projectRoot, { recursive: true, force: true }),
+        rm(externalRoot, { recursive: true, force: true }),
+      ])
     }
   })
 })

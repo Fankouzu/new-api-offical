@@ -110,7 +110,7 @@ async function main(): Promise<void> {
           path.join(projectRoot, 'node_modules', '.bin', 'rsbuild')
         const buildResult = await runChild(rsbuildPath, ['build'], {
           SKIN_WORKSPACE_LEASE_OWNER_PID: String(process.pid),
-          SKIN_WORKSPACE_LEASE_PROJECT_ROOT: lockProjectRoot,
+          SKIN_WORKSPACE_LEASE_PROJECT_ROOT: projectRoot,
           SKIN_WORKSPACE_LEASE_TOKEN: lease.token,
         })
         exitSignal = buildResult.terminationSignal ?? buildResult.signal

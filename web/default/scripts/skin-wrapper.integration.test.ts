@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { after, describe, it } from 'node:test'
+import { describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
@@ -119,15 +119,6 @@ async function killFixtureProcessGroup(childPidPath: string | undefined): Promis
   }
   throw new Error(`Fixture child PID ${childPid} did not exit after SIGKILL`)
 }
-
-after(async () => {
-  const restore = spawn('bun', ['run', 'skin:generate'], {
-    cwd: frontendRoot,
-    env: { ...process.env, APP_SKIN: 'default' },
-    stdio: 'ignore',
-  })
-  assert.deepEqual(await waitForExit(restore), { code: 0, signal: null })
-})
 
 describe('skin wrapper subprocess lifecycle', { concurrency: false }, () => {
   it('keeps the lease until the signaled child exits, then preserves signal semantics', async () => {

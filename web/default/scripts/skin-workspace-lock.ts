@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import {
   mkdir,
   readFile,
+  realpath,
   rm,
   writeFile,
 } from 'node:fs/promises'
@@ -142,6 +143,22 @@ export async function assertSkinWorkspaceLeaseOwner(options: {
       `Frontend skin workspace lease delegation is invalid for skin "${options.skinId}"`
     )
   }
+}
+
+export async function assertSkinLeaseDelegationProject(options: {
+  delegatedProjectRoot: string
+  projectRoot: string
+}): Promise<string> {
+  const [canonicalProjectRoot, canonicalDelegatedRoot] = await Promise.all([
+    realpath(options.projectRoot),
+    realpath(options.delegatedProjectRoot),
+  ])
+  if (canonicalDelegatedRoot !== canonicalProjectRoot) {
+    throw new Error(
+      `Frontend skin workspace lease delegation project mismatch: expected ${canonicalProjectRoot}`
+    )
+  }
+  return canonicalProjectRoot
 }
 
 export async function acquireSkinWorkspaceLease(

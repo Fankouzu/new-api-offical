@@ -7,6 +7,7 @@ import { generateSkin } from './scripts/generate-skin.ts'
 import { normalizeSkinId } from './scripts/skin-route-utils.ts'
 import {
   acquireSkinWorkspaceLease,
+  assertSkinLeaseDelegationProject,
   assertSkinWorkspaceLeaseOwner,
   installSkinLeaseProcessCleanup,
 } from './scripts/skin-workspace-lock.ts'
@@ -31,9 +32,13 @@ if (hasDelegation) {
   ) {
     throw new Error('Incomplete frontend skin workspace lease delegation')
   }
+  const canonicalProjectRoot = await assertSkinLeaseDelegationProject({
+    delegatedProjectRoot,
+    projectRoot: __dirname,
+  })
   await assertSkinWorkspaceLeaseOwner({
     ownerPid: delegatedOwnerPid,
-    projectRoot: delegatedProjectRoot,
+    projectRoot: canonicalProjectRoot,
     skinId,
     token: delegatedToken,
   })
