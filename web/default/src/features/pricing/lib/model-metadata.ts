@@ -28,9 +28,9 @@ import { hashStringToSeed, seededRandom } from './seed'
 // returned on `model.*` (see model/model_catalog.go). When the backend has no
 // entry for a model, those fields are left empty (no client-side mock).
 //
-// Modalities and capabilities still fall back to a lightweight heuristic derived
-// from the model's real endpoint / ratio configuration when the backend does not
-// provide them. The fabricated name-seeded "mock" numbers have been removed.
+// Modalities still fall back to a lightweight heuristic derived from the model's
+// real endpoint / ratio configuration when the backend does not provide them.
+// Capabilities are never guessed: only catalog-reported values are displayed.
 
 const TEXT_INPUT_ENDPOINTS = new Set([
   'openai',
@@ -44,52 +44,6 @@ const TEXT_INPUT_ENDPOINTS = new Set([
 const IMAGE_OUTPUT_ENDPOINTS = new Set(['image-generation'])
 const VIDEO_OUTPUT_ENDPOINTS = new Set(['openai-video'])
 const EMBEDDING_ENDPOINTS = new Set(['embeddings', 'jina-rerank'])
-
-const REASONING_NAME_PATTERNS = [
-  /^o[1-4](?:[-:_].+)?$/i,
-  /reasoning/i,
-  /thinking/i,
-  /qwq/i,
-  /deepseek-r\d/i,
-  /grok.*-(?:thinking|reasoning)/i,
-]
-
-const VISION_NAME_PATTERNS = [
-  /vision/i,
-  /vl(?:[-_]|$)/i,
-  /multimodal/i,
-  /-omni/i,
-]
-
-const AUDIO_NAME_PATTERNS = [
-  /audio/i,
-  /whisper/i,
-  /tts/i,
-  /voice/i,
-  /-realtime/i,
-]
-
-const VIDEO_NAME_PATTERNS = [/video/i, /sora/i, /veo/i, /kling/i, /pika/i]
-
-const CODE_NAME_PATTERNS = [/code/i, /-coder/i]
-
-const WEB_SEARCH_PATTERNS = [/web[-_ ]?search/i, /-online/i, /perplexity/i]
-
-const TAG_TO_CAPABILITY: Record<string, ModelCapability> = {
-  vision: 'vision',
-  multimodal: 'vision',
-  reasoning: 'reasoning',
-  thinking: 'reasoning',
-  tools: 'tools',
-  function: 'function_calling',
-  'function-calling': 'function_calling',
-  streaming: 'streaming',
-  json: 'json_mode',
-  structured: 'structured_output',
-  search: 'web_search',
-  code: 'code_interpreter',
-  embedding: 'embeddings',
-}
 
 const TAG_TO_MODALITY: Record<string, Modality> = {
   text: 'text',
@@ -109,15 +63,10 @@ function parseModelTags(tagsString?: string): string[] {
     .filter(Boolean)
 }
 
-function nameMatches(name: string, patterns: RegExp[]): boolean {
-  return patterns.some((re) => re.test(name))
-}
-
 function inferInputModalities(
   model: PricingModel,
   tags: string[],
-  endpoints: string[],
-  name: string
+  endpoints: string[]
 ): Modality[] {
   const set = new Set<Modality>()
 
@@ -128,14 +77,11 @@ function inferInputModalities(
     set.add('text')
   }
 
-  if (model.image_ratio != null || nameMatches(name, VISION_NAME_PATTERNS)) {
+  if (model.image_ratio != null) {
     set.add('image')
   }
-  if (model.audio_ratio != null || nameMatches(name, AUDIO_NAME_PATTERNS)) {
+  if (model.audio_ratio != null) {
     set.add('audio')
-  }
-  if (nameMatches(name, VIDEO_NAME_PATTERNS)) {
-    set.add('video')
   }
 
   for (const tag of tags) {
@@ -149,8 +95,7 @@ function inferInputModalities(
 
 function inferOutputModalities(
   model: PricingModel,
-  endpoints: string[],
-  name: string
+  endpoints: string[]
 ): Modality[] {
   const set = new Set<Modality>()
 
@@ -158,54 +103,12 @@ function inferOutputModalities(
   if (endpoints.some((e) => VIDEO_OUTPUT_ENDPOINTS.has(e))) set.add('video')
   if (endpoints.some((e) => EMBEDDING_ENDPOINTS.has(e))) set.add('text')
 
-  if (
-    model.audio_completion_ratio != null ||
-    /tts|voice|audio-out/i.test(name)
-  ) {
+  if (model.audio_completion_ratio != null) {
     set.add('audio')
   }
 
   if (set.size === 0) set.add('text')
   return ordered(set)
-}
-
-function inferCapabilities(
-  model: PricingModel,
-  tags: string[],
-  endpoints: string[],
-  name: string,
-  outputs: Modality[],
-  inputs: Modality[]
-): ModelCapability[] {
-  const set = new Set<ModelCapability>()
-
-  if (outputs.includes('text') && !endpoints.includes('image-generation')) {
-    set.add('streaming')
-    set.add('system_prompt')
-  }
-  if (
-    !endpoints.includes('image-generation') &&
-    !endpoints.includes('embeddings') &&
-    !endpoints.includes('jina-rerank')
-  ) {
-    set.add('function_calling')
-    set.add('tools')
-    set.add('json_mode')
-    set.add('structured_output')
-  }
-  if (inputs.includes('image')) set.add('vision')
-  if (model.cache_ratio != null) set.add('caching')
-  if (endpoints.some((e) => EMBEDDING_ENDPOINTS.has(e))) set.add('embeddings')
-  if (nameMatches(name, REASONING_NAME_PATTERNS)) set.add('reasoning')
-  if (nameMatches(name, CODE_NAME_PATTERNS)) set.add('code_interpreter')
-  if (nameMatches(name, WEB_SEARCH_PATTERNS)) set.add('web_search')
-
-  for (const tag of tags) {
-    const cap = TAG_TO_CAPABILITY[tag]
-    if (cap) set.add(cap)
-  }
-
-  return Array.from(set)
 }
 
 function ordered(modalities: Set<Modality>): Modality[] {
@@ -228,21 +131,18 @@ export type ModelMetadata = {
  * Build model metadata for display. Spec fields (context_length,
  * max_output_tokens, knowledge_cutoff, release_date, parameter_count) come
  * straight from the backend models.dev catalog (`model.*`) and are left empty
- * when the backend has no entry. Modalities and capabilities prefer the backend
- * too, but fall back to a real-config heuristic for models the catalog lacks.
+ * when the backend has no entry. Modalities prefer the backend and fall back to
+ * real configuration; capabilities remain empty when the catalog reports none.
  */
 export function inferModelMetadata(model: PricingModel): ModelMetadata {
-  const name = model.model_name || ''
   const tags = parseModelTags(model.tags)
   const endpoints = model.supported_endpoint_types || []
 
   const inputs =
-    model.input_modalities ?? inferInputModalities(model, tags, endpoints, name)
+    model.input_modalities ?? inferInputModalities(model, tags, endpoints)
   const outputs =
-    model.output_modalities ?? inferOutputModalities(model, endpoints, name)
-  const capabilities =
-    model.capabilities ??
-    inferCapabilities(model, tags, endpoints, name, outputs, inputs)
+    model.output_modalities ?? inferOutputModalities(model, endpoints)
+  const capabilities = model.capabilities ?? []
 
   return {
     context_length: model.context_length ?? 0,
