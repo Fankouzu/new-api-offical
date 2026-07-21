@@ -141,6 +141,12 @@ func TestParseCatalogInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestParseCatalogRejectsEmptyCatalog(t *testing.T) {
+	if _, err := parseCatalog([]byte(`{}`)); err == nil {
+		t.Fatal("expected an empty catalog to be rejected")
+	}
+}
+
 func TestParseCatalogPreservesUnknownTemperature(t *testing.T) {
 	idx, err := parseCatalog([]byte(`{
 		"provider": {"models": {"model-without-temperature": {"limit": {"context": 8192}}}}
@@ -234,6 +240,41 @@ func TestCatalogFailureIsNotRetriedForEveryLookup(t *testing.T) {
 	}
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("catalog requests = %d, want 1 during the failure cooldown", got)
+	}
+}
+
+func TestSuccessfulCatalogLoadInvalidatesPricingCache(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"provider": {"models": {"test-model": {"limit": {"context": 8192}}}}
+		}`))
+	}))
+	defer server.Close()
+	t.Setenv("MODEL_CATALOG_URL", server.URL)
+
+	updatePricingLock.Lock()
+	oldPricingMap := pricingMap
+	oldVendorsList := vendorsList
+	oldLastGetPricingTime := lastGetPricingTime
+	pricingMap = []Pricing{{ModelName: "cached-without-catalog"}}
+	vendorsList = []PricingVendor{{ID: 1}}
+	lastGetPricingTime = time.Now()
+	updatePricingLock.Unlock()
+	t.Cleanup(func() {
+		updatePricingLock.Lock()
+		pricingMap = oldPricingMap
+		vendorsList = oldVendorsList
+		lastGetPricingTime = oldLastGetPricingTime
+		updatePricingLock.Unlock()
+	})
+
+	loadModelCatalog()
+
+	updatePricingLock.Lock()
+	defer updatePricingLock.Unlock()
+	if pricingMap != nil || vendorsList != nil || !lastGetPricingTime.IsZero() {
+		t.Fatalf("pricing cache was not invalidated after catalog load: pricing=%v vendors=%v loadedAt=%v", pricingMap, vendorsList, lastGetPricingTime)
 	}
 }
 

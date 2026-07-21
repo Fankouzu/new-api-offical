@@ -236,6 +236,9 @@ func parseCatalog(data []byte) (map[string]*ModelCatalogSpec, error) {
 			}
 		}
 	}
+	if len(idx) == 0 {
+		return nil, fmt.Errorf("model catalog contains no models")
+	}
 	return idx, nil
 }
 
@@ -293,6 +296,7 @@ func loadModelCatalog() {
 	modelCatalogIndex = idx
 	modelCatalogLoadedAt = time.Now()
 	modelCatalogMu.Unlock()
+	InvalidatePricingCache()
 	common.SysLog(fmt.Sprintf("model catalog loaded: %d models", len(idx)))
 }
 

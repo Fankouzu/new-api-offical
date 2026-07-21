@@ -54,26 +54,13 @@ func IsKnownRoute(requestURI string, pricings []model.Pricing, theme string) boo
 		return theme != "classic"
 	case path == "/forbidden":
 		return theme == "classic"
-	case theme != "classic" && isDefaultAppPath(path):
+	case theme != "classic" && isDefaultAuthenticatedPath(path):
 		return true
-	case theme == "classic" && hasPathPrefix(path, "/console"):
-		return true
-	case theme != "classic" && isAuthenticatedAppPath(path):
-		return true
-	case theme != "classic" && hasPathPrefix(path, "/system-settings", "/errors", "/site", "/security", "/operations", "/models", "/content", "/billing", "/auth"):
+	case theme == "classic" && isClassicAuthenticatedPath(path):
 		return true
 	default:
 		return false
 	}
-}
-
-func hasPathPrefix(path string, prefixes ...string) bool {
-	for _, prefix := range prefixes {
-		if path == prefix || strings.HasPrefix(path, prefix+"/") {
-			return true
-		}
-	}
-	return false
 }
 
 func isDefaultExactRoute(path string) bool {
@@ -86,15 +73,52 @@ func isDefaultExactRoute(path string) bool {
 	}
 }
 
-func isDefaultAppPath(path string) bool {
+func isDefaultAuthenticatedPath(path string) bool {
 	switch path {
-	case "/profile", "/keys", "/subscriptions", "/redemption-codes":
+	case "/console/log", "/console/topup", "/wallet", "/users",
+		"/usage-logs", "/subscriptions", "/redemption-codes", "/profile",
+		"/playground", "/models", "/keys", "/dashboard", "/channels",
+		"/system-settings":
 		return true
 	}
-	if path == "/dashboard" || hasSinglePathSegment(path, "/dashboard") {
+	if hasSinglePathSegment(path, "/usage-logs") ||
+		hasSinglePathSegment(path, "/models") ||
+		hasSinglePathSegment(path, "/errors") ||
+		hasSinglePathSegment(path, "/dashboard") ||
+		hasSinglePathSegment(path, "/chat") {
 		return true
 	}
-	return hasSinglePathSegment(path, "/chat")
+	return isSystemSettingsPath(path)
+}
+
+func isSystemSettingsPath(path string) bool {
+	rest, ok := strings.CutPrefix(path, "/system-settings/")
+	if !ok || rest == "" {
+		return false
+	}
+	parts := strings.Split(rest, "/")
+	if len(parts) > 2 || parts[0] == "" {
+		return false
+	}
+	switch parts[0] {
+	case "site", "security", "operations", "models", "content", "billing", "auth":
+		return len(parts) == 1 || parts[1] != ""
+	default:
+		return false
+	}
+}
+
+func isClassicAuthenticatedPath(path string) bool {
+	switch path {
+	case "/console", "/console/models", "/console/deployment",
+		"/console/subscription", "/console/channel", "/console/token",
+		"/console/playground", "/console/redemption", "/console/user",
+		"/console/setting", "/console/personal", "/console/topup",
+		"/console/log", "/console/midjourney", "/console/task", "/console/chat":
+		return true
+	default:
+		return hasSinglePathSegment(path, "/console/chat")
+	}
 }
 
 func hasSinglePathSegment(path string, prefix string) bool {
