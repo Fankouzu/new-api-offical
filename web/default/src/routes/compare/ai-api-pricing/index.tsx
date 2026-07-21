@@ -18,7 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { createFileRoute } from '@tanstack/react-router'
 import { SkinPage } from '@/skins/runtime/skin-page'
+import { pricingSearchSchema } from '@/features/pricing/lib/search'
 
 export const Route = createFileRoute('/compare/ai-api-pricing/')({
+  validateSearch: pricingSearchSchema,
   component: () => <SkinPage page='pricing' />,
 })

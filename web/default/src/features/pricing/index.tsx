@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useMemo, useState } from 'react'
+import { useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
@@ -33,9 +34,11 @@ import {
 import { EXCLUDED_GROUPS, VIEW_MODES } from './constants'
 import { useFilters } from './hooks/use-filters'
 import { usePricingData } from './hooks/use-pricing-data'
+import { parsePricingSearch } from './lib/search'
 
 export function Pricing() {
   const { t } = useTranslation()
+  const initialSearch = parsePricingSearch(useSearch({ strict: false }))
   const [selectedModelName, setSelectedModelName] = useState<string | null>(
     null
   )
@@ -79,7 +82,7 @@ export function Pricing() {
     availableTags,
     clearFilters,
     clearSearch,
-  } = useFilters(models || [])
+  } = useFilters(models || [], initialSearch)
 
   const handleModelClick = useCallback((modelName: string) => {
     setSelectedModelName(modelName)

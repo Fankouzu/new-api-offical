@@ -7,7 +7,7 @@ import type {
 } from './contracts'
 import { resolveSkinPage } from './resolve-page'
 
-type SkinPageRenderPlan =
+export type SkinPageRenderPlan =
   | {
       shell: 'self'
       definition: SkinPageDefinition

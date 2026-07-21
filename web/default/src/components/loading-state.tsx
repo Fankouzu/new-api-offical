@@ -50,12 +50,15 @@ export function LoadingState(props: LoadingStateProps) {
 
   return (
     <div
+      role='status'
+      aria-live='polite'
+      aria-busy='true'
       className={cn(
         'flex min-h-[200px] flex-col items-center justify-center gap-3',
         props.className
       )}
     >
-      <div className='animate-spin'>
+      <div aria-hidden='true' className='animate-spin'>
         <Loader2 className={iconSize} />
       </div>
       <p className='text-muted-foreground text-sm'>
