@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { BACKGROUND_GET_CONFIG } from '@/lib/api-error-policy'
 import { buildQueryParams } from './lib/utils'
 import type {
   GetLogsParams,
@@ -48,7 +49,7 @@ async function fetchLogs<T>(
     ...params,
   })
   const path = buildApiPath(endpoint, isAdmin)
-  const res = await api.get(`${path}?${queryParams}`)
+  const res = await api.get(`${path}?${queryParams}`, BACKGROUND_GET_CONFIG)
   return res.data
 }
 
@@ -61,7 +62,10 @@ async function fetchLogStats<T>(
     params as unknown as Record<string, unknown>
   )
   const path = buildApiPath(endpoint, isAdmin)
-  const res = await api.get(`${path}/stat?${queryParams}`)
+  const res = await api.get(
+    `${path}/stat?${queryParams}`,
+    BACKGROUND_GET_CONFIG
+  )
   return res.data
 }
 

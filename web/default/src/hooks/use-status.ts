@@ -68,6 +68,7 @@ export function useStatus() {
     placeholderData: getInitialStatus(),
     // Data becomes stale after 5 minutes
     staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
     // Cache expires after 30 minutes
     gcTime: 30 * 60 * 1000,
   })
