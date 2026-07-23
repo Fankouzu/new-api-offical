@@ -20,6 +20,7 @@ import axios from 'axios'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { shouldSuppressNetworkToast } from './api-error-policy'
 
 // ============================================================================
 // Axios Instance Configuration
@@ -103,7 +104,7 @@ api.interceptors.response.use(
         } catch {
           /* empty */
         }
-      } else {
+      } else if (!shouldSuppressNetworkToast(error)) {
         // Other errors: show error message from response or default
         const msg =
           error?.response?.data?.message || error?.message || 'Request error'
