@@ -20,13 +20,24 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { shouldSuppressNetworkToast } from './api-error-policy'
 
-test('suppresses background-style GET failures without an HTTP response', () => {
-  assert.equal(shouldSuppressNetworkToast({ config: { method: 'get' } }), true)
+test('keeps response-less GET failures visible unless explicitly suppressed', () => {
+  assert.equal(shouldSuppressNetworkToast({ config: { method: 'get' } }), false)
 })
 
-test('keeps network failure toasts for write requests', () => {
+test('suppresses explicitly marked background GET failures without a response', () => {
   assert.equal(
-    shouldSuppressNetworkToast({ config: { method: 'post' } }),
+    shouldSuppressNetworkToast({
+      config: { method: 'get', suppressNetworkErrorToast: true },
+    }),
+    true
+  )
+})
+
+test('keeps marked network failures visible for write requests', () => {
+  assert.equal(
+    shouldSuppressNetworkToast({
+      config: { method: 'post', suppressNetworkErrorToast: true },
+    }),
     false
   )
 })
@@ -34,7 +45,7 @@ test('keeps network failure toasts for write requests', () => {
 test('keeps server response errors visible for GET requests', () => {
   assert.equal(
     shouldSuppressNetworkToast({
-      config: { method: 'get' },
+      config: { method: 'get', suppressNetworkErrorToast: true },
       response: { status: 503 },
     }),
     false

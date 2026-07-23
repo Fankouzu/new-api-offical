@@ -17,10 +17,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 interface RequestErrorLike {
-  config?: { method?: string }
+  config?: { method?: string; suppressNetworkErrorToast?: boolean }
   response?: unknown
 }
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    suppressNetworkErrorToast?: boolean
+  }
+}
+
+export const BACKGROUND_GET_CONFIG = {
+  suppressNetworkErrorToast: true,
+} as const
+
 export function shouldSuppressNetworkToast(error: RequestErrorLike): boolean {
-  return error.config?.method?.toLowerCase() === 'get' && !error.response
+  return (
+    error.config?.method?.toLowerCase() === 'get' &&
+    error.config.suppressNetworkErrorToast === true &&
+    !error.response
+  )
 }

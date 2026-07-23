@@ -20,7 +20,10 @@ import axios from 'axios'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { shouldSuppressNetworkToast } from './api-error-policy'
+import {
+  BACKGROUND_GET_CONFIG,
+  shouldSuppressNetworkToast,
+} from './api-error-policy'
 
 // ============================================================================
 // Axios Instance Configuration
@@ -206,7 +209,7 @@ export async function getUserGroups(): Promise<{
 
 // Get system status
 export async function getStatus() {
-  const res = await api.get('/api/status')
+  const res = await api.get('/api/status', BACKGROUND_GET_CONFIG)
   return res.data?.data as Record<string, unknown>
 }
 
@@ -216,7 +219,7 @@ export async function getNotice(): Promise<{
   message?: string
   data?: string
 }> {
-  const res = await api.get('/api/notice')
+  const res = await api.get('/api/notice', BACKGROUND_GET_CONFIG)
   return res.data
 }
 

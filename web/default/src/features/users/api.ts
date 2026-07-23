@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { BACKGROUND_GET_CONFIG } from '@/lib/api-error-policy'
 import type {
   User,
   GetUsersParams,
@@ -39,7 +40,10 @@ export async function getUsers(
   params: GetUsersParams = {}
 ): Promise<GetUsersResponse> {
   const { p = 1, page_size = 10 } = params
-  const res = await api.get(`/api/user/?p=${p}&page_size=${page_size}`)
+  const res = await api.get(
+    `/api/user/?p=${p}&page_size=${page_size}`,
+    BACKGROUND_GET_CONFIG
+  )
   return res.data
 }
 
@@ -51,7 +55,8 @@ export async function searchUsers(
 ): Promise<GetUsersResponse> {
   const { keyword = '', group = '', p = 1, page_size = 10 } = params
   const res = await api.get(
-    `/api/user/search?keyword=${keyword}&group=${group}&p=${p}&page_size=${page_size}`
+    `/api/user/search?keyword=${keyword}&group=${group}&p=${p}&page_size=${page_size}`,
+    BACKGROUND_GET_CONFIG
   )
   return res.data
 }
